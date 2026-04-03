@@ -2,6 +2,7 @@ package eu.kafkaesque.core;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.compress.Compression;
+import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.message.FetchRequestData;
 import org.apache.kafka.common.message.FetchResponseData;
 import org.apache.kafka.common.message.ListOffsetsRequestData;
@@ -340,7 +341,8 @@ final class ConsumerDataApiHandler {
         for (final var record : stored) {
             final byte[] key = record.key() != null ? record.key().getBytes(StandardCharsets.UTF_8) : null;
             final byte[] value = record.value() != null ? record.value().getBytes(StandardCharsets.UTF_8) : null;
-            builder.append(record.timestamp(), key, value);
+            final Header[] headers = record.headers().toArray(Header[]::new);
+            builder.append(record.timestamp(), key, value, headers);
         }
 
         return builder.build();

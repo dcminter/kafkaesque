@@ -269,7 +269,7 @@ class EventStoreTest {
 
         final var records = eventStore.getRecords("topic", 0);
         assertThrows(UnsupportedOperationException.class,
-            () -> records.add(new StoredRecord("topic", 0, 0, timestamp, "key2", "value2")),
+            () -> records.add(new StoredRecord("topic", 0, 0, timestamp, "key2", "value2", List.of())),
             "Returned list should be unmodifiable");
 
         final var allRecords = eventStore.getAllRecords();

@@ -12,12 +12,14 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.clients.producer.RecordMetadata;
+import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -230,6 +232,81 @@ abstract class AbstractKafkaBehaviorIT {
         }
 
         log.info("Verified ordering for {} messages", messageCount);
+    }
+
+    /**
+     * Verifies that a single record header is preserved faithfully through the
+     * produce → store → fetch round-trip.
+     *
+     * <p>Headers are commonly used to carry distributed-tracing context (e.g.
+     * W3C TraceContext, B3) and schema-registry magic bytes. A consumer must
+     * receive the exact same header key and value bytes that the producer sent.</p>
+     */
+    @Test
+    void shouldPreserveSingleHeaderThroughRoundTrip() {
+        // Given
+        final ProducerRecord<String, String> record = new ProducerRecord<>(topicName, "key", "value");
+        record.headers().add("trace-id", "abc-123".getBytes(StandardCharsets.UTF_8));
+
+        producer.send(record);
+        producer.flush();
+
+        consumer.subscribe(List.of(topicName));
+
+        // When
+        final List<ConsumerRecord<String, String>> received = new ArrayList<>();
+        final long deadline = System.currentTimeMillis() + 10_000;
+        while (received.isEmpty() && System.currentTimeMillis() < deadline) {
+            consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+        }
+
+        // Then
+        assertThat(received).hasSize(1);
+        final Header traceHeader = received.get(0).headers().lastHeader("trace-id");
+        assertThat(traceHeader).isNotNull();
+        assertThat(new String(traceHeader.value(), StandardCharsets.UTF_8)).isEqualTo("abc-123");
+
+        log.info("Single header preserved: key={}, value={}", traceHeader.key(),
+            new String(traceHeader.value(), StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Verifies that multiple record headers are all preserved faithfully through the
+     * produce → store → fetch round-trip, and that no headers are lost or duplicated.
+     */
+    @Test
+    void shouldPreserveMultipleHeadersThroughRoundTrip() {
+        // Given
+        final ProducerRecord<String, String> record = new ProducerRecord<>(topicName, "key", "value");
+        record.headers().add("content-type", "application/json".getBytes(StandardCharsets.UTF_8));
+        record.headers().add("correlation-id", "corr-456".getBytes(StandardCharsets.UTF_8));
+        record.headers().add("source-service", "order-service".getBytes(StandardCharsets.UTF_8));
+
+        producer.send(record);
+        producer.flush();
+
+        consumer.subscribe(List.of(topicName));
+
+        // When
+        final List<ConsumerRecord<String, String>> received = new ArrayList<>();
+        final long deadline = System.currentTimeMillis() + 10_000;
+        while (received.isEmpty() && System.currentTimeMillis() < deadline) {
+            consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+        }
+
+        // Then
+        assertThat(received).hasSize(1);
+        final Header[] headers = received.get(0).headers().toArray();
+        assertThat(headers).hasSize(3);
+
+        assertThat(new String(received.get(0).headers().lastHeader("content-type").value(), StandardCharsets.UTF_8))
+            .isEqualTo("application/json");
+        assertThat(new String(received.get(0).headers().lastHeader("correlation-id").value(), StandardCharsets.UTF_8))
+            .isEqualTo("corr-456");
+        assertThat(new String(received.get(0).headers().lastHeader("source-service").value(), StandardCharsets.UTF_8))
+            .isEqualTo("order-service");
+
+        log.info("All {} headers preserved correctly", headers.length);
     }
 
     /**

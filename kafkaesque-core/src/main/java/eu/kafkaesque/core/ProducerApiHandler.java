@@ -1,6 +1,7 @@
 package eu.kafkaesque.core;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.message.ProduceRequestData;
 import org.apache.kafka.common.message.ProduceResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -11,6 +12,7 @@ import org.apache.kafka.common.requests.RequestHeader;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Handles Kafka producer API responses.
@@ -102,9 +104,11 @@ final class ProducerApiHandler {
                             count++;
                             final var key = readBufferToString(record.key(), record.keySize());
                             final var value = readBufferToString(record.value(), record.valueSize());
+                            final var headers = readHeaders(record.headers());
                             final var offset = eventStore.storeRecord(
-                                topicData.name(), partitionData.index(), record.timestamp(), key, value);
-                            log.info("      Record {}: offset={}, key='{}', value='{}'", count, offset, key, value);
+                                topicData.name(), partitionData.index(), record.timestamp(), key, value, headers);
+                            log.info("      Record {}: offset={}, key='{}', value='{}', headers={}",
+                                count, offset, key, value, headers.size());
                         }
                     }
                     log.info("    Total records: {}", count);
@@ -127,5 +131,18 @@ final class ProducerApiHandler {
         final byte[] raw = new byte[size];
         buf.get(raw);
         return new String(raw, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * Copies the headers from a record's header array into an immutable list.
+     *
+     * @param headerArray the header array from a decoded record (may be null)
+     * @return an immutable list of headers; empty if {@code headerArray} is null or empty
+     */
+    private static List<Header> readHeaders(final Header[] headerArray) {
+        if (headerArray == null || headerArray.length == 0) {
+            return List.of();
+        }
+        return List.of(headerArray);
     }
 }

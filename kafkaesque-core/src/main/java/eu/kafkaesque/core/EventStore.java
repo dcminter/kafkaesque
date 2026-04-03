@@ -1,6 +1,7 @@
 package eu.kafkaesque.core;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.header.Header;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -70,9 +71,11 @@ public final class EventStore {
     private final Map<TopicPartitionKey, PartitionStore> partitions = new ConcurrentHashMap<>();
 
     /**
-     * Stores a published record and assigns it an offset.
+     * Stores a published record with no headers and assigns it an offset.
      *
-     * <p>The offset is assigned atomically per partition, starting from 0.</p>
+     * <p>Convenience overload for callers that do not need to supply headers;
+     * delegates to {@link #storeRecord(String, int, long, String, String, List)}
+     * with an empty header list.</p>
      *
      * @param topic the topic name
      * @param partition the partition index
@@ -87,12 +90,35 @@ public final class EventStore {
             final long timestamp,
             final String key,
             final String value) {
+        return storeRecord(topic, partition, timestamp, key, value, List.of());
+    }
+
+    /**
+     * Stores a published record and assigns it an offset.
+     *
+     * <p>The offset is assigned atomically per partition, starting from 0.</p>
+     *
+     * @param topic the topic name
+     * @param partition the partition index
+     * @param timestamp the record timestamp (epoch milliseconds)
+     * @param key the record key (nullable)
+     * @param value the record value (nullable)
+     * @param headers the record headers (may be null or empty)
+     * @return the assigned offset
+     */
+    public long storeRecord(
+            final String topic,
+            final int partition,
+            final long timestamp,
+            final String key,
+            final String value,
+            final List<Header> headers) {
 
         final var partitionKey = new TopicPartitionKey(topic, partition);
         final var partitionStore = partitions.computeIfAbsent(partitionKey, k -> new PartitionStore());
 
         final var offset = partitionStore.getNextOffset();
-        final var record = new StoredRecord(topic, partition, offset, timestamp, key, value);
+        final var record = new StoredRecord(topic, partition, offset, timestamp, key, value, headers);
 
         partitionStore.store(record);
 
