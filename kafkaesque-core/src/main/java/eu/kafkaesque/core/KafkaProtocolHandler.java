@@ -4,6 +4,8 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.message.ApiVersionsResponseData;
 import org.apache.kafka.common.message.DescribeClusterResponseData;
+import org.apache.kafka.common.message.FindCoordinatorRequestData;
+import org.apache.kafka.common.message.FindCoordinatorResponseData;
 import org.apache.kafka.common.message.MetadataRequestData;
 import org.apache.kafka.common.message.MetadataResponseData;
 import org.apache.kafka.common.message.ProduceRequestData;
@@ -208,7 +210,7 @@ public final class KafkaProtocolHandler {
                 case API_VERSIONS -> generateApiVersionsResponse(header);
                 case METADATA -> generateMetadataResponse(header, buffer);
                 case DESCRIBE_CLUSTER -> generateDescribeClusterResponse(header);
-                case FIND_COORDINATOR -> generateFindCoordinatorResponse(header);
+                case FIND_COORDINATOR -> generateFindCoordinatorResponse(header, buffer);
                 case PRODUCE -> generateProduceResponse(header, buffer);
                 default -> {
                     log.warn("Unhandled API key: {} (id={}), returning null response", apiKey, apiKey.id);
@@ -406,20 +408,49 @@ public final class KafkaProtocolHandler {
     }
 
     /**
-     * Generates a FIND_COORDINATOR response (currently returns an error).
+     * Generates a FIND_COORDINATOR response indicating the coordinator is not available.
+     *
+     * <p>Consumer-group coordination is not yet implemented; this method returns a
+     * properly serialized {@code COORDINATOR_NOT_AVAILABLE} error so the client can
+     * parse and handle the response gracefully rather than encountering a schema
+     * deserialization failure.</p>
+     *
+     * <p>API version 4 and above use a {@code coordinators} array keyed by the values
+     * from the request; earlier versions use a single top-level error code.</p>
      *
      * @param requestHeader the request header
-     * @return the response buffer, or null if an error occurs
+     * @param buffer the buffer containing the request body, positioned after the header
+     * @return the serialized response buffer, or null if an error occurs
      */
-    private ByteBuffer generateFindCoordinatorResponse(final RequestHeader requestHeader) {
+    private ByteBuffer generateFindCoordinatorResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
         try {
-            // For now, just return an error response
-            // AdminClient might be trying to find coordinator
-            final var buffer = ByteBuffer.allocate(256);
-            buffer.putInt(requestHeader.correlationId());
-            buffer.putShort((short) 15); // COORDINATOR_NOT_AVAILABLE
-            buffer.flip();
-            return buffer;
+            final var accessor = new ByteBufferAccessor(buffer);
+            final var request = new FindCoordinatorRequestData(accessor, requestHeader.apiVersion());
+
+            final var data = new FindCoordinatorResponseData().setThrottleTimeMs(0);
+
+            if (requestHeader.apiVersion() >= 4) {
+                // v4+: one Coordinator entry per requested key
+                final var coordinators = new java.util.ArrayList<FindCoordinatorResponseData.Coordinator>();
+                for (final var key : request.coordinatorKeys()) {
+                    coordinators.add(new FindCoordinatorResponseData.Coordinator()
+                        .setKey(key)
+                        .setNodeId(-1)
+                        .setHost("")
+                        .setPort(-1)
+                        .setErrorCode((short) 15)); // COORDINATOR_NOT_AVAILABLE
+                }
+                data.setCoordinators(coordinators);
+            } else {
+                // v0-v3: single top-level error fields
+                data.setErrorCode((short) 15) // COORDINATOR_NOT_AVAILABLE
+                    .setNodeId(-1)
+                    .setHost("")
+                    .setPort(-1);
+            }
+
+            return serializeFlexibleResponse(requestHeader, data, ApiKeys.FIND_COORDINATOR);
+
         } catch (final Exception e) {
             log.error("Error generating FindCoordinator response", e);
             return null;

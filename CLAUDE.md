@@ -4,7 +4,8 @@ The goal of this project is to build Kafkaesque, a library that provides a mock 
 
 ## Project overview
 
-The is built with Maven and uses Java 25 (we may in future backport to a more typical earlier version of Java).
+The is built with Maven via Maven Wrapper and uses Java 25 (we may in future backport to a more typical earlier 
+version of Java).
 
 Several directories exist. They are:
 
