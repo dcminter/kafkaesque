@@ -1,0 +1,215 @@
+package eu.kafkaesque.it;
+
+import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.Header;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
+
+/**
+ * Abstract base class defining the consumer integration test suite.
+ *
+ * <p>Covers end-to-end produce→consume round-trips including message ordering and
+ * header preservation. Subclasses must implement {@link #getBootstrapServers()}.</p>
+ */
+@Slf4j
+abstract class AbstractConsumerBehaviorIT {
+
+    /** Per-test producer; created fresh in {@link #setUpClients()}. */
+    private KafkaProducer<String, String> producer;
+
+    /** Per-test consumer; created fresh in {@link #setUpClients()}. */
+    private KafkaConsumer<String, String> consumer;
+
+    /** Per-test topic name; unique per invocation to avoid cross-test interference. */
+    private String topicName;
+
+    /**
+     * Returns the bootstrap servers string for the Kafka backend under test.
+     *
+     * @return bootstrap servers in {@code "host:port"} format
+     * @throws Exception if the address cannot be determined
+     */
+    protected abstract String getBootstrapServers() throws Exception;
+
+    /**
+     * Creates a fresh producer and consumer for the current test.
+     *
+     * @throws Exception if the clients cannot be created
+     */
+    @BeforeEach
+    void setUpClients() throws Exception {
+        final String bootstrapServers = getBootstrapServers();
+        topicName = "test-topic-" + UUID.randomUUID();
+        producer = KafkaTestClientFactory.createProducer(bootstrapServers);
+        consumer = KafkaTestClientFactory.createConsumer(bootstrapServers);
+    }
+
+    /**
+     * Closes the Kafka producer and consumer after each test.
+     */
+    @AfterEach
+    void tearDownClients() {
+        if (producer != null) {
+            producer.close();
+        }
+        if (consumer != null) {
+            consumer.close();
+        }
+    }
+
+    /**
+     * Verifies that events published to a topic can be consumed by a subscriber,
+     * and that the key, value, and topic are preserved faithfully.
+     */
+    @Test
+    void shouldReceivePublishedEventsFromKafka() {
+        // Given
+        producer.send(new ProducerRecord<>(topicName, "key-1", "value-1"));
+        producer.send(new ProducerRecord<>(topicName, "key-2", "value-2"));
+        producer.flush();
+
+        consumer.subscribe(List.of(topicName));
+
+        // When
+        final List<ConsumerRecord<String, String>> received = new ArrayList<>();
+        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+            return received.size() >= 2;
+        });
+
+        // Then
+        assertThat(received).hasSize(2);
+        assertThat(received.get(0).key()).isEqualTo("key-1");
+        assertThat(received.get(0).value()).isEqualTo("value-1");
+        assertThat(received.get(0).topic()).isEqualTo(topicName);
+        assertThat(received.get(1).key()).isEqualTo("key-2");
+        assertThat(received.get(1).value()).isEqualTo("value-2");
+        assertThat(received.get(1).topic()).isEqualTo(topicName);
+
+        log.info("Consumed {} messages successfully", received.size());
+    }
+
+    /**
+     * Verifies that messages published with the same key (and therefore routed to the
+     * same partition) are consumed in the order they were produced.
+     *
+     * @throws Exception if any producer future fails
+     */
+    @Test
+    void shouldMaintainMessageOrderWithinPartition() throws Exception {
+        // Given – same key forces all messages to the same partition
+        final String commonKey = "same-key";
+        final int messageCount = 10;
+
+        // When – publish synchronously to guarantee ordering at the producer
+        for (int i = 0; i < messageCount; i++) {
+            producer.send(new ProducerRecord<>(topicName, commonKey, "message-" + i)).get();
+        }
+
+        consumer.subscribe(List.of(topicName));
+
+        final List<String> receivedValues = new ArrayList<>();
+        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            consumer.poll(Duration.ofMillis(100)).forEach(r -> receivedValues.add(r.value()));
+            return receivedValues.size() >= messageCount;
+        });
+
+        // Then
+        assertThat(receivedValues).hasSize(messageCount);
+        for (int i = 0; i < messageCount; i++) {
+            assertThat(receivedValues.get(i)).isEqualTo("message-" + i);
+        }
+
+        log.info("Verified ordering for {} messages", messageCount);
+    }
+
+    /**
+     * Verifies that a single record header is preserved faithfully through the
+     * produce → store → fetch round-trip.
+     *
+     * <p>Headers are commonly used to carry distributed-tracing context (e.g.
+     * W3C TraceContext, B3) and schema-registry magic bytes. A consumer must
+     * receive the exact same header key and value bytes that the producer sent.</p>
+     */
+    @Test
+    void shouldPreserveSingleHeaderThroughRoundTrip() {
+        // Given
+        final ProducerRecord<String, String> record = new ProducerRecord<>(topicName, "key", "value");
+        record.headers().add("trace-id", "abc-123".getBytes(StandardCharsets.UTF_8));
+
+        producer.send(record);
+        producer.flush();
+
+        consumer.subscribe(List.of(topicName));
+
+        // When
+        final List<ConsumerRecord<String, String>> received = new ArrayList<>();
+        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+            return !received.isEmpty();
+        });
+
+        // Then
+        assertThat(received).hasSize(1);
+        final Header traceHeader = received.get(0).headers().lastHeader("trace-id");
+        assertThat(traceHeader).isNotNull();
+        assertThat(new String(traceHeader.value(), StandardCharsets.UTF_8)).isEqualTo("abc-123");
+
+        log.info("Single header preserved: key={}, value={}", traceHeader.key(),
+            new String(traceHeader.value(), StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Verifies that multiple record headers are all preserved faithfully through the
+     * produce → store → fetch round-trip, and that no headers are lost or duplicated.
+     */
+    @Test
+    void shouldPreserveMultipleHeadersThroughRoundTrip() {
+        // Given
+        final ProducerRecord<String, String> record = new ProducerRecord<>(topicName, "key", "value");
+        record.headers().add("content-type", "application/json".getBytes(StandardCharsets.UTF_8));
+        record.headers().add("correlation-id", "corr-456".getBytes(StandardCharsets.UTF_8));
+        record.headers().add("source-service", "order-service".getBytes(StandardCharsets.UTF_8));
+
+        producer.send(record);
+        producer.flush();
+
+        consumer.subscribe(List.of(topicName));
+
+        // When
+        final List<ConsumerRecord<String, String>> received = new ArrayList<>();
+        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+            return !received.isEmpty();
+        });
+
+        // Then
+        assertThat(received).hasSize(1);
+        final Header[] headers = received.get(0).headers().toArray();
+        assertThat(headers).hasSize(3);
+
+        assertThat(new String(received.get(0).headers().lastHeader("content-type").value(), StandardCharsets.UTF_8))
+            .isEqualTo("application/json");
+        assertThat(new String(received.get(0).headers().lastHeader("correlation-id").value(), StandardCharsets.UTF_8))
+            .isEqualTo("corr-456");
+        assertThat(new String(received.get(0).headers().lastHeader("source-service").value(), StandardCharsets.UTF_8))
+            .isEqualTo("order-service");
+
+        log.info("All {} headers preserved correctly", headers.length);
+    }
+}
