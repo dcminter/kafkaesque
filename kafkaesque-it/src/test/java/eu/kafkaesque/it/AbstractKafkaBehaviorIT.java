@@ -30,8 +30,10 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.awaitility.Awaitility.await;
 
 /**
  * Abstract base class defining the shared Kafka behavior integration test suite.
@@ -186,10 +188,10 @@ abstract class AbstractKafkaBehaviorIT {
 
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
-        final long deadline = System.currentTimeMillis() + 10_000;
-        while (received.size() < 2 && System.currentTimeMillis() < deadline) {
+        await().atMost(10, TimeUnit.SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(received::add);
-        }
+            return received.size() >= 2;
+        });
 
         // Then
         assertThat(received).hasSize(2);
@@ -224,10 +226,10 @@ abstract class AbstractKafkaBehaviorIT {
         consumer.subscribe(List.of(topicName));
 
         final List<String> receivedValues = new ArrayList<>();
-        final long deadline = System.currentTimeMillis() + 10_000;
-        while (receivedValues.size() < messageCount && System.currentTimeMillis() < deadline) {
+        await().atMost(10, TimeUnit.SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(r -> receivedValues.add(r.value()));
-        }
+            return receivedValues.size() >= messageCount;
+        });
 
         // Then
         assertThat(receivedValues).hasSize(messageCount);
@@ -259,10 +261,10 @@ abstract class AbstractKafkaBehaviorIT {
 
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
-        final long deadline = System.currentTimeMillis() + 10_000;
-        while (received.isEmpty() && System.currentTimeMillis() < deadline) {
+        await().atMost(10, TimeUnit.SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(received::add);
-        }
+            return !received.isEmpty();
+        });
 
         // Then
         assertThat(received).hasSize(1);
@@ -293,10 +295,10 @@ abstract class AbstractKafkaBehaviorIT {
 
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
-        final long deadline = System.currentTimeMillis() + 10_000;
-        while (received.isEmpty() && System.currentTimeMillis() < deadline) {
+        await().atMost(10, TimeUnit.SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(received::add);
-        }
+            return !received.isEmpty();
+        });
 
         // Then
         assertThat(received).hasSize(1);

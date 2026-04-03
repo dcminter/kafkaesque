@@ -23,6 +23,7 @@
         <!-- Testing -->
         <junit.version>5.11.3</junit.version>
         <assertj.version>3.27.2</assertj.version>
+        <awaitility.version>4.2.2</awaitility.version>
         <mockito.version>5.14.2</mockito.version>
         <testcontainers.version>1.20.4</testcontainers.version>
 
@@ -76,6 +77,14 @@
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
                 <version>${assertj.version}</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- Awaitility -->
+            <dependency>
+                <groupId>org.awaitility</groupId>
+                <artifactId>awaitility</artifactId>
+                <version>${awaitility.version}</version>
                 <scope>test</scope>
             </dependency>
 
