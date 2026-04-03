@@ -33,6 +33,8 @@ import java.nio.channels.SelectionKey;
  *   <li>{@link ApiKeys#OFFSET_COMMIT} - Stores committed offsets for a consumer group</li>
  *   <li>{@link ApiKeys#LIST_OFFSETS} - Returns earliest or latest offsets for partitions</li>
  *   <li>{@link ApiKeys#FETCH} - Returns stored records to consumers</li>
+ *   <li>{@link ApiKeys#CREATE_TOPICS} - Registers topics in the topic store</li>
+ *   <li>{@link ApiKeys#DESCRIBE_TOPIC_PARTITIONS} - Returns partition details for registered topics</li>
  *   <li>{@link ApiKeys#GET_TELEMETRY_SUBSCRIPTIONS} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  *   <li>{@link ApiKeys#PUSH_TELEMETRY} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  * </ul>
@@ -49,6 +51,7 @@ public final class KafkaProtocolHandler {
     private final ConsumerGroupApiHandler consumerGroupApiHandler;
     private final ConsumerDataApiHandler consumerDataApiHandler;
     private final ProducerApiHandler producerApiHandler;
+    private final AdminApiHandler adminApiHandler;
 
     /**
      * Creates a new protocol handler with a new event store and group coordinator.
@@ -65,10 +68,13 @@ public final class KafkaProtocolHandler {
     public KafkaProtocolHandler(final EventStore eventStore) {
         this.eventStore = eventStore;
         final var groupCoordinator = new GroupCoordinator();
+        final var topicStore = new TopicStore();
         this.clusterApiHandler = new ClusterApiHandler();
+        this.clusterApiHandler.setTopicStore(topicStore);
         this.consumerGroupApiHandler = new ConsumerGroupApiHandler(groupCoordinator);
         this.consumerDataApiHandler = new ConsumerDataApiHandler(eventStore, groupCoordinator);
         this.producerApiHandler = new ProducerApiHandler(eventStore);
+        this.adminApiHandler = new AdminApiHandler(topicStore);
     }
 
     /**
@@ -213,7 +219,9 @@ public final class KafkaProtocolHandler {
                 case OFFSET_FETCH     -> consumerDataApiHandler.generateOffsetFetchResponse(header, buffer);
                 case OFFSET_COMMIT    -> consumerDataApiHandler.generateOffsetCommitResponse(header, buffer);
                 case LIST_OFFSETS     -> consumerDataApiHandler.generateListOffsetsResponse(header, buffer);
-                case FETCH            -> consumerDataApiHandler.generateFetchResponse(header, buffer);
+                case FETCH                      -> consumerDataApiHandler.generateFetchResponse(header, buffer);
+                case CREATE_TOPICS              -> adminApiHandler.generateCreateTopicsResponse(header, buffer);
+                case DESCRIBE_TOPIC_PARTITIONS  -> clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
                 case GET_TELEMETRY_SUBSCRIPTIONS, PUSH_TELEMETRY -> {
                     log.debug("Telemetry API not supported: {}", apiKey);
                     yield clusterApiHandler.generateUnsupportedResponse(header, apiKey);

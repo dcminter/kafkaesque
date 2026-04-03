@@ -2,8 +2,11 @@ package eu.kafkaesque.core;
 
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ApiVersionsResponseData;
 import org.apache.kafka.common.message.DescribeClusterResponseData;
+import org.apache.kafka.common.message.DescribeTopicPartitionsRequestData;
+import org.apache.kafka.common.message.DescribeTopicPartitionsResponseData;
 import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.FindCoordinatorResponseData;
 import org.apache.kafka.common.message.GetTelemetrySubscriptionsResponseData;
@@ -26,7 +29,8 @@ import java.util.List;
  * Handles Kafka cluster and topology API responses.
  *
  * <p>Covers {@link ApiKeys#API_VERSIONS}, {@link ApiKeys#METADATA},
- * {@link ApiKeys#DESCRIBE_CLUSTER}, and {@link ApiKeys#FIND_COORDINATOR}.</p>
+ * {@link ApiKeys#DESCRIBE_CLUSTER}, {@link ApiKeys#FIND_COORDINATOR}, and
+ * {@link ApiKeys#DESCRIBE_TOPIC_PARTITIONS}.</p>
  *
  * @see KafkaProtocolHandler
  */
@@ -48,8 +52,11 @@ final class ClusterApiHandler {
     @Setter
     private ServerInfo serverInfo;
 
+    @Setter
+    private TopicStore topicStore;
+
     /**
-     * Creates a new handler with no server info (will use defaults until set).
+     * Creates a new handler with no server info or topic store (will use defaults until set).
      */
     ClusterApiHandler() {
     }
@@ -85,6 +92,13 @@ final class ClusterApiHandler {
     /**
      * Generates a METADATA response for the requested topics.
      *
+     * <p>When the request's topic list is {@code null} (i.e. the client wants all
+     * topics, as used by {@code AdminClient.listTopics()}), all topics registered in
+     * the {@link TopicStore} are returned. When specific topics are requested, each
+     * is returned with the partition count stored in the {@link TopicStore}, falling
+     * back to a single partition for topics that were not explicitly created via the
+     * admin API (e.g. auto-created by a producer).</p>
+     *
      * @param requestHeader the request header
      * @param buffer        the buffer containing the request body
      * @return the serialised response buffer, or null on error
@@ -105,11 +119,19 @@ final class ClusterApiHandler {
             final var topics = new MetadataResponseData.MetadataResponseTopicCollection();
             final var requestedTopics = metadataRequest.topics();
 
-            if (requestedTopics != null && !requestedTopics.isEmpty()) {
+            if (requestedTopics == null) {
+                // null means "list all topics"
+                if (topicStore != null) {
+                    for (final var topic : topicStore.getTopics()) {
+                        topics.add(buildMetadataTopicResponse(topic.name(), topic.numPartitions()));
+                    }
+                }
+            } else if (!requestedTopics.isEmpty()) {
                 for (final var requestedTopic : requestedTopics) {
                     final var topicName = requestedTopic.name();
                     if (topicName != null && !topicName.isEmpty()) {
-                        topics.add(buildMetadataTopicResponse(topicName));
+                        final int numPartitions = resolvePartitionCount(topicName);
+                        topics.add(buildMetadataTopicResponse(topicName, numPartitions));
                     }
                 }
             }
@@ -191,6 +213,43 @@ final class ClusterApiHandler {
     }
 
     /**
+     * Generates a DESCRIBE_TOPIC_PARTITIONS response for the requested topics.
+     *
+     * <p>Each topic is looked up in the {@link TopicStore}. Topics that are registered
+     * are returned with their full partition details. Topics that are not registered
+     * receive an {@link Errors#UNKNOWN_TOPIC_OR_PARTITION} error code and no partitions.
+     * Pagination via the request cursor is not supported; {@code nextCursor} is always
+     * null in the response.</p>
+     *
+     * @param requestHeader the request header
+     * @param buffer        the buffer containing the request body
+     * @return the serialised response buffer, or null on error
+     */
+    ByteBuffer generateDescribeTopicPartitionsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
+        try {
+            final var accessor = new ByteBufferAccessor(buffer);
+            final var request = new DescribeTopicPartitionsRequestData(accessor, requestHeader.apiVersion());
+
+            final var responseTopics = new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopicCollection();
+
+            for (final var topicRequest : request.topics()) {
+                responseTopics.add(buildDescribeTopicPartitionsTopicResponse(topicRequest.name()));
+            }
+
+            final var data = new DescribeTopicPartitionsResponseData()
+                .setThrottleTimeMs(0)
+                .setTopics(responseTopics)
+                .setNextCursor(null);
+
+            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.DESCRIBE_TOPIC_PARTITIONS);
+
+        } catch (final Exception e) {
+            log.error("Error generating DescribeTopicPartitions response", e);
+            return null;
+        }
+    }
+
+    /**
      * Generates an {@link Errors#UNSUPPORTED_VERSION} response for APIs that this mock
      * does not support, ensuring the client receives a valid (correctly-correlated)
      * response and does not treat the silence as a protocol error.
@@ -252,25 +311,94 @@ final class ClusterApiHandler {
     }
 
     /**
-     * Builds a single-partition metadata entry for a topic.
+     * Builds a DESCRIBE_TOPIC_PARTITIONS topic entry for the given topic name.
+     *
+     * <p>If the topic is registered in the {@link TopicStore}, a full partition listing
+     * is included. If it is unknown, an {@link Errors#UNKNOWN_TOPIC_OR_PARTITION} error
+     * is returned with an empty partition list.</p>
+     *
+     * @param topicName the topic name to describe
+     * @return the response topic entry
+     */
+    private DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopic buildDescribeTopicPartitionsTopicResponse(
+            final String topicName) {
+
+        if (topicStore == null || !topicStore.hasTopic(topicName)) {
+            return new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopic()
+                .setName(topicName)
+                .setTopicId(Uuid.ZERO_UUID)
+                .setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code())
+                .setIsInternal(false)
+                .setPartitions(List.of())
+                .setTopicAuthorizedOperations(Integer.MIN_VALUE);
+        }
+
+        final var definition = topicStore.getTopic(topicName).orElseThrow();
+        final var partitions = new ArrayList<DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponsePartition>();
+        for (int i = 0; i < definition.numPartitions(); i++) {
+            partitions.add(new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponsePartition()
+                .setErrorCode((short) 0)
+                .setPartitionIndex(i)
+                .setLeaderId(1)
+                .setLeaderEpoch(0)
+                .setReplicaNodes(List.of(1))
+                .setIsrNodes(List.of(1))
+                .setEligibleLeaderReplicas(List.of())
+                .setLastKnownElr(List.of())
+                .setOfflineReplicas(List.of()));
+        }
+
+        return new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopic()
+            .setName(topicName)
+            .setTopicId(definition.topicId())
+            .setErrorCode((short) 0)
+            .setIsInternal(false)
+            .setPartitions(partitions)
+            .setTopicAuthorizedOperations(Integer.MIN_VALUE);
+    }
+
+    /**
+     * Returns the partition count for a topic, consulting the {@link TopicStore} first
+     * and falling back to {@code 1} for topics not explicitly created via the admin API.
      *
      * @param topicName the topic name
+     * @return the number of partitions
+     */
+    private int resolvePartitionCount(final String topicName) {
+        if (topicStore == null) {
+            return 1;
+        }
+        return topicStore.getTopic(topicName)
+            .map(TopicStore.TopicDefinition::numPartitions)
+            .orElse(1);
+    }
+
+    /**
+     * Builds a metadata entry for a topic with the specified number of partitions.
+     *
+     * @param topicName     the topic name
+     * @param numPartitions the number of partitions to advertise
      * @return the topic metadata
      */
-    private MetadataResponseData.MetadataResponseTopic buildMetadataTopicResponse(final String topicName) {
-        final var partition = new MetadataResponseData.MetadataResponsePartition()
-            .setPartitionIndex(0)
-            .setLeaderId(1)
-            .setLeaderEpoch(0)
-            .setReplicaNodes(List.of(1))
-            .setIsrNodes(List.of(1))
-            .setErrorCode((short) 0);
+    private MetadataResponseData.MetadataResponseTopic buildMetadataTopicResponse(
+            final String topicName, final int numPartitions) {
+
+        final var partitions = new ArrayList<MetadataResponseData.MetadataResponsePartition>();
+        for (int i = 0; i < numPartitions; i++) {
+            partitions.add(new MetadataResponseData.MetadataResponsePartition()
+                .setPartitionIndex(i)
+                .setLeaderId(1)
+                .setLeaderEpoch(0)
+                .setReplicaNodes(List.of(1))
+                .setIsrNodes(List.of(1))
+                .setErrorCode((short) 0));
+        }
 
         return new MetadataResponseData.MetadataResponseTopic()
             .setName(topicName)
             .setErrorCode((short) 0)
             .setIsInternal(false)
-            .setPartitions(List.of(partition));
+            .setPartitions(partitions);
     }
 
     /**
