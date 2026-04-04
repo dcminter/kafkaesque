@@ -165,7 +165,7 @@ void tearDown() {
   - Tests for offset assignment, filtering, counting, and edge cases
 
 ### Event Retrieval Tests
-- `KafkaesqueServerEventRetrievalTest` - Tests with real Kafka producer (currently `@Disabled`)
+- `KafkaesqueServerEventRetrievalTest` - Tests with real Kafka producer
   - Located in `kafkaesque-core/src/test/` alongside the unit tests
   - Tests publishing and retrieval workflows
   - Tests filtering and counting

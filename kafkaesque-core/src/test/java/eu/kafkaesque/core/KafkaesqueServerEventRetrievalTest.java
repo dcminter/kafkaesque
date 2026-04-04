@@ -1,15 +1,18 @@
 package eu.kafkaesque.core;
 
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 
@@ -18,16 +21,21 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Integration tests for event retrieval methods on {@link KafkaesqueServer}.
  */
-@Disabled
 class KafkaesqueServerEventRetrievalTest {
 
     private KafkaesqueServer server;
+    private AdminClient adminClient;
     private KafkaProducer<String, String> producer;
 
     @BeforeEach
     void setUp() throws IOException {
         server = new KafkaesqueServer("localhost", 0);
         server.start();
+
+        final var adminProps = new Properties();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, server.getBootstrapServers());
+        adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
+        adminClient = AdminClient.create(adminProps);
 
         final var props = new Properties();
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, server.getBootstrapServers());
@@ -42,6 +50,13 @@ class KafkaesqueServerEventRetrievalTest {
 
     @AfterEach
     void tearDown() {
+        if (adminClient != null) {
+            try {
+                adminClient.close(java.time.Duration.ofSeconds(5));
+            } catch (final Exception e) {
+                // Ignore close exceptions
+            }
+        }
         if (producer != null) {
             try {
                 producer.close(java.time.Duration.ofSeconds(5));
@@ -230,6 +245,7 @@ class KafkaesqueServerEventRetrievalTest {
     @Test
     void shouldHandleMultiplePartitions() throws ExecutionException, InterruptedException {
         final var topic = "test-topic";
+        adminClient.createTopics(List.of(new NewTopic(topic, 2, (short) 1))).all().get();
 
         // Publish to different partitions
         producer.send(new ProducerRecord<>(topic, 0, "key1", "value1")).get();
