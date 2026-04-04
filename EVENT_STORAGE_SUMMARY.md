@@ -14,6 +14,7 @@ A record type that captures all metadata about a published event:
 - `timestamp` - the publication timestamp (epoch milliseconds)
 - `key` - the message key (nullable)
 - `value` - the message value (nullable)
+- `headers` - the record headers (never null; empty list if none were set)
 
 ### `EventStore`
 Thread-safe in-memory storage for published events with the following features:
@@ -163,10 +164,9 @@ void tearDown() {
   - 17 test cases covering all functionality
   - Tests for offset assignment, filtering, counting, and edge cases
 
-### Integration Tests
-- `KafkaesqueServerEventRetrievalTest` - Tests with real Kafka producer
+### Event Retrieval Tests
+- `KafkaesqueServerEventRetrievalTest` - Tests with real Kafka producer (currently `@Disabled`)
+  - Located in `kafkaesque-core/src/test/` alongside the unit tests
   - Tests publishing and retrieval workflows
   - Tests filtering and counting
   - Tests with multiple topics and partitions
-
-All tests pass successfully!
