@@ -14,6 +14,10 @@ import org.apache.kafka.common.requests.RequestHeader;
 import java.nio.ByteBuffer;
 import java.util.stream.StreamSupport;
 
+import static eu.kafkaesque.core.CleanupPolicy.COMPACT;
+import static eu.kafkaesque.core.CleanupPolicy.COMPACT_DELETE;
+import static eu.kafkaesque.core.CleanupPolicy.DELETE;
+
 /**
  * Handles Kafka admin API responses.
  *
@@ -102,7 +106,7 @@ final class AdminApiHandler {
             .filter(c -> "cleanup.policy".equals(c.name()))
             .findFirst()
             .map(c -> resolveCleanupPolicyValue(c.value()))
-            .orElse(CleanupPolicy.DELETE);
+            .orElse(DELETE);
     }
 
     /**
@@ -116,10 +120,10 @@ final class AdminApiHandler {
      */
     private static CleanupPolicy resolveCleanupPolicyValue(final String value) {
         return switch (value) {
-            case "compact"        -> CleanupPolicy.COMPACT;
+            case "compact"        -> COMPACT;
             case "compact,delete",
-                 "delete,compact" -> CleanupPolicy.COMPACT_DELETE;
-            default               -> CleanupPolicy.DELETE;
+                 "delete,compact" -> COMPACT_DELETE;
+            default               -> DELETE;
         };
     }
 

@@ -20,8 +20,12 @@ import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.kafka.common.record.CompressionType.NONE;
+import static eu.kafkaesque.core.CleanupPolicy.COMPACT;
+import static eu.kafkaesque.core.CleanupPolicy.COMPACT_DELETE;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -347,8 +351,8 @@ final class ConsumerDataApiHandler {
     private List<StoredRecord> applyTopicPolicy(
             final List<StoredRecord> records, final TopicStore.TopicDefinition def) {
         var result = records;
-        if (def.cleanupPolicy() == CleanupPolicy.COMPACT
-                || def.cleanupPolicy() == CleanupPolicy.COMPACT_DELETE) {
+        if (def.cleanupPolicy() == COMPACT
+                || def.cleanupPolicy() == COMPACT_DELETE) {
             result = applyCompaction(result);
         }
         if (def.retentionMs() < Long.MAX_VALUE) {
@@ -449,9 +453,9 @@ final class ConsumerDataApiHandler {
      */
     private static long recordByteSize(final StoredRecord record) {
         final long keyBytes = record.key() != null
-            ? record.key().getBytes(StandardCharsets.UTF_8).length : 0L;
+            ? record.key().getBytes(UTF_8).length : 0L;
         final long valueBytes = record.value() != null
-            ? record.value().getBytes(StandardCharsets.UTF_8).length : 0L;
+            ? record.value().getBytes(UTF_8).length : 0L;
         return keyBytes + valueBytes;
     }
 
@@ -476,8 +480,8 @@ final class ConsumerDataApiHandler {
             .forEach(r -> builder.appendWithOffset(
                 r.offset(),
                 r.timestamp(),
-                r.key() != null ? r.key().getBytes(StandardCharsets.UTF_8) : null,
-                r.value() != null ? r.value().getBytes(StandardCharsets.UTF_8) : null,
+                r.key() != null ? r.key().getBytes(UTF_8) : null,
+                r.value() != null ? r.value().getBytes(UTF_8) : null,
                 r.headers().toArray(Header[]::new)));
         return builder.build();
     }
@@ -494,6 +498,6 @@ final class ConsumerDataApiHandler {
      */
     private static int estimateBufferSize(final List<StoredRecord> records, final Compression compression) {
         final int base = records.size() * 512 + 64;
-        return compression.type() == CompressionType.NONE ? base : base * 2;
+        return compression.type() == NONE ? base : base * 2;
     }
 }

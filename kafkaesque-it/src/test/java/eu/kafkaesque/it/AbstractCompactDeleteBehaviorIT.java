@@ -15,7 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -80,12 +80,12 @@ abstract class AbstractCompactDeleteBehaviorIT {
                 KafkaTestClientFactory.createConsumer(bootstrapServers)) {
             consumer.subscribe(List.of(topicName));
 
-            await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            await().atMost(10, SECONDS).until(() -> {
                 consumer.poll(Duration.ofMillis(200));
                 return !consumer.assignment().isEmpty();
             });
 
-            await().atMost(30, TimeUnit.SECONDS).pollInterval(2, TimeUnit.SECONDS).until(() -> {
+            await().atMost(30, SECONDS).pollInterval(2, SECONDS).until(() -> {
                 consumer.seekToBeginning(consumer.assignment());
                 final List<ConsumerRecord<String, String>> records = new ArrayList<>();
                 int emptyPolls = 0;
@@ -143,12 +143,12 @@ abstract class AbstractCompactDeleteBehaviorIT {
                 KafkaTestClientFactory.createConsumer(bootstrapServers)) {
             consumer.subscribe(List.of(topicName));
 
-            await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            await().atMost(10, SECONDS).until(() -> {
                 consumer.poll(Duration.ofMillis(200));
                 return !consumer.assignment().isEmpty();
             });
 
-            await().atMost(30, TimeUnit.SECONDS).pollInterval(2, TimeUnit.SECONDS).until(() -> {
+            await().atMost(30, SECONDS).pollInterval(2, SECONDS).until(() -> {
                 consumer.seekToBeginning(consumer.assignment());
                 final List<ConsumerRecord<String, String>> records = new ArrayList<>();
                 int emptyPolls = 0;

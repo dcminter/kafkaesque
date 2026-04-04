@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.awaitility.Awaitility.await;
 
@@ -112,12 +112,12 @@ abstract class AbstractRetentionBehaviorIT {
             consumer.subscribe(List.of(topicName));
 
             // Obtain partition assignment before seeking
-            await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            await().atMost(10, SECONDS).until(() -> {
                 consumer.poll(Duration.ofMillis(200));
                 return !consumer.assignment().isEmpty();
             });
 
-            await().atMost(60, TimeUnit.SECONDS).pollInterval(2, TimeUnit.SECONDS).until(() -> {
+            await().atMost(60, SECONDS).pollInterval(2, SECONDS).until(() -> {
                 consumer.seekToBeginning(consumer.assignment());
                 final List<ConsumerRecord<String, String>> received = new ArrayList<>();
                 int emptyPolls = 0;
@@ -181,13 +181,13 @@ abstract class AbstractRetentionBehaviorIT {
                 KafkaTestClientFactory.createConsumer(bootstrapServers)) {
             consumer.subscribe(List.of(topicName));
 
-            await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            await().atMost(10, SECONDS).until(() -> {
                 consumer.poll(Duration.ofMillis(200));
                 return !consumer.assignment().isEmpty();
             });
 
             // Wait until the oldest record (key-0) is no longer returned when reading from the start.
-            await().atMost(60, TimeUnit.SECONDS).pollInterval(2, TimeUnit.SECONDS).until(() -> {
+            await().atMost(60, SECONDS).pollInterval(2, SECONDS).until(() -> {
                 consumer.seekToBeginning(consumer.assignment());
                 final List<ConsumerRecord<String, String>> received = new ArrayList<>();
                 int emptyPolls = 0;
@@ -274,7 +274,7 @@ abstract class AbstractRetentionBehaviorIT {
                     new ConfigEntry("log.retention.check.interval.ms", "1000"),
                     AlterConfigOp.OpType.SET
                 ))
-            )).all().get(5, TimeUnit.SECONDS);
+            )).all().get(5, SECONDS);
         } catch (final Exception e) {
             log.debug("Could not set log.retention.check.interval.ms dynamically ({}); "
                 + "backend must be pre-configured.", e.getMessage());

@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -78,7 +78,7 @@ abstract class AbstractCompressionBehaviorIT {
             consumer.subscribe(List.of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
-            await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            await().atMost(10, SECONDS).until(() -> {
                 consumer.poll(Duration.ofMillis(100)).forEach(received::add);
                 return received.size() >= 2;
             });

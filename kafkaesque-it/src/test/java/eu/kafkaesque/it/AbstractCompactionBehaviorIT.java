@@ -15,7 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.awaitility.Awaitility.await;
 
@@ -79,13 +79,13 @@ abstract class AbstractCompactionBehaviorIT {
             consumer.subscribe(List.of(topicName));
 
             // Obtain partition assignment before seeking
-            await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            await().atMost(10, SECONDS).until(() -> {
                 consumer.poll(Duration.ofMillis(200));
                 return !consumer.assignment().isEmpty();
             });
 
             // Wait until compaction has reduced k1 to a single record with the latest value
-            await().atMost(30, TimeUnit.SECONDS).pollInterval(2, TimeUnit.SECONDS).until(() -> {
+            await().atMost(30, SECONDS).pollInterval(2, SECONDS).until(() -> {
                 consumer.seekToBeginning(consumer.assignment());
                 final List<ConsumerRecord<String, String>> records = new ArrayList<>();
                 int emptyPolls = 0;
@@ -140,7 +140,7 @@ abstract class AbstractCompactionBehaviorIT {
                 KafkaTestClientFactory.createConsumer(bootstrapServers)) {
             consumer.subscribe(List.of(topicName));
 
-            await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            await().atMost(10, SECONDS).until(() -> {
                 consumer.poll(Duration.ofMillis(200));
                 return !consumer.assignment().isEmpty();
             });
@@ -148,7 +148,7 @@ abstract class AbstractCompactionBehaviorIT {
             // Wait until the original record (k1=value-1) has been compacted away.
             // After one compaction pass the tombstone (k1=null) may still be present;
             // we only assert that no non-null k1 record remains so that a single pass suffices.
-            await().atMost(30, TimeUnit.SECONDS).pollInterval(2, TimeUnit.SECONDS).until(() -> {
+            await().atMost(30, SECONDS).pollInterval(2, SECONDS).until(() -> {
                 consumer.seekToBeginning(consumer.assignment());
                 final List<ConsumerRecord<String, String>> records = new ArrayList<>();
                 int emptyPolls = 0;

@@ -10,13 +10,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -88,7 +89,7 @@ abstract class AbstractConsumerBehaviorIT {
 
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
-        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+        await().atMost(10, SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(received::add);
             return received.size() >= 2;
         });
@@ -125,7 +126,7 @@ abstract class AbstractConsumerBehaviorIT {
         consumer.subscribe(List.of(topicName));
 
         final List<String> receivedValues = new ArrayList<>();
-        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+        await().atMost(10, SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(r -> receivedValues.add(r.value()));
             return receivedValues.size() >= messageCount;
         });
@@ -150,7 +151,7 @@ abstract class AbstractConsumerBehaviorIT {
     void shouldPreserveSingleHeaderThroughRoundTrip() {
         // Given
         final ProducerRecord<String, String> record = new ProducerRecord<>(topicName, "key", "value");
-        record.headers().add("trace-id", "abc-123".getBytes(StandardCharsets.UTF_8));
+        record.headers().add("trace-id", "abc-123".getBytes(UTF_8));
 
         producer.send(record);
         producer.flush();
@@ -159,7 +160,7 @@ abstract class AbstractConsumerBehaviorIT {
 
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
-        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+        await().atMost(10, SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(received::add);
             return !received.isEmpty();
         });
@@ -168,10 +169,10 @@ abstract class AbstractConsumerBehaviorIT {
         assertThat(received).hasSize(1);
         final Header traceHeader = received.get(0).headers().lastHeader("trace-id");
         assertThat(traceHeader).isNotNull();
-        assertThat(new String(traceHeader.value(), StandardCharsets.UTF_8)).isEqualTo("abc-123");
+        assertThat(new String(traceHeader.value(), UTF_8)).isEqualTo("abc-123");
 
         log.info("Single header preserved: key={}, value={}", traceHeader.key(),
-            new String(traceHeader.value(), StandardCharsets.UTF_8));
+            new String(traceHeader.value(), UTF_8));
     }
 
     /**
@@ -182,9 +183,9 @@ abstract class AbstractConsumerBehaviorIT {
     void shouldPreserveMultipleHeadersThroughRoundTrip() {
         // Given
         final ProducerRecord<String, String> record = new ProducerRecord<>(topicName, "key", "value");
-        record.headers().add("content-type", "application/json".getBytes(StandardCharsets.UTF_8));
-        record.headers().add("correlation-id", "corr-456".getBytes(StandardCharsets.UTF_8));
-        record.headers().add("source-service", "order-service".getBytes(StandardCharsets.UTF_8));
+        record.headers().add("content-type", "application/json".getBytes(UTF_8));
+        record.headers().add("correlation-id", "corr-456".getBytes(UTF_8));
+        record.headers().add("source-service", "order-service".getBytes(UTF_8));
 
         producer.send(record);
         producer.flush();
@@ -193,7 +194,7 @@ abstract class AbstractConsumerBehaviorIT {
 
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
-        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+        await().atMost(10, SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(received::add);
             return !received.isEmpty();
         });
@@ -203,11 +204,11 @@ abstract class AbstractConsumerBehaviorIT {
         final Header[] headers = received.get(0).headers().toArray();
         assertThat(headers).hasSize(3);
 
-        assertThat(new String(received.get(0).headers().lastHeader("content-type").value(), StandardCharsets.UTF_8))
+        assertThat(new String(received.get(0).headers().lastHeader("content-type").value(), UTF_8))
             .isEqualTo("application/json");
-        assertThat(new String(received.get(0).headers().lastHeader("correlation-id").value(), StandardCharsets.UTF_8))
+        assertThat(new String(received.get(0).headers().lastHeader("correlation-id").value(), UTF_8))
             .isEqualTo("corr-456");
-        assertThat(new String(received.get(0).headers().lastHeader("source-service").value(), StandardCharsets.UTF_8))
+        assertThat(new String(received.get(0).headers().lastHeader("source-service").value(), UTF_8))
             .isEqualTo("order-service");
 
         log.info("All {} headers preserved correctly", headers.length);

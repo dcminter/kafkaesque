@@ -10,8 +10,9 @@ import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
+
+import static java.nio.charset.StandardCharsets.UTF_8;
 
 /**
  * Handles Kafka producer API responses.
@@ -124,7 +125,7 @@ final class ProducerApiHandler {
         }
         final byte[] raw = new byte[size];
         buf.get(raw);
-        return new String(raw, StandardCharsets.UTF_8);
+        return new String(raw, UTF_8);
     }
 
     /**

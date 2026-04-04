@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static eu.kafkaesque.core.CleanupPolicy.DELETE;
+
 /**
  * Thread-safe registry of topics known to Kafkaesque.
  *
@@ -56,7 +58,7 @@ public final class TopicStore {
         static TopicCreationConfig defaults(final int numPartitions, final short replicationFactor) {
             return new TopicCreationConfig(
                 numPartitions, replicationFactor, Compression.NONE,
-                CleanupPolicy.DELETE, Long.MAX_VALUE, -1L);
+                DELETE, Long.MAX_VALUE, -1L);
         }
     }
 
@@ -119,7 +121,7 @@ public final class TopicStore {
             final short replicationFactor, final Compression compression) {
         createTopic(name, new TopicCreationConfig(
             numPartitions, replicationFactor, compression,
-            CleanupPolicy.DELETE, Long.MAX_VALUE, -1L));
+            DELETE, Long.MAX_VALUE, -1L));
     }
 
     /**

@@ -12,6 +12,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
@@ -52,14 +53,14 @@ class KafkaesqueServerEventRetrievalTest {
     void tearDown() {
         if (adminClient != null) {
             try {
-                adminClient.close(java.time.Duration.ofSeconds(5));
+                adminClient.close(Duration.ofSeconds(5));
             } catch (final Exception e) {
                 // Ignore close exceptions
             }
         }
         if (producer != null) {
             try {
-                producer.close(java.time.Duration.ofSeconds(5));
+                producer.close(Duration.ofSeconds(5));
             } catch (final Exception e) {
                 // Ignore close exceptions
             }
