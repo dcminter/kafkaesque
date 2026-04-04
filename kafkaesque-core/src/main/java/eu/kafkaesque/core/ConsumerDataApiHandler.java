@@ -20,7 +20,6 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -65,25 +64,22 @@ final class ConsumerDataApiHandler {
             final var accessor = new ByteBufferAccessor(buffer);
             final var request = new ListOffsetsRequestData(accessor, requestHeader.apiVersion());
 
-            final var topicResponses = new ArrayList<ListOffsetsResponseData.ListOffsetsTopicResponse>();
-
-            for (final var topic : request.topics()) {
-                final var partitionResponses = new ArrayList<ListOffsetsResponseData.ListOffsetsPartitionResponse>();
-
-                for (final var partition : topic.partitions()) {
-                    final long offset = resolveListOffset(topic.name(), partition.partitionIndex(), partition.timestamp());
-                    partitionResponses.add(new ListOffsetsResponseData.ListOffsetsPartitionResponse()
-                        .setPartitionIndex(partition.partitionIndex())
-                        .setErrorCode((short) 0)
-                        .setTimestamp(partition.timestamp() >= 0 ? partition.timestamp() : -1L)
-                        .setOffset(offset)
-                        .setLeaderEpoch(0));
-                }
-
-                topicResponses.add(new ListOffsetsResponseData.ListOffsetsTopicResponse()
+            final var topicResponses = request.topics().stream()
+                .map(topic -> new ListOffsetsResponseData.ListOffsetsTopicResponse()
                     .setName(topic.name())
-                    .setPartitions(partitionResponses));
-            }
+                    .setPartitions(topic.partitions().stream()
+                        .map(partition -> {
+                            final long offset = resolveListOffset(
+                                topic.name(), partition.partitionIndex(), partition.timestamp());
+                            return new ListOffsetsResponseData.ListOffsetsPartitionResponse()
+                                .setPartitionIndex(partition.partitionIndex())
+                                .setErrorCode((short) 0)
+                                .setTimestamp(partition.timestamp() >= 0 ? partition.timestamp() : -1L)
+                                .setOffset(offset)
+                                .setLeaderEpoch(0);
+                        })
+                        .toList()))
+                .toList();
 
             return ResponseSerializer.serialize(requestHeader,
                 new ListOffsetsResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
@@ -113,10 +109,9 @@ final class ConsumerDataApiHandler {
             final var data = new OffsetFetchResponseData().setThrottleTimeMs(0);
 
             if (requestHeader.apiVersion() >= 8) {
-                final var groupResponses = new ArrayList<OffsetFetchResponseData.OffsetFetchResponseGroup>();
-                for (final var group : request.groups()) {
-                    groupResponses.add(buildOffsetFetchGroupResponse(group.groupId(), group.topics()));
-                }
+                final var groupResponses = request.groups().stream()
+                    .map(group -> buildOffsetFetchGroupResponse(group.groupId(), group.topics()))
+                    .toList();
                 data.setGroups(groupResponses);
             } else {
                 data.setTopics(buildOffsetFetchTopicResponses(request.groupId(), request.topics()));
@@ -142,21 +137,20 @@ final class ConsumerDataApiHandler {
             final var accessor = new ByteBufferAccessor(buffer);
             final var request = new OffsetCommitRequestData(accessor, requestHeader.apiVersion());
 
-            final var topicResponses = new ArrayList<OffsetCommitResponseData.OffsetCommitResponseTopic>();
-
-            for (final var topic : request.topics()) {
-                final var partitionResponses = new ArrayList<OffsetCommitResponseData.OffsetCommitResponsePartition>();
-                for (final var partition : topic.partitions()) {
-                    groupCoordinator.commitOffset(
-                        request.groupId(), topic.name(), partition.partitionIndex(), partition.committedOffset());
-                    partitionResponses.add(new OffsetCommitResponseData.OffsetCommitResponsePartition()
-                        .setPartitionIndex(partition.partitionIndex())
-                        .setErrorCode((short) 0));
-                }
-                topicResponses.add(new OffsetCommitResponseData.OffsetCommitResponseTopic()
+            final var topicResponses = request.topics().stream()
+                .map(topic -> new OffsetCommitResponseData.OffsetCommitResponseTopic()
                     .setName(topic.name())
-                    .setPartitions(partitionResponses));
-            }
+                    .setPartitions(topic.partitions().stream()
+                        .map(partition -> {
+                            groupCoordinator.commitOffset(
+                                request.groupId(), topic.name(),
+                                partition.partitionIndex(), partition.committedOffset());
+                            return new OffsetCommitResponseData.OffsetCommitResponsePartition()
+                                .setPartitionIndex(partition.partitionIndex())
+                                .setErrorCode((short) 0);
+                        })
+                        .toList()))
+                .toList();
 
             return ResponseSerializer.serialize(requestHeader,
                 new OffsetCommitResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
@@ -183,29 +177,25 @@ final class ConsumerDataApiHandler {
             final var accessor = new ByteBufferAccessor(buffer);
             final var request = new FetchRequestData(accessor, requestHeader.apiVersion());
 
-            final var topicResponses = new ArrayList<FetchResponseData.FetchableTopicResponse>();
-
-            for (final var topic : request.topics()) {
-                final var partitionDataList = new ArrayList<FetchResponseData.PartitionData>();
-
-                for (final var partition : topic.partitions()) {
-                    final var records = buildFetchRecords(
-                        topic.topic(), partition.partition(), partition.fetchOffset());
-                    final var highWatermark = eventStore.getRecordCount(topic.topic(), partition.partition());
-
-                    partitionDataList.add(new FetchResponseData.PartitionData()
-                        .setPartitionIndex(partition.partition())
-                        .setErrorCode((short) 0)
-                        .setHighWatermark(highWatermark)
-                        .setLastStableOffset(highWatermark)
-                        .setLogStartOffset(0L)
-                        .setRecords(records));
-                }
-
-                topicResponses.add(new FetchResponseData.FetchableTopicResponse()
+            final var topicResponses = request.topics().stream()
+                .map(topic -> new FetchResponseData.FetchableTopicResponse()
                     .setTopic(topic.topic())
-                    .setPartitions(partitionDataList));
-            }
+                    .setPartitions(topic.partitions().stream()
+                        .map(partition -> {
+                            final var records = buildFetchRecords(
+                                topic.topic(), partition.partition(), partition.fetchOffset());
+                            final var highWatermark =
+                                eventStore.getRecordCount(topic.topic(), partition.partition());
+                            return new FetchResponseData.PartitionData()
+                                .setPartitionIndex(partition.partition())
+                                .setErrorCode((short) 0)
+                                .setHighWatermark(highWatermark)
+                                .setLastStableOffset(highWatermark)
+                                .setLogStartOffset(0L)
+                                .setRecords(records);
+                        })
+                        .toList()))
+                .toList();
 
             final var data = new FetchResponseData()
                 .setThrottleTimeMs(0)
@@ -259,27 +249,22 @@ final class ConsumerDataApiHandler {
             final String groupId,
             final List<OffsetFetchRequestData.OffsetFetchRequestTopics> topics) {
 
-        final var topicResponses = new ArrayList<OffsetFetchResponseData.OffsetFetchResponseTopics>();
-
-        for (final var topic : topics) {
-            final var partitionResponses = new ArrayList<OffsetFetchResponseData.OffsetFetchResponsePartitions>();
-
-            for (final var partitionIndex : topic.partitionIndexes()) {
-                final var committed = groupCoordinator.getCommittedOffset(groupId, topic.name(), partitionIndex);
-                partitionResponses.add(new OffsetFetchResponseData.OffsetFetchResponsePartitions()
-                    .setPartitionIndex(partitionIndex)
-                    .setCommittedOffset(committed)
-                    .setCommittedLeaderEpoch(-1)
-                    .setMetadata("")
-                    .setErrorCode((short) 0));
-            }
-
-            topicResponses.add(new OffsetFetchResponseData.OffsetFetchResponseTopics()
+        return topics.stream()
+            .map(topic -> new OffsetFetchResponseData.OffsetFetchResponseTopics()
                 .setName(topic.name())
-                .setPartitions(partitionResponses));
-        }
-
-        return topicResponses;
+                .setPartitions(topic.partitionIndexes().stream()
+                    .map(partitionIndex -> {
+                        final var committed =
+                            groupCoordinator.getCommittedOffset(groupId, topic.name(), partitionIndex);
+                        return new OffsetFetchResponseData.OffsetFetchResponsePartitions()
+                            .setPartitionIndex(partitionIndex)
+                            .setCommittedOffset(committed)
+                            .setCommittedLeaderEpoch(-1)
+                            .setMetadata("")
+                            .setErrorCode((short) 0);
+                    })
+                    .toList()))
+            .toList();
     }
 
     /**
@@ -293,27 +278,22 @@ final class ConsumerDataApiHandler {
             final String groupId,
             final List<OffsetFetchRequestData.OffsetFetchRequestTopic> topics) {
 
-        final var topicResponses = new ArrayList<OffsetFetchResponseData.OffsetFetchResponseTopic>();
-
-        for (final var topic : topics) {
-            final var partitionResponses = new ArrayList<OffsetFetchResponseData.OffsetFetchResponsePartition>();
-
-            for (final var partitionIndex : topic.partitionIndexes()) {
-                final var committed = groupCoordinator.getCommittedOffset(groupId, topic.name(), partitionIndex);
-                partitionResponses.add(new OffsetFetchResponseData.OffsetFetchResponsePartition()
-                    .setPartitionIndex(partitionIndex)
-                    .setCommittedOffset(committed)
-                    .setCommittedLeaderEpoch(-1)
-                    .setMetadata("")
-                    .setErrorCode((short) 0));
-            }
-
-            topicResponses.add(new OffsetFetchResponseData.OffsetFetchResponseTopic()
+        return topics.stream()
+            .map(topic -> new OffsetFetchResponseData.OffsetFetchResponseTopic()
                 .setName(topic.name())
-                .setPartitions(partitionResponses));
-        }
-
-        return topicResponses;
+                .setPartitions(topic.partitionIndexes().stream()
+                    .map(partitionIndex -> {
+                        final var committed =
+                            groupCoordinator.getCommittedOffset(groupId, topic.name(), partitionIndex);
+                        return new OffsetFetchResponseData.OffsetFetchResponsePartition()
+                            .setPartitionIndex(partitionIndex)
+                            .setCommittedOffset(committed)
+                            .setCommittedLeaderEpoch(-1)
+                            .setMetadata("")
+                            .setErrorCode((short) 0);
+                    })
+                    .toList()))
+            .toList();
     }
 
     /**

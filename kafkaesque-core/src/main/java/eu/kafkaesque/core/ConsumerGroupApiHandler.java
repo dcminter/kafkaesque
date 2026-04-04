@@ -14,8 +14,8 @@ import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
-import java.util.HashMap;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Handles Kafka consumer group lifecycle API responses.
@@ -100,10 +100,10 @@ final class ConsumerGroupApiHandler {
             final var request = new SyncGroupRequestData(accessor, requestHeader.apiVersion());
 
             if (!request.assignments().isEmpty()) {
-                final var assignments = new HashMap<String, byte[]>();
-                for (final var entry : request.assignments()) {
-                    assignments.put(entry.memberId(), entry.assignment());
-                }
+                final var assignments = request.assignments().stream()
+                    .collect(Collectors.toMap(
+                        SyncGroupRequestData.SyncGroupRequestAssignment::memberId,
+                        SyncGroupRequestData.SyncGroupRequestAssignment::assignment));
                 groupCoordinator.syncGroup(request.groupId(), assignments);
             }
 

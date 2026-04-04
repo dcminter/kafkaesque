@@ -11,7 +11,6 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -52,23 +51,18 @@ final class ProducerApiHandler {
             logProduceRequest(produceRequest);
 
             final var topicResponses = new ProduceResponseData.TopicProduceResponseCollection();
-
-            for (final var topicData : produceRequest.topicData()) {
-                final var partitionResponses = new ArrayList<ProduceResponseData.PartitionProduceResponse>();
-
-                for (final var partitionData : topicData.partitionData()) {
-                    partitionResponses.add(new ProduceResponseData.PartitionProduceResponse()
-                        .setIndex(partitionData.index())
-                        .setErrorCode((short) 0)
-                        .setBaseOffset(0L)
-                        .setLogAppendTimeMs(-1L)
-                        .setLogStartOffset(0L));
-                }
-
-                topicResponses.add(new ProduceResponseData.TopicProduceResponse()
+            produceRequest.topicData().stream()
+                .map(topicData -> new ProduceResponseData.TopicProduceResponse()
                     .setName(topicData.name())
-                    .setPartitionResponses(partitionResponses));
-            }
+                    .setPartitionResponses(topicData.partitionData().stream()
+                        .map(partitionData -> new ProduceResponseData.PartitionProduceResponse()
+                            .setIndex(partitionData.index())
+                            .setErrorCode((short) 0)
+                            .setBaseOffset(0L)
+                            .setLogAppendTimeMs(-1L)
+                            .setLogStartOffset(0L))
+                        .toList()))
+                .forEach(topicResponses::add);
 
             final var response = new ProduceResponseData()
                 .setThrottleTimeMs(0)

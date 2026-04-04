@@ -27,6 +27,7 @@ all reported violations before considering the task complete. This will enforce 
   * Lean towards declaring collection fields and parameters as interface types (Map, Set, etc) rather than concrete types (HashMap, HashSet, etc.)
     * i.e. prefer `private final Map<String,String> foo = ConcreteHashMap<>()` to `private final ConcreteHashMap<String,String> foo = ConcreteHashMap<>()`
     * But for local variables prefer `var`, i.e. `let var foo = ConcreteHashMap<String,String>()` form
+  * Lean towards using static imports in order to keep 
   * Lombok annotations are encouraged to keep boilerplate "noise" to a minimum
   * Where "external" infrastructure is needed to support integration tests then `testcontainers` should be used to support this
   * Keep method implementations fairly short - where there's opportunity for re-use, put these into private methods.

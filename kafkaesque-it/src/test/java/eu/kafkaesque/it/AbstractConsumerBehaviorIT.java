@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -131,9 +132,8 @@ abstract class AbstractConsumerBehaviorIT {
 
         // Then
         assertThat(receivedValues).hasSize(messageCount);
-        for (int i = 0; i < messageCount; i++) {
-            assertThat(receivedValues.get(i)).isEqualTo("message-" + i);
-        }
+        IntStream.range(0, messageCount)
+            .forEach(i -> assertThat(receivedValues.get(i)).isEqualTo("message-" + i));
 
         log.info("Verified ordering for {} messages", messageCount);
     }

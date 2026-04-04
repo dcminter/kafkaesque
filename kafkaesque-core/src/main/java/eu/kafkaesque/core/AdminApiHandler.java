@@ -34,6 +34,32 @@ final class AdminApiHandler {
     }
 
     /**
+     * Registers a topic in the store and builds the corresponding CREATE_TOPICS response entry.
+     *
+     * @param topic the topic to create
+     * @return the result entry for the CREATE_TOPICS response
+     */
+    private CreateTopicsResponseData.CreatableTopicResult registerAndBuildTopicResult(
+            final CreateTopicsRequestData.CreatableTopic topic) {
+        final var name = topic.name();
+        final var numPartitions = topic.numPartitions();
+        final var replicationFactor = topic.replicationFactor();
+        topicStore.createTopic(name, numPartitions, replicationFactor);
+        final var topicId = topicStore.getTopic(name)
+            .map(TopicStore.TopicDefinition::topicId)
+            .orElse(Uuid.randomUuid());
+        log.info("Created topic: name={}, partitions={}, replicationFactor={}",
+            name, numPartitions, replicationFactor);
+        return new CreateTopicsResponseData.CreatableTopicResult()
+            .setName(name)
+            .setTopicId(topicId)
+            .setErrorCode((short) 0)
+            .setErrorMessage(null)
+            .setNumPartitions(numPartitions)
+            .setReplicationFactor(replicationFactor);
+    }
+
+    /**
      * Generates a CREATE_TOPICS response after registering the requested topics.
      *
      * <p>Each topic in the request is stored in the {@link TopicStore} and a
@@ -50,28 +76,9 @@ final class AdminApiHandler {
             final var request = new CreateTopicsRequestData(accessor, requestHeader.apiVersion());
 
             final var topicResults = new CreateTopicsResponseData.CreatableTopicResultCollection();
-
-            for (final var topic : request.topics()) {
-                final var name = topic.name();
-                final var numPartitions = topic.numPartitions();
-                final var replicationFactor = topic.replicationFactor();
-
-                topicStore.createTopic(name, numPartitions, replicationFactor);
-                final var topicId = topicStore.getTopic(name)
-                    .map(TopicStore.TopicDefinition::topicId)
-                    .orElse(Uuid.randomUuid());
-
-                log.info("Created topic: name={}, partitions={}, replicationFactor={}",
-                    name, numPartitions, replicationFactor);
-
-                topicResults.add(new CreateTopicsResponseData.CreatableTopicResult()
-                    .setName(name)
-                    .setTopicId(topicId)
-                    .setErrorCode((short) 0)
-                    .setErrorMessage(null)
-                    .setNumPartitions(numPartitions)
-                    .setReplicationFactor(replicationFactor));
-            }
+            request.topics().stream()
+                .map(this::registerAndBuildTopicResult)
+                .forEach(topicResults::add);
 
             final var response = new CreateTopicsResponseData()
                 .setThrottleTimeMs(0)

@@ -21,8 +21,9 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.IntStream;
 
 /**
  * Handles Kafka cluster and topology API responses.
@@ -124,18 +125,15 @@ final class ClusterApiHandler {
             if (requestedTopics == null) {
                 // null means "list all topics"
                 if (topicStore != null) {
-                    for (final var topic : topicStore.getTopics()) {
-                        topics.add(buildMetadataTopicResponse(topic.name(), topic.numPartitions()));
-                    }
+                    topicStore.getTopics().stream()
+                        .map(topic -> buildMetadataTopicResponse(topic.name(), topic.numPartitions()))
+                        .forEach(topics::add);
                 }
             } else if (!requestedTopics.isEmpty()) {
-                for (final var requestedTopic : requestedTopics) {
-                    final var topicName = requestedTopic.name();
-                    if (topicName != null && !topicName.isEmpty()) {
-                        final int numPartitions = resolvePartitionCount(topicName);
-                        topics.add(buildMetadataTopicResponse(topicName, numPartitions));
-                    }
-                }
+                requestedTopics.stream()
+                    .filter(t -> t.name() != null && !t.name().isEmpty())
+                    .map(t -> buildMetadataTopicResponse(t.name(), resolvePartitionCount(t.name())))
+                    .forEach(topics::add);
             }
 
             data.setTopics(topics);
@@ -189,15 +187,14 @@ final class ClusterApiHandler {
             final var data = new FindCoordinatorResponseData().setThrottleTimeMs(0);
 
             if (requestHeader.apiVersion() >= 4) {
-                final var coordinators = new ArrayList<FindCoordinatorResponseData.Coordinator>();
-                for (final var key : request.coordinatorKeys()) {
-                    coordinators.add(new FindCoordinatorResponseData.Coordinator()
+                final var coordinators = request.coordinatorKeys().stream()
+                    .map(key -> new FindCoordinatorResponseData.Coordinator()
                         .setKey(key)
                         .setNodeId(1)
                         .setHost(getServerHost())
                         .setPort(getServerPort())
-                        .setErrorCode((short) 0));
-                }
+                        .setErrorCode((short) 0))
+                    .toList();
                 data.setCoordinators(coordinators);
             } else {
                 data.setErrorCode((short) 0)
@@ -234,9 +231,9 @@ final class ClusterApiHandler {
 
             final var responseTopics = new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopicCollection();
 
-            for (final var topicRequest : request.topics()) {
-                responseTopics.add(buildDescribeTopicPartitionsTopicResponse(topicRequest.name()));
-            }
+            request.topics().stream()
+                .map(topicRequest -> buildDescribeTopicPartitionsTopicResponse(topicRequest.name()))
+                .forEach(responseTopics::add);
 
             final var data = new DescribeTopicPartitionsResponseData()
                 .setThrottleTimeMs(0)
@@ -292,22 +289,16 @@ final class ClusterApiHandler {
     private ApiVersionsResponseData.ApiVersionCollection buildSupportedApiVersions() {
         final var apiVersions = new ApiVersionsResponseData.ApiVersionCollection();
 
-        for (final var apiKey : ApiKeys.values()) {
-            if (apiKey == ApiKeys.CONTROLLED_SHUTDOWN
-                    || apiKey == ApiKeys.GET_TELEMETRY_SUBSCRIPTIONS
-                    || apiKey == ApiKeys.PUSH_TELEMETRY
-                    || apiKey.id < 0) {
-                continue;
-            }
-            final short maxVersion = (apiKey == ApiKeys.FETCH)
-                ? FETCH_MAX_VERSION
-                : apiKey.latestVersion();
-
-            apiVersions.add(new ApiVersionsResponseData.ApiVersion()
+        Arrays.stream(ApiKeys.values())
+            .filter(apiKey -> apiKey != ApiKeys.CONTROLLED_SHUTDOWN
+                && apiKey != ApiKeys.GET_TELEMETRY_SUBSCRIPTIONS
+                && apiKey != ApiKeys.PUSH_TELEMETRY
+                && apiKey.id >= 0)
+            .map(apiKey -> new ApiVersionsResponseData.ApiVersion()
                 .setApiKey(apiKey.id)
                 .setMinVersion(apiKey.oldestVersion())
-                .setMaxVersion(maxVersion));
-        }
+                .setMaxVersion(apiKey == ApiKeys.FETCH ? FETCH_MAX_VERSION : apiKey.latestVersion()))
+            .forEach(apiVersions::add);
 
         return apiVersions;
     }
@@ -336,9 +327,8 @@ final class ClusterApiHandler {
         }
 
         final var definition = topicStore.getTopic(topicName).orElseThrow();
-        final var partitions = new ArrayList<DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponsePartition>();
-        for (int i = 0; i < definition.numPartitions(); i++) {
-            partitions.add(new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponsePartition()
+        final var partitions = IntStream.range(0, definition.numPartitions())
+            .mapToObj(i -> new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponsePartition()
                 .setErrorCode((short) 0)
                 .setPartitionIndex(i)
                 .setLeaderId(1)
@@ -347,8 +337,8 @@ final class ClusterApiHandler {
                 .setIsrNodes(List.of(1))
                 .setEligibleLeaderReplicas(List.of())
                 .setLastKnownElr(List.of())
-                .setOfflineReplicas(List.of()));
-        }
+                .setOfflineReplicas(List.of()))
+            .toList();
 
         return new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopic()
             .setName(topicName)
@@ -385,16 +375,15 @@ final class ClusterApiHandler {
     private MetadataResponseData.MetadataResponseTopic buildMetadataTopicResponse(
             final String topicName, final int numPartitions) {
 
-        final var partitions = new ArrayList<MetadataResponseData.MetadataResponsePartition>();
-        for (int i = 0; i < numPartitions; i++) {
-            partitions.add(new MetadataResponseData.MetadataResponsePartition()
+        final var partitions = IntStream.range(0, numPartitions)
+            .mapToObj(i -> new MetadataResponseData.MetadataResponsePartition()
                 .setPartitionIndex(i)
                 .setLeaderId(1)
                 .setLeaderEpoch(0)
                 .setReplicaNodes(List.of(1))
                 .setIsrNodes(List.of(1))
-                .setErrorCode((short) 0));
-        }
+                .setErrorCode((short) 0))
+            .toList();
 
         return new MetadataResponseData.MetadataResponseTopic()
             .setName(topicName)
