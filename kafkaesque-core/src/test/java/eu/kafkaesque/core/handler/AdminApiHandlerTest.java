@@ -1,5 +1,6 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.handler;
 
+import eu.kafkaesque.core.storage.TopicStore;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.message.CreateTopicsRequestData;
 import org.apache.kafka.common.message.CreateTopicsResponseData;

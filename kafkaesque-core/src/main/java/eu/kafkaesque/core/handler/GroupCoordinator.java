@@ -1,4 +1,4 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.handler;
 
 import lombok.extern.slf4j.Slf4j;
 

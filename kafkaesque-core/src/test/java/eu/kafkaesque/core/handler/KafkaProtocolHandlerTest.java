@@ -1,5 +1,7 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.handler;
 
+import eu.kafkaesque.core.ServerInfo;
+import eu.kafkaesque.core.connection.ClientConnection;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

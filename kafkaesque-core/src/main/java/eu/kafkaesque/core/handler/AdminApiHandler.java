@@ -1,5 +1,7 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.handler;
 
+import eu.kafkaesque.core.storage.CleanupPolicy;
+import eu.kafkaesque.core.storage.TopicStore;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.compress.Compression;
@@ -14,9 +16,9 @@ import org.apache.kafka.common.requests.RequestHeader;
 import java.nio.ByteBuffer;
 import java.util.stream.StreamSupport;
 
-import static eu.kafkaesque.core.CleanupPolicy.COMPACT;
-import static eu.kafkaesque.core.CleanupPolicy.COMPACT_DELETE;
-import static eu.kafkaesque.core.CleanupPolicy.DELETE;
+import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT;
+import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT_DELETE;
+import static eu.kafkaesque.core.storage.CleanupPolicy.DELETE;
 
 /**
  * Handles Kafka admin API responses.

@@ -1,5 +1,7 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.handler;
 
+import eu.kafkaesque.core.ServerInfo;
+import eu.kafkaesque.core.storage.TopicStore;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ApiVersionsResponseData;

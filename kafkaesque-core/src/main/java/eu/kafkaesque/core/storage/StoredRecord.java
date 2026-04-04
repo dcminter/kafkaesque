@@ -1,4 +1,4 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.storage;
 
 import org.apache.kafka.common.header.Header;
 

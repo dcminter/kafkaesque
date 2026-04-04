@@ -1,4 +1,4 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.storage;
 
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.compress.Compression;
@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static eu.kafkaesque.core.CleanupPolicy.DELETE;
+import static eu.kafkaesque.core.storage.CleanupPolicy.DELETE;
 
 /**
  * Thread-safe registry of topics known to Kafkaesque.

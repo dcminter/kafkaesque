@@ -1,5 +1,9 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.handler;
 
+import eu.kafkaesque.core.storage.CleanupPolicy;
+import eu.kafkaesque.core.storage.EventStore;
+import eu.kafkaesque.core.storage.StoredRecord;
+import eu.kafkaesque.core.storage.TopicStore;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.header.Header;
@@ -21,15 +25,15 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
 import java.util.Comparator;
-
-import static java.nio.charset.StandardCharsets.UTF_8;
-import static org.apache.kafka.common.record.CompressionType.NONE;
-import static eu.kafkaesque.core.CleanupPolicy.COMPACT;
-import static eu.kafkaesque.core.CleanupPolicy.COMPACT_DELETE;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT;
+import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT_DELETE;
+import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.kafka.common.record.CompressionType.NONE;
 
 /**
  * Handles Kafka consumer data-plane API responses.

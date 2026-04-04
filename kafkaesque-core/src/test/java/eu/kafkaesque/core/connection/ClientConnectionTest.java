@@ -1,4 +1,4 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.connection;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;

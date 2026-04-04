@@ -1,5 +1,9 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.handler;
 
+import eu.kafkaesque.core.ServerInfo;
+import eu.kafkaesque.core.connection.ClientConnection;
+import eu.kafkaesque.core.storage.EventStore;
+import eu.kafkaesque.core.storage.TopicStore;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.protocol.ApiKeys;

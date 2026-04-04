@@ -1,4 +1,4 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.connection;
 
 import lombok.Getter;
 import lombok.experimental.Accessors;

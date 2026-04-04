@@ -1,4 +1,4 @@
-package eu.kafkaesque.core;
+package eu.kafkaesque.core.storage;
 
 /**
  * The log cleanup policy for a Kafka topic.
