@@ -187,6 +187,14 @@ final class ConsumerDataApiHandler {
      * <p>Session tracking is not implemented; responding with {@code sessionId=0} signals
      * to the client that it should send a full (non-incremental) fetch each time.</p>
      *
+     * <p>The {@code isolationLevel} field in the request is respected:</p>
+     * <ul>
+     *   <li>{@code 0} ({@code READ_UNCOMMITTED}) – returns all records including aborted ones,
+     *       up to the high-watermark</li>
+     *   <li>{@code 1} ({@code READ_COMMITTED}) – returns only non-transactional and committed
+     *       records, up to the last-stable-offset (LSO)</li>
+     * </ul>
+     *
      * @param requestHeader the request header
      * @param buffer        the buffer containing the request body
      * @return the serialised response buffer, or null on error
@@ -196,20 +204,26 @@ final class ConsumerDataApiHandler {
             final var accessor = new ByteBufferAccessor(buffer);
             final var request = new FetchRequestData(accessor, requestHeader.apiVersion());
 
+            final var isolationLevel = request.isolationLevel();
+
             final var topicResponses = request.topics().stream()
                 .map(topic -> new FetchResponseData.FetchableTopicResponse()
                     .setTopic(topic.topic())
                     .setPartitions(topic.partitions().stream()
                         .map(partition -> {
-                            final var records = buildFetchRecords(
-                                topic.topic(), partition.partition(), partition.fetchOffset());
                             final var highWatermark =
                                 eventStore.getRecordCount(topic.topic(), partition.partition());
+                            final long lso = (isolationLevel == 1)
+                                ? eventStore.getLastStableOffset(topic.topic(), partition.partition())
+                                : highWatermark;
+                            final var records = buildFetchRecords(
+                                topic.topic(), partition.partition(),
+                                partition.fetchOffset(), isolationLevel, lso);
                             return new FetchResponseData.PartitionData()
                                 .setPartitionIndex(partition.partition())
                                 .setErrorCode((short) 0)
                                 .setHighWatermark(highWatermark)
-                                .setLastStableOffset(highWatermark)
+                                .setLastStableOffset(lso)
                                 .setLogStartOffset(0L)
                                 .setRecords(records);
                         })
@@ -317,21 +331,36 @@ final class ConsumerDataApiHandler {
 
     /**
      * Builds a {@link MemoryRecords} instance from stored records at or after the given offset,
-     * applying any compaction or retention policies configured on the topic.
+     * applying isolation-level filtering, the last-stable-offset bound, and any compaction or
+     * retention policies configured on the topic.
      *
-     * @param topic       the topic name
-     * @param partition   the partition index
-     * @param fetchOffset the offset from which to start; records with lower offsets are skipped
+     * @param topic          the topic name
+     * @param partition      the partition index
+     * @param fetchOffset    the offset from which to start; records with lower offsets are skipped
+     * @param isolationLevel {@code 0} for READ_UNCOMMITTED, {@code 1} for READ_COMMITTED
+     * @param lso            the last-stable-offset; READ_COMMITTED records at or above this are excluded
      * @return a {@code MemoryRecords} instance, or {@link MemoryRecords#EMPTY} if none qualify
      */
-    private MemoryRecords buildFetchRecords(final String topic, final int partition, final long fetchOffset) {
+    private MemoryRecords buildFetchRecords(
+            final String topic, final int partition,
+            final long fetchOffset, final byte isolationLevel, final long lso) {
         final var topicDef = topicStore.getTopic(topic);
+        final var rawRecords = eventStore.getRecords(topic, partition, isolationLevel);
         final var effective = topicDef
-            .map(def -> applyTopicPolicy(eventStore.getRecords(topic, partition), def))
-            .orElseGet(() -> eventStore.getRecords(topic, partition));
+            .map(def -> applyTopicPolicy(rawRecords, def))
+            .orElse(rawRecords);
 
+        // Two-stage READ_COMMITTED filtering:
+        // Stage 1 (getRecords above): removes ABORTED and PENDING records server-side.
+        // Stage 2 (LSO check below): additionally removes non-transactional records whose
+        // offsets fall at or above the last-stable-offset, i.e. records interleaved after
+        // an open-transaction record. Both stages are necessary: stage 1 alone cannot hide
+        // non-transactional records that appear after a PENDING offset (the LSO boundary
+        // covers them), and stage 2 alone would not remove ABORTED records below the LSO.
+        // For READ_UNCOMMITTED the LSO equals the high-watermark, so stage 2 is a no-op.
         final var stored = effective.stream()
             .filter(r -> r.offset() >= fetchOffset)
+            .filter(r -> isolationLevel != 1 || r.offset() < lso)
             .toList();
 
         if (stored.isEmpty()) {

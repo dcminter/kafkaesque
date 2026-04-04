@@ -263,6 +263,102 @@ class EventStoreTest {
     }
 
     @Test
+    void storePendingRecord_shouldAssignOffsetAndIncludeInRecordCount() {
+        final var topic = "test-topic";
+        final var timestamp = System.currentTimeMillis();
+
+        final var offset = eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+
+        assertEquals(0L, offset, "First pending record should get offset 0");
+        assertEquals(1L, eventStore.getRecordCount(topic, 0), "Record count should include pending records");
+    }
+
+    @Test
+    void storePendingRecord_shouldBeVisibleToReadUncommittedButHiddenFromReadCommitted() {
+        final var topic = "test-topic";
+        final var timestamp = System.currentTimeMillis();
+
+        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+
+        final var uncommitted = eventStore.getRecords(topic, 0, (byte) 0);
+        final var committed = eventStore.getRecords(topic, 0, (byte) 1);
+
+        assertEquals(1, uncommitted.size(), "READ_UNCOMMITTED should see PENDING records");
+        assertTrue(committed.isEmpty(), "READ_COMMITTED should not see PENDING records");
+    }
+
+    @Test
+    void commitTransaction_shouldMakePendingRecordVisibleToReadCommitted() {
+        final var topic = "test-topic";
+        final var timestamp = System.currentTimeMillis();
+
+        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+        eventStore.commitTransaction("txn-1");
+
+        final var records = eventStore.getRecords(topic, 0, (byte) 1);
+
+        assertEquals(1, records.size(), "Committed record should be visible to READ_COMMITTED");
+        assertEquals("value", records.get(0).value());
+    }
+
+    @Test
+    void abortTransaction_shouldHideRecordFromReadCommittedButShowToReadUncommitted() {
+        final var topic = "test-topic";
+        final var timestamp = System.currentTimeMillis();
+
+        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+        eventStore.abortTransaction("txn-1");
+
+        final var uncommitted = eventStore.getRecords(topic, 0, (byte) 0);
+        final var committed = eventStore.getRecords(topic, 0, (byte) 1);
+
+        // READ_UNCOMMITTED sees all records including aborted ones (matches real Kafka semantics)
+        assertEquals(1, uncommitted.size(), "READ_UNCOMMITTED should see aborted records");
+        // READ_COMMITTED hides aborted records
+        assertTrue(committed.isEmpty(), "Aborted record should be hidden from READ_COMMITTED");
+    }
+
+    @Test
+    void getLastStableOffset_shouldReturnFirstPendingOffset() {
+        final var topic = "test-topic";
+        final var timestamp = System.currentTimeMillis();
+
+        eventStore.storeRecord(topic, 0, timestamp, "key-0", "value-0");   // offset 0
+        eventStore.storeRecord(topic, 0, timestamp, "key-1", "value-1");   // offset 1
+        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key-2", "value-2", List.of()); // offset 2
+
+        assertEquals(2L, eventStore.getLastStableOffset(topic, 0),
+            "LSO should be the first pending offset");
+    }
+
+    @Test
+    void getLastStableOffset_shouldReturnHighWatermarkWhenNoOpenTransaction() {
+        final var topic = "test-topic";
+        final var timestamp = System.currentTimeMillis();
+
+        eventStore.storeRecord(topic, 0, timestamp, "key-0", "value-0");
+        eventStore.storeRecord(topic, 0, timestamp, "key-1", "value-1");
+
+        assertEquals(2L, eventStore.getLastStableOffset(topic, 0),
+            "LSO should equal high-watermark when there are no pending records");
+    }
+
+    @Test
+    void getLastStableOffset_shouldAdvanceAfterTransactionCommit() {
+        final var topic = "test-topic";
+        final var timestamp = System.currentTimeMillis();
+
+        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+
+        assertEquals(0L, eventStore.getLastStableOffset(topic, 0), "LSO should be 0 while txn is open");
+
+        eventStore.commitTransaction("txn-1");
+
+        assertEquals(1L, eventStore.getLastStableOffset(topic, 0),
+            "LSO should advance to high-watermark after commit");
+    }
+
+    @Test
     void returnedLists_shouldBeUnmodifiable() {
         final var timestamp = System.currentTimeMillis();
         eventStore.storeRecord("topic", 0, timestamp, "key", "value");

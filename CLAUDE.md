@@ -39,3 +39,4 @@ all reported violations before considering the task complete. This will enforce 
     * and CONSIDER providing proper javadoc comments for private methods and fields
   * Don't commit changes to git unless this is explicitly requested
   * Don't disable any test cases (including new ones) unless you get explicit approval
+  * There are currently no warnings in the build output - if changes cause new warnings, the warnings should be addressed

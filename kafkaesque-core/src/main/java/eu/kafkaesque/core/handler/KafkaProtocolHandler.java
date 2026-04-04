@@ -28,7 +28,7 @@ import java.nio.channels.SelectionKey;
  *   <li>{@link ApiKeys#API_VERSIONS} - Returns supported API versions</li>
  *   <li>{@link ApiKeys#METADATA} - Returns cluster and topic metadata</li>
  *   <li>{@link ApiKeys#DESCRIBE_CLUSTER} - Returns cluster information</li>
- *   <li>{@link ApiKeys#FIND_COORDINATOR} - Returns this broker as the group coordinator</li>
+ *   <li>{@link ApiKeys#FIND_COORDINATOR} - Returns this broker as the group/transaction coordinator</li>
  *   <li>{@link ApiKeys#PRODUCE} - Accepts and stores published records</li>
  *   <li>{@link ApiKeys#JOIN_GROUP} - Handles consumer group join</li>
  *   <li>{@link ApiKeys#SYNC_GROUP} - Stores and returns partition assignments</li>
@@ -37,10 +37,16 @@ import java.nio.channels.SelectionKey;
  *   <li>{@link ApiKeys#OFFSET_FETCH} - Returns committed offsets for a consumer group</li>
  *   <li>{@link ApiKeys#OFFSET_COMMIT} - Stores committed offsets for a consumer group</li>
  *   <li>{@link ApiKeys#LIST_OFFSETS} - Returns earliest or latest offsets for partitions</li>
- *   <li>{@link ApiKeys#FETCH} - Returns stored records to consumers</li>
+ *   <li>{@link ApiKeys#FETCH} - Returns stored records to consumers (honours isolation level)</li>
  *   <li>{@link ApiKeys#CREATE_TOPICS} - Registers topics in the topic store</li>
  *   <li>{@link ApiKeys#DESCRIBE_TOPIC_PARTITIONS} - Returns partition details for registered topics</li>
  *   <li>{@link ApiKeys#INCREMENTAL_ALTER_CONFIGS} - Accepts broker/topic config changes (no-op: policies applied at fetch time)</li>
+ *   <li>{@link ApiKeys#INIT_PRODUCER_ID} - Assigns a stable producer ID and epoch for transactions</li>
+ *   <li>{@link ApiKeys#ADD_PARTITIONS_TO_TXN} - Registers partition involvement in a transaction</li>
+ *   <li>{@link ApiKeys#ADD_OFFSETS_TO_TXN} - Registers consumer-group involvement in a transaction</li>
+ *   <li>{@link ApiKeys#END_TXN} - Commits or aborts an open transaction</li>
+ *   <li>{@link ApiKeys#WRITE_TXN_MARKERS} - Broker-internal marker writing (returns success)</li>
+ *   <li>{@link ApiKeys#TXN_OFFSET_COMMIT} - Commits offsets transactionally</li>
  *   <li>{@link ApiKeys#GET_TELEMETRY_SUBSCRIPTIONS} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  *   <li>{@link ApiKeys#PUSH_TELEMETRY} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  * </ul>
@@ -59,6 +65,7 @@ public final class KafkaProtocolHandler {
     private final ConsumerDataApiHandler consumerDataApiHandler;
     private final ProducerApiHandler producerApiHandler;
     private final AdminApiHandler adminApiHandler;
+    private final TransactionApiHandler transactionApiHandler;
 
     /**
      * Creates a new protocol handler with the given server info and a fresh event store.
@@ -103,12 +110,14 @@ public final class KafkaProtocolHandler {
     public KafkaProtocolHandler(final ServerInfo serverInfo, final EventStore eventStore) {
         this.eventStore = eventStore;
         final var groupCoordinator = new GroupCoordinator();
+        final var transactionCoordinator = new TransactionCoordinator(eventStore);
         this.topicStore = new TopicStore();
         this.clusterApiHandler = new ClusterApiHandler(serverInfo, this.topicStore);
         this.consumerGroupApiHandler = new ConsumerGroupApiHandler(groupCoordinator);
         this.consumerDataApiHandler = new ConsumerDataApiHandler(eventStore, groupCoordinator, this.topicStore);
         this.producerApiHandler = new ProducerApiHandler(eventStore);
         this.adminApiHandler = new AdminApiHandler(this.topicStore);
+        this.transactionApiHandler = new TransactionApiHandler(transactionCoordinator, groupCoordinator);
     }
 
     /**
@@ -262,6 +271,12 @@ public final class KafkaProtocolHandler {
                 case CREATE_TOPICS                -> adminApiHandler.generateCreateTopicsResponse(header, buffer);
                 case INCREMENTAL_ALTER_CONFIGS   -> adminApiHandler.generateIncrementalAlterConfigsResponse(header, buffer);
                 case DESCRIBE_TOPIC_PARTITIONS   -> clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
+                case INIT_PRODUCER_ID            -> transactionApiHandler.generateInitProducerIdResponse(header, buffer);
+                case ADD_PARTITIONS_TO_TXN       -> transactionApiHandler.generateAddPartitionsToTxnResponse(header, buffer);
+                case ADD_OFFSETS_TO_TXN          -> transactionApiHandler.generateAddOffsetsToTxnResponse(header, buffer);
+                case END_TXN                     -> transactionApiHandler.generateEndTxnResponse(header, buffer);
+                case WRITE_TXN_MARKERS           -> transactionApiHandler.generateWriteTxnMarkersResponse(header, buffer);
+                case TXN_OFFSET_COMMIT           -> transactionApiHandler.generateTxnOffsetCommitResponse(header, buffer);
                 case GET_TELEMETRY_SUBSCRIPTIONS, PUSH_TELEMETRY -> {
                     log.debug("Telemetry API not supported: {}", apiKey);
                     yield clusterApiHandler.generateUnsupportedResponse(header, apiKey);
@@ -273,15 +288,24 @@ public final class KafkaProtocolHandler {
             };
 
             buffer.position(startPosition + requestSize);
-
-            if (response != null) {
-                final var writeBuffer = connection.writeBuffer();
-                writeBuffer.putInt(response.remaining());
-                writeBuffer.put(response);
-            }
+            writeResponse(connection, response);
 
         } catch (final Exception e) {
             log.error("Error processing request", e);
+        }
+    }
+
+    /**
+     * Writes a serialised response buffer to the client's write buffer, prefixed with its length.
+     *
+     * @param connection the client connection to write to
+     * @param response   the serialised response buffer, or {@code null} if there is nothing to send
+     */
+    private static void writeResponse(final ClientConnection connection, final ByteBuffer response) {
+        if (response != null) {
+            final var writeBuffer = connection.writeBuffer();
+            writeBuffer.putInt(response.remaining());
+            writeBuffer.put(response);
         }
     }
 }

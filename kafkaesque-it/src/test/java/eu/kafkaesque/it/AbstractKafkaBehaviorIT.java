@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Nested;
  * @see AbstractCompactionBehaviorIT
  * @see AbstractRetentionBehaviorIT
  * @see AbstractCompactDeleteBehaviorIT
+ * @see AbstractTransactionBehaviorIT
  */
 abstract class AbstractKafkaBehaviorIT {
 
@@ -105,6 +106,17 @@ abstract class AbstractKafkaBehaviorIT {
      */
     @Nested
     class CompactDeleteBehavior extends AbstractCompactDeleteBehaviorIT {
+        @Override
+        protected String getBootstrapServers() throws Exception {
+            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
+        }
+    }
+
+    /**
+     * Runs the Kafka transaction behavior tests against this backend.
+     */
+    @Nested
+    class TransactionBehavior extends AbstractTransactionBehaviorIT {
         @Override
         protected String getBootstrapServers() throws Exception {
             return AbstractKafkaBehaviorIT.this.getBootstrapServers();

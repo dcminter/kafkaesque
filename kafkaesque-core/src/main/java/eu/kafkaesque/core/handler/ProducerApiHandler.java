@@ -21,6 +21,11 @@ import static java.nio.charset.StandardCharsets.UTF_8;
  * <p>Covers {@link ApiKeys#PRODUCE}: parses incoming records, stores them in the
  * event store, and returns a success acknowledgement.</p>
  *
+ * <p>Non-transactional records are stored immediately and are visible to all consumers.
+ * Records produced with a {@code transactionalId} are stored as
+ * {@link eu.kafkaesque.core.storage.TransactionState#PENDING} and only become visible
+ * once the owning transaction is committed via {@code END_TXN}.</p>
+ *
  * @see KafkaProtocolHandler
  * @see EventStore
  */
@@ -50,20 +55,15 @@ final class ProducerApiHandler {
             final var accessor = new ByteBufferAccessor(buffer);
             final var produceRequest = new ProduceRequestData(accessor, requestHeader.apiVersion());
 
-            logProduceRequest(produceRequest);
+            final var transactionalId = produceRequest.transactionalId();
+            final var isTransactional = transactionalId != null && !transactionalId.isBlank();
+
+            log.info("Received PRODUCE request: transactionalId={}, acks={}, timeoutMs={}",
+                transactionalId, produceRequest.acks(), produceRequest.timeoutMs());
 
             final var topicResponses = new ProduceResponseData.TopicProduceResponseCollection();
             produceRequest.topicData().stream()
-                .map(topicData -> new ProduceResponseData.TopicProduceResponse()
-                    .setName(topicData.name())
-                    .setPartitionResponses(topicData.partitionData().stream()
-                        .map(partitionData -> new ProduceResponseData.PartitionProduceResponse()
-                            .setIndex(partitionData.index())
-                            .setErrorCode((short) 0)
-                            .setBaseOffset(0L)
-                            .setLogAppendTimeMs(-1L)
-                            .setLogStartOffset(0L))
-                        .toList()))
+                .map(topicData -> buildTopicResponse(topicData, transactionalId, isTransactional))
                 .forEach(topicResponses::add);
 
             final var response = new ProduceResponseData()
@@ -79,38 +79,82 @@ final class ProducerApiHandler {
     }
 
     /**
-     * Parses a PRODUCE request, logs its contents, and stores each record in the event store.
+     * Builds the response for a single topic, storing all its records.
      *
-     * @param produceRequest the parsed produce request
+     * @param topicData       the topic data from the produce request
+     * @param transactionalId the transactional ID, or null/blank for non-transactional
+     * @param isTransactional whether this is a transactional produce
+     * @return the topic produce response
      */
-    private void logProduceRequest(final ProduceRequestData produceRequest) {
-        log.info("Received PRODUCE request: transactionalId={}, acks={}, timeoutMs={}",
-            produceRequest.transactionalId(), produceRequest.acks(), produceRequest.timeoutMs());
+    private ProduceResponseData.TopicProduceResponse buildTopicResponse(
+            final ProduceRequestData.TopicProduceData topicData,
+            final String transactionalId,
+            final boolean isTransactional) {
 
-        for (final var topicData : produceRequest.topicData()) {
-            log.info("  Topic: {}", topicData.name());
+        log.info("  Topic: {}", topicData.name());
 
-            for (final var partitionData : topicData.partitionData()) {
-                log.info("    Partition: {}", partitionData.index());
+        return new ProduceResponseData.TopicProduceResponse()
+            .setName(topicData.name())
+            .setPartitionResponses(topicData.partitionData().stream()
+                .map(partitionData -> buildPartitionResponse(
+                    topicData.name(), partitionData, transactionalId, isTransactional))
+                .toList());
+    }
 
-                if (partitionData.records() instanceof MemoryRecords memoryRecords) {
-                    var count = 0;
-                    for (final var batch : memoryRecords.batches()) {
-                        for (final var record : batch) {
-                            count++;
-                            final var key = readBufferToString(record.key(), record.keySize());
-                            final var value = readBufferToString(record.value(), record.valueSize());
-                            final var headers = readHeaders(record.headers());
-                            final var offset = eventStore.storeRecord(
-                                topicData.name(), partitionData.index(), record.timestamp(), key, value, headers);
-                            log.info("      Record {}: offset={}, key='{}', value='{}', headers={}",
-                                count, offset, key, value, headers.size());
-                        }
+    /**
+     * Builds the response for a single partition, storing its records.
+     *
+     * @param topicName       the topic name
+     * @param partitionData   the partition data from the produce request
+     * @param transactionalId the transactional ID, or null/blank for non-transactional
+     * @param isTransactional whether this is a transactional produce
+     * @return the partition produce response
+     */
+    private ProduceResponseData.PartitionProduceResponse buildPartitionResponse(
+            final String topicName,
+            final ProduceRequestData.PartitionProduceData partitionData,
+            final String transactionalId,
+            final boolean isTransactional) {
+
+        log.info("    Partition: {}", partitionData.index());
+
+        long baseOffset = -1L;
+
+        if (partitionData.records() instanceof MemoryRecords memoryRecords) {
+            var count = 0;
+            for (final var batch : memoryRecords.batches()) {
+                for (final var record : batch) {
+                    count++;
+                    final var key = readBufferToString(record.key(), record.keySize());
+                    final var value = readBufferToString(record.value(), record.valueSize());
+                    final var headers = readHeaders(record.headers());
+
+                    final long offset;
+                    if (isTransactional) {
+                        offset = eventStore.storePendingRecord(
+                            transactionalId, topicName, partitionData.index(),
+                            record.timestamp(), key, value, headers);
+                    } else {
+                        offset = eventStore.storeRecord(
+                            topicName, partitionData.index(), record.timestamp(), key, value, headers);
                     }
-                    log.info("    Total records: {}", count);
+
+                    if (baseOffset < 0) {
+                        baseOffset = offset;
+                    }
+                    log.info("      Record {}: offset={}, key='{}', value='{}', headers={}, transactional={}",
+                        count, offset, key, value, headers.size(), isTransactional);
                 }
             }
+            log.info("    Total records: {}", count);
         }
+
+        return new ProduceResponseData.PartitionProduceResponse()
+            .setIndex(partitionData.index())
+            .setErrorCode((short) 0)
+            .setBaseOffset(Math.max(baseOffset, 0L))
+            .setLogAppendTimeMs(-1L)
+            .setLogStartOffset(0L);
     }
 
     /**
