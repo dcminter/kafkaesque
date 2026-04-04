@@ -1,5 +1,6 @@
 package eu.kafkaesque.core;
 
+import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.message.CreateTopicsRequestData;
 import org.apache.kafka.common.message.CreateTopicsResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -16,6 +17,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * Unit tests for {@link AdminApiHandler}.
  */
+@Slf4j
 class AdminApiHandlerTest {
 
     private TopicStore topicStore;
@@ -76,7 +78,8 @@ class AdminApiHandlerTest {
             ApiKeys.CREATE_TOPICS.latestVersion(), "test-client", 1);
         final var emptyBuffer = ByteBuffer.allocate(0);
 
-        // When
+        // When – the following error log from AdminApiHandler is expected
+        log.info("Expecting an error log from AdminApiHandler due to malformed (empty) request buffer");
         final var response = handler.generateCreateTopicsResponse(header, emptyBuffer);
 
         // Then
