@@ -120,9 +120,9 @@ public final class EventStore {
         final var offset = partitionStore.getNextOffset();
         final var record = new StoredRecord(topic, partition, offset, timestamp, key, value, headers);
 
-        partitionStore.store(record);
+        final var assignedOffset = partitionStore.store(record);
 
-        log.debug("Stored record: {}", record);
+        log.debug("Stored record: {} at offset {}", record, assignedOffset);
 
         return offset;
     }

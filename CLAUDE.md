@@ -19,10 +19,16 @@ Ultimately we will provide the features of this library as DSL-like configuratio
 
 ## Development standards
 
+After making any edits, you must ensure `mvn checkstyle:check` passes with zero violations. If checkstyle fails, fix 
+all reported violations before considering the task complete. This will enforce some, but not all, of the following:
+
   * Immutability is encouraged wherever reasonably possible; all parameters, fields, and variables should therefore be declared `final` unless their mutability is essential.
   * Modern Java features are encouraged - for example prefer `record` types to classes for simple DTOs 
+  * Lean towards declaring collection fields and parameters as interface types (Map, Set, etc) rather than concrete types (HashMap, HashSet, etc.)
+    * i.e. prefer `private final Map<String,String> foo = ConcreteHashMap<>()` to `private final ConcreteHashMap<String,String> foo = ConcreteHashMap<>()`
+    * But for local variables prefer `var`, i.e. `let var foo = ConcreteHashMap<String,String>()` form
   * Lombok annotations are encouraged to keep boilerplate "noise" to a minimum
-  * Where "external" infrastructure is needed to support integration tests then `testcontainers` should be used to support this (and Claude Code itself is being run within a Docker container so configuration of testcontainers must allow for this)
+  * Where "external" infrastructure is needed to support integration tests then `testcontainers` should be used to support this
   * Keep method implementations fairly short - where there's opportunity for re-use, put these into private methods.
   * Public methods and classes SHOULD generally have corresponding unit tests
   * Prefer to take "configuration" or "context" classes or records over very long parameter lists on methods and constructors. 

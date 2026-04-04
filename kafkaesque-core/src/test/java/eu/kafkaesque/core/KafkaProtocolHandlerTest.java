@@ -29,8 +29,7 @@ class KafkaProtocolHandlerTest {
     @BeforeEach
     void setUp() throws IOException {
         testServerInfo = new TestServerInfo("test-host", 9093);
-        handler = new KafkaProtocolHandler();
-        handler.setServerInfo(testServerInfo);
+        handler = new KafkaProtocolHandler(testServerInfo);
 
         // Set up real socket connection for integration-style tests
         serverSocket = ServerSocketChannel.open();

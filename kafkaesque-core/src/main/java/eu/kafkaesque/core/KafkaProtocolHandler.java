@@ -54,36 +54,54 @@ public final class KafkaProtocolHandler {
     private final AdminApiHandler adminApiHandler;
 
     /**
-     * Creates a new protocol handler with a new event store and group coordinator.
+     * Creates a new protocol handler with the given server info and a fresh event store.
+     *
+     * @param serverInfo the server info used to advertise host and port in cluster responses;
+     *                   may be {@code null} to use built-in defaults
      */
-    public KafkaProtocolHandler() {
-        this(new EventStore());
+    public KafkaProtocolHandler(final ServerInfo serverInfo) {
+        this(serverInfo, new EventStore());
     }
 
     /**
-     * Creates a new protocol handler with the specified event store.
+     * Creates a new protocol handler with a fresh event store and no server info.
+     *
+     * <p>Cluster responses will use built-in default host and port values until the handler
+     * is provided with real server info via the
+     * {@link #KafkaProtocolHandler(ServerInfo, EventStore)} constructor.</p>
+     */
+    public KafkaProtocolHandler() {
+        this(null, new EventStore());
+    }
+
+    /**
+     * Creates a new protocol handler with the specified event store and no server info.
+     *
+     * <p>Useful in tests that inject a pre-populated event store and do not need cluster
+     * metadata to reflect live server coordinates.</p>
      *
      * @param eventStore the event store to use for storing published records
      */
     public KafkaProtocolHandler(final EventStore eventStore) {
+        this(null, eventStore);
+    }
+
+    /**
+     * Creates a new protocol handler with the specified server info and event store.
+     *
+     * @param serverInfo the server info used to advertise host and port in cluster responses;
+     *                   may be {@code null} to use built-in defaults
+     * @param eventStore the event store to use for storing published records
+     */
+    public KafkaProtocolHandler(final ServerInfo serverInfo, final EventStore eventStore) {
         this.eventStore = eventStore;
         final var groupCoordinator = new GroupCoordinator();
         final var topicStore = new TopicStore();
-        this.clusterApiHandler = new ClusterApiHandler();
-        this.clusterApiHandler.setTopicStore(topicStore);
+        this.clusterApiHandler = new ClusterApiHandler(serverInfo, topicStore);
         this.consumerGroupApiHandler = new ConsumerGroupApiHandler(groupCoordinator);
         this.consumerDataApiHandler = new ConsumerDataApiHandler(eventStore, groupCoordinator);
         this.producerApiHandler = new ProducerApiHandler(eventStore);
         this.adminApiHandler = new AdminApiHandler(topicStore);
-    }
-
-    /**
-     * Sets the server info used to advertise the broker's host and port in cluster responses.
-     *
-     * @param serverInfo the server info to use
-     */
-    public void setServerInfo(final ServerInfo serverInfo) {
-        clusterApiHandler.setServerInfo(serverInfo);
     }
 
     /**

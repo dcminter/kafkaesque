@@ -1,6 +1,5 @@
 package eu.kafkaesque.core;
 
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ApiVersionsResponseData;
@@ -49,16 +48,19 @@ final class ClusterApiHandler {
      */
     private static final short FETCH_MAX_VERSION = 12;
 
-    @Setter
-    private ServerInfo serverInfo;
-
-    @Setter
-    private TopicStore topicStore;
+    private final ServerInfo serverInfo;
+    private final TopicStore topicStore;
 
     /**
-     * Creates a new handler with no server info or topic store (will use defaults until set).
+     * Creates a new handler backed by the given server info and topic store.
+     *
+     * @param serverInfo the server info used to advertise host and port in cluster responses;
+     *                   may be {@code null} to use built-in defaults
+     * @param topicStore the topic registry consulted when building metadata responses
      */
-    ClusterApiHandler() {
+    ClusterApiHandler(final ServerInfo serverInfo, final TopicStore topicStore) {
+        this.serverInfo = serverInfo;
+        this.topicStore = topicStore;
     }
 
     /**

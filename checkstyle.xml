@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+    Standards enforced:
+      - Immutability: all method, constructor, catch, and for-each parameters must be final
+      - Collection interface types: concrete collection classes are disallowed as declared types
+      - Concise methods: methods may not exceed 60 lines of implementation
+      - Javadoc: all non-private types, methods, and fields must be documented
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="error"/>
+    <property name="fileExtensions" value="java"/>
+
+    <module name="TreeWalker">
+
+        <!-- ===== Immutability ===== -->
+        <!--
+            All method, constructor, catch-block, and for-each parameters must be final.
+        -->
+        <module name="FinalParameters"/>
+
+        <!-- ===== Collection interface types ===== -->
+        <!--
+            Concrete collection class names are not permitted in declared types (field types,
+            parameter types, local-variable types, or return types).  Use the corresponding
+            interface instead (e.g. Map instead of HashMap).
+            Local variables should use `var` whose inferred type does not trigger this check.
+        -->
+        <module name="IllegalType">
+            <property name="illegalClassNames" value="
+                ArrayList,                          java.util.ArrayList,
+                LinkedList,                         java.util.LinkedList,
+                HashMap,                            java.util.HashMap,
+                LinkedHashMap,                      java.util.LinkedHashMap,
+                HashSet,                            java.util.HashSet,
+                LinkedHashSet,                      java.util.LinkedHashSet,
+                TreeMap,                            java.util.TreeMap,
+                TreeSet,                            java.util.TreeSet,
+                ConcurrentHashMap,                  java.util.concurrent.ConcurrentHashMap,
+                CopyOnWriteArrayList,               java.util.concurrent.CopyOnWriteArrayList,
+                CopyOnWriteArraySet,                java.util.concurrent.CopyOnWriteArraySet
+            "/>
+        </module>
+
+        <!-- ===== Concise methods ===== -->
+        <!--
+            Methods should be short.  Flag implementations longer than 60 lines so that
+            they are refactored into well-named private helpers.
+        -->
+        <module name="MethodLength">
+            <property name="max" value="60"/>
+        </module>
+
+        <!-- ===== Javadoc ===== -->
+        <!--
+            All non-private types must have a Javadoc comment.
+        -->
+        <module name="JavadocType">
+            <property name="scope" value="package"/>
+        </module>
+
+        <!--
+            All non-private methods must have a Javadoc comment including @param, @return,
+            and @throws tags where applicable.
+        -->
+        <module name="JavadocMethod">
+            <property name="accessModifiers" value="public, protected, package"/>
+            <property name="allowMissingParamTags" value="false"/>
+            <property name="allowMissingReturnTag" value="false"/>
+        </module>
+
+        <!--
+            All non-private fields must have a Javadoc comment.
+        -->
+        <module name="JavadocVariable">
+            <property name="scope" value="package"/>
+        </module>
+
+    </module>
+</module>

@@ -54,8 +54,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
     public KafkaesqueServer(final String host, final int port) {
         this.host = host;
         this.port = port;
-        this.protocolHandler = new KafkaProtocolHandler();
-        this.protocolHandler.setServerInfo(this);
+        this.protocolHandler = new KafkaProtocolHandler(this);
     }
 
     /**

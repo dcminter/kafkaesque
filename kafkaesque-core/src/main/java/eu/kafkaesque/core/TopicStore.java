@@ -4,6 +4,7 @@ import org.apache.kafka.common.Uuid;
 
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -31,7 +32,7 @@ public final class TopicStore {
      */
     public record TopicDefinition(String name, int numPartitions, short replicationFactor, Uuid topicId) {}
 
-    private final ConcurrentHashMap<String, TopicDefinition> topics = new ConcurrentHashMap<>();
+    private final Map<String, TopicDefinition> topics = new ConcurrentHashMap<>();
 
     /**
      * Registers a new topic with the given configuration, assigning it a stable random UUID.
