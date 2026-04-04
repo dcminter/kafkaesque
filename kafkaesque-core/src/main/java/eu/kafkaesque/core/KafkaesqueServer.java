@@ -5,6 +5,7 @@ import org.apache.kafka.common.compress.Compression;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
@@ -167,6 +168,8 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
                         handleWrite(key);
                     }
                 }
+            } catch (final ClosedSelectorException e) {
+                break;
             } catch (final IOException e) {
                 if (running.get()) {
                     log.error("Error in server event loop", e);
@@ -189,6 +192,11 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
 
         if (clientChannel != null) {
             clientChannel.configureBlocking(false);
+
+            if (!selector.isOpen()) {
+                clientChannel.close();
+                return;
+            }
 
             final var clientKey = clientChannel.register(selector, SelectionKey.OP_READ);
 
