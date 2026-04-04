@@ -15,18 +15,6 @@
     <name>Kafkaesque Core</name>
     <description>Core implementation of Kafkaesque mock Kafka service</description>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>eu.kafkaesque</groupId>
-                <artifactId>kafkaesque-bom</artifactId>
-                <version>${project.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
     <dependencies>
         <!-- Kafka protocol types -->
         <dependency>
