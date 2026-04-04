@@ -145,8 +145,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
             try {
                 selector.select(1000);
 
-                if (!selector.isOpen()) {
-                    log.info("Selector was closed! Exiting event loop");
+                if (!running.get() || !selector.isOpen()) {
                     break;
                 }
 
