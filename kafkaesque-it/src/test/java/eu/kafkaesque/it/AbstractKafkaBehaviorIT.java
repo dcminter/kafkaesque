@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Nested;
  * @see AbstractAdminBehaviorIT
  * @see AbstractProducerBehaviorIT
  * @see AbstractConsumerBehaviorIT
+ * @see AbstractCompressionBehaviorIT
  */
 abstract class AbstractKafkaBehaviorIT {
 
@@ -57,6 +58,17 @@ abstract class AbstractKafkaBehaviorIT {
      */
     @Nested
     class ConsumerBehavior extends AbstractConsumerBehaviorIT {
+        @Override
+        protected String getBootstrapServers() throws Exception {
+            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
+        }
+    }
+
+    /**
+     * Runs the compression behavior tests against this backend.
+     */
+    @Nested
+    class CompressionBehavior extends AbstractCompressionBehaviorIT {
         @Override
         protected String getBootstrapServers() throws Exception {
             return AbstractKafkaBehaviorIT.this.getBootstrapServers();

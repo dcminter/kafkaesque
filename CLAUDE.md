@@ -22,6 +22,7 @@ Ultimately we will provide the features of this library as DSL-like configuratio
 After making any edits, you must ensure `mvn checkstyle:check` passes with zero violations. If checkstyle fails, fix 
 all reported violations before considering the task complete. This will enforce some, but not all, of the following:
 
+  * Integration test cases must always be run against both Kafkaesque and the real Kafka brokers to verify that we're correctly implementing the Kafka line protocol
   * Immutability is encouraged wherever reasonably possible; all parameters, fields, and variables should therefore be declared `final` unless their mutability is essential.
   * Modern Java features are encouraged - for example prefer `record` types to classes for simple DTOs 
   * Lean towards declaring collection fields and parameters as interface types (Map, Set, etc) rather than concrete types (HashMap, HashSet, etc.)
@@ -37,5 +38,4 @@ all reported violations before considering the task complete. This will enforce 
     * and for ALL non-private methods and fields (including @param, @return and @exception entries)
     * and CONSIDER providing proper javadoc comments for private methods and fields
   * Don't commit changes to git unless this is explicitly requested
-  * Don't disable any test cases (including new ones) unless this has been explicity approved
-
+  * Don't disable any test cases (including new ones) unless you get explicit approval

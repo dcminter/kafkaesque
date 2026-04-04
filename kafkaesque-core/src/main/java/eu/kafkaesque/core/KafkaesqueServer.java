@@ -1,6 +1,7 @@
 package eu.kafkaesque.core;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.compress.Compression;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -283,6 +284,38 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
     @Override
     public void close() {
         stop();
+    }
+
+    // Topic management
+
+    /**
+     * Pre-registers a topic with the given configuration and compression.
+     *
+     * <p>FetchResponses for this topic will use the specified compression codec,
+     * allowing consumer applications under test to be verified against compressed messages.</p>
+     *
+     * @param name              the topic name
+     * @param numPartitions     the number of partitions
+     * @param replicationFactor the replication factor
+     * @param compression       the compression to apply when serving FetchResponses
+     */
+    public void createTopic(
+            final String name, final int numPartitions,
+            final short replicationFactor, final Compression compression) {
+        protocolHandler.createTopic(name, numPartitions, replicationFactor, compression);
+    }
+
+    /**
+     * Pre-registers a topic with the given configuration.
+     *
+     * <p>FetchResponses for this topic will use {@link Compression#NONE}.</p>
+     *
+     * @param name              the topic name
+     * @param numPartitions     the number of partitions
+     * @param replicationFactor the replication factor
+     */
+    public void createTopic(final String name, final int numPartitions, final short replicationFactor) {
+        createTopic(name, numPartitions, replicationFactor, Compression.NONE);
     }
 
     // Event retrieval methods

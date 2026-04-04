@@ -2,6 +2,7 @@ package eu.kafkaesque.core;
 
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.message.CreateTopicsRequestData;
 import org.apache.kafka.common.message.CreateTopicsResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -9,6 +10,7 @@ import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
+import java.util.stream.StreamSupport;
 
 /**
  * Handles Kafka admin API responses.
@@ -44,7 +46,8 @@ final class AdminApiHandler {
         final var name = topic.name();
         final var numPartitions = topic.numPartitions();
         final var replicationFactor = topic.replicationFactor();
-        topicStore.createTopic(name, numPartitions, replicationFactor);
+        final var compression = resolveCompression(topic.configs());
+        topicStore.createTopic(name, numPartitions, replicationFactor, compression);
         final var topicId = topicStore.getTopic(name)
             .map(TopicStore.TopicDefinition::topicId)
             .orElse(Uuid.randomUuid());
@@ -57,6 +60,44 @@ final class AdminApiHandler {
             .setErrorMessage(null)
             .setNumPartitions(numPartitions)
             .setReplicationFactor(replicationFactor);
+    }
+
+    /**
+     * Resolves a {@link Compression} instance from a CREATE_TOPICS config collection.
+     *
+     * <p>Looks for the standard {@code compression.type} config key. Returns
+     * {@link Compression#NONE} if the key is absent or unrecognised.</p>
+     *
+     * @param configs the config collection from the CREATE_TOPICS request
+     * @return the resolved compression
+     */
+    private Compression resolveCompression(
+            final CreateTopicsRequestData.CreatableTopicConfigCollection configs) {
+        return StreamSupport.stream(configs.spliterator(), false)
+            .filter(c -> "compression.type".equals(c.name()))
+            .findFirst()
+            .<Compression>map(c -> compressionForName(c.value()))
+            .orElse(Compression.NONE);
+    }
+
+    /**
+     * Maps a Kafka {@code compression.type} config value to a {@link Compression} instance.
+     *
+     * <p>Handles the standard broker-side values ({@code uncompressed}, {@code gzip},
+     * {@code snappy}, {@code lz4}, {@code zstd}, {@code producer}).
+     * {@code producer} and any unrecognised value fall back to {@link Compression#NONE}.</p>
+     *
+     * @param name the compression type name from the topic config
+     * @return the corresponding {@link Compression}
+     */
+    private static Compression compressionForName(final String name) {
+        return switch (name) {
+            case "gzip"   -> Compression.gzip().build();
+            case "snappy" -> Compression.snappy().build();
+            case "lz4"    -> Compression.lz4().build();
+            case "zstd"   -> Compression.zstd().build();
+            default       -> Compression.NONE; // "uncompressed", "producer", unknown
+        };
     }
 
     /**

@@ -1,6 +1,7 @@
 package eu.kafkaesque.core;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.requests.RequestHeader;
 
@@ -47,6 +48,7 @@ import java.nio.channels.SelectionKey;
 public final class KafkaProtocolHandler {
 
     private final EventStore eventStore;
+    private final TopicStore topicStore;
     private final ClusterApiHandler clusterApiHandler;
     private final ConsumerGroupApiHandler consumerGroupApiHandler;
     private final ConsumerDataApiHandler consumerDataApiHandler;
@@ -96,12 +98,12 @@ public final class KafkaProtocolHandler {
     public KafkaProtocolHandler(final ServerInfo serverInfo, final EventStore eventStore) {
         this.eventStore = eventStore;
         final var groupCoordinator = new GroupCoordinator();
-        final var topicStore = new TopicStore();
-        this.clusterApiHandler = new ClusterApiHandler(serverInfo, topicStore);
+        this.topicStore = new TopicStore();
+        this.clusterApiHandler = new ClusterApiHandler(serverInfo, this.topicStore);
         this.consumerGroupApiHandler = new ConsumerGroupApiHandler(groupCoordinator);
-        this.consumerDataApiHandler = new ConsumerDataApiHandler(eventStore, groupCoordinator);
+        this.consumerDataApiHandler = new ConsumerDataApiHandler(eventStore, groupCoordinator, this.topicStore);
         this.producerApiHandler = new ProducerApiHandler(eventStore);
-        this.adminApiHandler = new AdminApiHandler(topicStore);
+        this.adminApiHandler = new AdminApiHandler(this.topicStore);
     }
 
     /**
@@ -111,6 +113,20 @@ public final class KafkaProtocolHandler {
      */
     public EventStore getEventStore() {
         return eventStore;
+    }
+
+    /**
+     * Pre-registers a topic with the given configuration and compression.
+     *
+     * @param name              the topic name
+     * @param numPartitions     the number of partitions
+     * @param replicationFactor the replication factor
+     * @param compression       the compression to apply when serving FetchResponses for this topic
+     */
+    public void createTopic(
+            final String name, final int numPartitions,
+            final short replicationFactor, final Compression compression) {
+        topicStore.createTopic(name, numPartitions, replicationFactor, compression);
     }
 
     /**

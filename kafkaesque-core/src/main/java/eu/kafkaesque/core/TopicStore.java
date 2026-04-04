@@ -1,6 +1,7 @@
 package eu.kafkaesque.core;
 
 import org.apache.kafka.common.Uuid;
+import org.apache.kafka.common.compress.Compression;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -29,13 +30,35 @@ public final class TopicStore {
      * @param numPartitions     the number of partitions
      * @param replicationFactor the replication factor
      * @param topicId           the stable UUID assigned to this topic at creation time
+     * @param compression       the compression to apply when serving FetchResponses for this topic
      */
-    public record TopicDefinition(String name, int numPartitions, short replicationFactor, Uuid topicId) {}
+    public record TopicDefinition(
+            String name, int numPartitions, short replicationFactor, Uuid topicId, Compression compression) {}
 
     private final Map<String, TopicDefinition> topics = new ConcurrentHashMap<>();
 
     /**
+     * Registers a new topic with the given configuration and compression, assigning it a stable random UUID.
+     *
+     * <p>If a topic with the same name already exists its existing definition is
+     * retained; this method is effectively idempotent for a given name.</p>
+     *
+     * @param name              the topic name
+     * @param numPartitions     the number of partitions
+     * @param replicationFactor the replication factor
+     * @param compression       the compression to apply when serving FetchResponses for this topic
+     */
+    public void createTopic(
+            final String name, final int numPartitions,
+            final short replicationFactor, final Compression compression) {
+        topics.putIfAbsent(name,
+            new TopicDefinition(name, numPartitions, replicationFactor, Uuid.randomUuid(), compression));
+    }
+
+    /**
      * Registers a new topic with the given configuration, assigning it a stable random UUID.
+     *
+     * <p>FetchResponses for this topic will use {@link Compression#NONE}.</p>
      *
      * <p>If a topic with the same name already exists its existing definition is
      * retained; this method is effectively idempotent for a given name.</p>
@@ -45,7 +68,7 @@ public final class TopicStore {
      * @param replicationFactor the replication factor
      */
     public void createTopic(final String name, final int numPartitions, final short replicationFactor) {
-        topics.putIfAbsent(name, new TopicDefinition(name, numPartitions, replicationFactor, Uuid.randomUuid()));
+        createTopic(name, numPartitions, replicationFactor, Compression.NONE);
     }
 
     /**

@@ -13,6 +13,7 @@ import org.apache.kafka.common.message.OffsetFetchRequestData;
 import org.apache.kafka.common.message.OffsetFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
+import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.TimestampType;
@@ -37,16 +38,22 @@ final class ConsumerDataApiHandler {
 
     private final EventStore eventStore;
     private final GroupCoordinator groupCoordinator;
+    private final TopicStore topicStore;
 
     /**
-     * Creates a new handler backed by the given event store and group coordinator.
+     * Creates a new handler backed by the given event store, group coordinator, and topic store.
      *
      * @param eventStore       the store holding produced records
      * @param groupCoordinator the coordinator managing committed offsets
+     * @param topicStore       the store holding topic definitions (used to resolve per-topic compression)
      */
-    ConsumerDataApiHandler(final EventStore eventStore, final GroupCoordinator groupCoordinator) {
+    ConsumerDataApiHandler(
+            final EventStore eventStore,
+            final GroupCoordinator groupCoordinator,
+            final TopicStore topicStore) {
         this.eventStore = eventStore;
         this.groupCoordinator = groupCoordinator;
+        this.topicStore = topicStore;
     }
 
     /**
@@ -313,10 +320,14 @@ final class ConsumerDataApiHandler {
             return MemoryRecords.EMPTY;
         }
 
+        final var compression = topicStore.getTopic(topic)
+            .map(TopicStore.TopicDefinition::compression)
+            .orElse(Compression.NONE);
+
         final long baseOffset = stored.get(0).offset();
-        final var buf = ByteBuffer.allocate(stored.size() * 512 + 64);
+        final var buf = ByteBuffer.allocate(estimateBufferSize(stored, compression));
         final var builder = MemoryRecords.builder(
-            buf, RecordBatch.CURRENT_MAGIC_VALUE, Compression.NONE, TimestampType.CREATE_TIME, baseOffset);
+            buf, RecordBatch.CURRENT_MAGIC_VALUE, compression, TimestampType.CREATE_TIME, baseOffset);
 
         for (final var record : stored) {
             final byte[] key = record.key() != null ? record.key().getBytes(StandardCharsets.UTF_8) : null;
@@ -326,5 +337,20 @@ final class ConsumerDataApiHandler {
         }
 
         return builder.build();
+    }
+
+    /**
+     * Estimates the byte buffer size needed to hold the given records with the given compression.
+     *
+     * <p>For compressed codecs, doubles the baseline to accommodate framing overhead and
+     * the possibility that small or incompressible payloads expand slightly.</p>
+     *
+     * @param records     the records to be written
+     * @param compression the compression that will be applied
+     * @return estimated buffer size in bytes
+     */
+    private static int estimateBufferSize(final List<StoredRecord> records, final Compression compression) {
+        final int base = records.size() * 512 + 64;
+        return compression.type() == CompressionType.NONE ? base : base * 2;
     }
 }
