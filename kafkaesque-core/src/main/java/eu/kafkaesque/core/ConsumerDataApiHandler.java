@@ -21,7 +21,11 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Handles Kafka consumer data-plane API responses.
@@ -304,7 +308,8 @@ final class ConsumerDataApiHandler {
     }
 
     /**
-     * Builds a {@link MemoryRecords} instance from stored records at or after the given offset.
+     * Builds a {@link MemoryRecords} instance from stored records at or after the given offset,
+     * applying any compaction or retention policies configured on the topic.
      *
      * @param topic       the topic name
      * @param partition   the partition index
@@ -312,7 +317,12 @@ final class ConsumerDataApiHandler {
      * @return a {@code MemoryRecords} instance, or {@link MemoryRecords#EMPTY} if none qualify
      */
     private MemoryRecords buildFetchRecords(final String topic, final int partition, final long fetchOffset) {
-        final var stored = eventStore.getRecords(topic, partition).stream()
+        final var topicDef = topicStore.getTopic(topic);
+        final var effective = topicDef
+            .map(def -> applyTopicPolicy(eventStore.getRecords(topic, partition), def))
+            .orElseGet(() -> eventStore.getRecords(topic, partition));
+
+        final var stored = effective.stream()
             .filter(r -> r.offset() >= fetchOffset)
             .toList();
 
@@ -320,22 +330,155 @@ final class ConsumerDataApiHandler {
             return MemoryRecords.EMPTY;
         }
 
-        final var compression = topicStore.getTopic(topic)
+        final var compression = topicDef
             .map(TopicStore.TopicDefinition::compression)
             .orElse(Compression.NONE);
 
-        final long baseOffset = stored.get(0).offset();
+        return buildMemoryRecords(stored, compression);
+    }
+
+    /**
+     * Applies the compaction and retention policies from the given topic definition to a record list.
+     *
+     * @param records the full partition record list
+     * @param def     the topic definition holding the active policies
+     * @return the filtered record list
+     */
+    private List<StoredRecord> applyTopicPolicy(
+            final List<StoredRecord> records, final TopicStore.TopicDefinition def) {
+        var result = records;
+        if (def.cleanupPolicy() == CleanupPolicy.COMPACT
+                || def.cleanupPolicy() == CleanupPolicy.COMPACT_DELETE) {
+            result = applyCompaction(result);
+        }
+        if (def.retentionMs() < Long.MAX_VALUE) {
+            result = applyRetentionMs(result, def.retentionMs());
+        }
+        if (def.retentionBytes() >= 0) {
+            result = applyRetentionBytes(result, def.retentionBytes());
+        }
+        return result;
+    }
+
+    /**
+     * Applies log-compaction semantics: retains only the latest record per key.
+     *
+     * <p>Records with {@code null} keys are always retained unchanged.
+     * Records whose latest value for a key is {@code null} (tombstones) are removed.</p>
+     *
+     * @param records the source record list, ordered by ascending offset
+     * @return the compacted list, preserving original offset ordering
+     */
+    private List<StoredRecord> applyCompaction(final List<StoredRecord> records) {
+        final var retainedOffsets = buildRetainedOffsetsAfterCompaction(records);
+        return records.stream()
+            .filter(r -> r.key() == null || retainedOffsets.contains(r.offset()))
+            .toList();
+    }
+
+    /**
+     * Builds the set of offsets that survive log compaction.
+     *
+     * <p>For each key, the record with the highest offset is the surviving candidate.
+     * If that record is a tombstone (null value) it is excluded, causing the key to disappear.</p>
+     *
+     * @param records the source record list
+     * @return the set of offsets to retain
+     */
+    private Set<Long> buildRetainedOffsetsAfterCompaction(final List<StoredRecord> records) {
+        return records.stream()
+            .filter(r -> r.key() != null)
+            .collect(Collectors.toMap(
+                StoredRecord::key,
+                r -> r,
+                (a, b) -> b.offset() > a.offset() ? b : a))
+            .values().stream()
+            .filter(r -> r.value() != null)
+            .map(StoredRecord::offset)
+            .collect(Collectors.toSet());
+    }
+
+    /**
+     * Filters records whose timestamp is older than the given retention window.
+     *
+     * @param records     the source record list
+     * @param retentionMs the maximum record age in milliseconds
+     * @return records whose timestamp falls within the retention window
+     */
+    private List<StoredRecord> applyRetentionMs(
+            final List<StoredRecord> records, final long retentionMs) {
+        final long cutoffMs = System.currentTimeMillis() - retentionMs;
+        return records.stream()
+            .filter(r -> r.timestamp() > cutoffMs)
+            .toList();
+    }
+
+    /**
+     * Filters records to keep only the most-recent ones within the byte budget.
+     *
+     * <p>Records are included starting from the most recent (highest offset), accumulating
+     * estimated byte sizes, until the running total would exceed the budget.  All older
+     * records beyond that point are dropped.  The returned list preserves the original
+     * ascending-offset order.</p>
+     *
+     * <p>Byte size is estimated as the sum of the UTF-8 encoded lengths of the record key
+     * and value, treating {@code null} as zero bytes.</p>
+     *
+     * @param records        the source record list, ordered by ascending offset
+     * @param retentionBytes the maximum total bytes to retain per partition
+     * @return the filtered list, preserving ascending offset order
+     */
+    private List<StoredRecord> applyRetentionBytes(
+            final List<StoredRecord> records, final long retentionBytes) {
+        final long[] accumulated = {0L};
+        return records.reversed().stream()
+            .takeWhile(r -> {
+                accumulated[0] += recordByteSize(r);
+                return accumulated[0] <= retentionBytes;
+            })
+            .sorted(Comparator.comparingLong(StoredRecord::offset))
+            .toList();
+    }
+
+    /**
+     * Estimates the byte size of a record as the sum of the UTF-8 encoded lengths of its key
+     * and value, treating {@code null} as zero bytes.
+     *
+     * @param record the record to measure
+     * @return the estimated byte size
+     */
+    private static long recordByteSize(final StoredRecord record) {
+        final long keyBytes = record.key() != null
+            ? record.key().getBytes(StandardCharsets.UTF_8).length : 0L;
+        final long valueBytes = record.value() != null
+            ? record.value().getBytes(StandardCharsets.UTF_8).length : 0L;
+        return keyBytes + valueBytes;
+    }
+
+    /**
+     * Serialises a non-empty list of stored records into a {@link MemoryRecords} batch.
+     *
+     * @param stored      the records to serialise (must be non-empty)
+     * @param compression the compression codec to apply
+     * @return the serialised batch
+     */
+    private MemoryRecords buildMemoryRecords(
+            final List<StoredRecord> stored, final Compression compression) {
+        final long baseOffset = stored.stream()
+            .mapToLong(StoredRecord::offset)
+            .min()
+            .orElse(0L);
         final var buf = ByteBuffer.allocate(estimateBufferSize(stored, compression));
         final var builder = MemoryRecords.builder(
             buf, RecordBatch.CURRENT_MAGIC_VALUE, compression, TimestampType.CREATE_TIME, baseOffset);
-
-        for (final var record : stored) {
-            final byte[] key = record.key() != null ? record.key().getBytes(StandardCharsets.UTF_8) : null;
-            final byte[] value = record.value() != null ? record.value().getBytes(StandardCharsets.UTF_8) : null;
-            final Header[] headers = record.headers().toArray(Header[]::new);
-            builder.append(record.timestamp(), key, value, headers);
-        }
-
+        stored.stream()
+            .sorted(Comparator.comparingLong(StoredRecord::offset))
+            .forEach(r -> builder.appendWithOffset(
+                r.offset(),
+                r.timestamp(),
+                r.key() != null ? r.key().getBytes(StandardCharsets.UTF_8) : null,
+                r.value() != null ? r.value().getBytes(StandardCharsets.UTF_8) : null,
+                r.headers().toArray(Header[]::new)));
         return builder.build();
     }
 

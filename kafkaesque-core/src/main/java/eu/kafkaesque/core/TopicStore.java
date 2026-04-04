@@ -24,6 +24,43 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class TopicStore {
 
     /**
+     * Configuration parameters for creating a topic.
+     *
+     * <p>Carries all mutable settings that can be specified when a topic is created.
+     * The stable topic ID is assigned by {@link TopicStore} at registration time.</p>
+     *
+     * @param numPartitions     the number of partitions
+     * @param replicationFactor the replication factor
+     * @param compression       the compression to apply when serving FETCH responses
+     * @param cleanupPolicy     the log cleanup policy
+     * @param retentionMs       maximum record age in milliseconds;
+     *                          {@code Long.MAX_VALUE} means unlimited
+     * @param retentionBytes    maximum bytes per partition; {@code -1} means unlimited
+     */
+    public record TopicCreationConfig(
+            int numPartitions,
+            short replicationFactor,
+            Compression compression,
+            CleanupPolicy cleanupPolicy,
+            long retentionMs,
+            long retentionBytes) {
+
+        /**
+         * Returns a default config with the given partitions and replication factor,
+         * no compression, delete cleanup policy, and unlimited retention.
+         *
+         * @param numPartitions     the number of partitions
+         * @param replicationFactor the replication factor
+         * @return a default {@code TopicCreationConfig}
+         */
+        static TopicCreationConfig defaults(final int numPartitions, final short replicationFactor) {
+            return new TopicCreationConfig(
+                numPartitions, replicationFactor, Compression.NONE,
+                CleanupPolicy.DELETE, Long.MAX_VALUE, -1L);
+        }
+    }
+
+    /**
      * Describes a topic as it was created.
      *
      * @param name              the topic name
@@ -31,14 +68,43 @@ public final class TopicStore {
      * @param replicationFactor the replication factor
      * @param topicId           the stable UUID assigned to this topic at creation time
      * @param compression       the compression to apply when serving FetchResponses for this topic
+     * @param cleanupPolicy     the log cleanup policy
+     * @param retentionMs       maximum record age in milliseconds;
+     *                          {@code Long.MAX_VALUE} means unlimited
+     * @param retentionBytes    maximum bytes per partition; {@code -1} means unlimited
      */
     public record TopicDefinition(
-            String name, int numPartitions, short replicationFactor, Uuid topicId, Compression compression) {}
+            String name,
+            int numPartitions,
+            short replicationFactor,
+            Uuid topicId,
+            Compression compression,
+            CleanupPolicy cleanupPolicy,
+            long retentionMs,
+            long retentionBytes) {}
 
     private final Map<String, TopicDefinition> topics = new ConcurrentHashMap<>();
 
     /**
+     * Registers a new topic with the given configuration, assigning it a stable random UUID.
+     *
+     * <p>If a topic with the same name already exists its existing definition is
+     * retained; this method is effectively idempotent for a given name.</p>
+     *
+     * @param name   the topic name
+     * @param config the creation configuration
+     */
+    public void createTopic(final String name, final TopicCreationConfig config) {
+        topics.putIfAbsent(name, new TopicDefinition(
+            name, config.numPartitions(), config.replicationFactor(), Uuid.randomUuid(),
+            config.compression(), config.cleanupPolicy(), config.retentionMs(), config.retentionBytes()));
+    }
+
+    /**
      * Registers a new topic with the given configuration and compression, assigning it a stable random UUID.
+     *
+     * <p>FetchResponses for this topic will use the specified compression codec.
+     * The cleanup policy defaults to {@link CleanupPolicy#DELETE} with unlimited retention.</p>
      *
      * <p>If a topic with the same name already exists its existing definition is
      * retained; this method is effectively idempotent for a given name.</p>
@@ -51,14 +117,16 @@ public final class TopicStore {
     public void createTopic(
             final String name, final int numPartitions,
             final short replicationFactor, final Compression compression) {
-        topics.putIfAbsent(name,
-            new TopicDefinition(name, numPartitions, replicationFactor, Uuid.randomUuid(), compression));
+        createTopic(name, new TopicCreationConfig(
+            numPartitions, replicationFactor, compression,
+            CleanupPolicy.DELETE, Long.MAX_VALUE, -1L));
     }
 
     /**
      * Registers a new topic with the given configuration, assigning it a stable random UUID.
      *
-     * <p>FetchResponses for this topic will use {@link Compression#NONE}.</p>
+     * <p>FetchResponses for this topic will use {@link Compression#NONE}.
+     * The cleanup policy defaults to {@link CleanupPolicy#DELETE} with unlimited retention.</p>
      *
      * <p>If a topic with the same name already exists its existing definition is
      * retained; this method is effectively idempotent for a given name.</p>

@@ -36,6 +36,7 @@ import java.nio.channels.SelectionKey;
  *   <li>{@link ApiKeys#FETCH} - Returns stored records to consumers</li>
  *   <li>{@link ApiKeys#CREATE_TOPICS} - Registers topics in the topic store</li>
  *   <li>{@link ApiKeys#DESCRIBE_TOPIC_PARTITIONS} - Returns partition details for registered topics</li>
+ *   <li>{@link ApiKeys#INCREMENTAL_ALTER_CONFIGS} - Accepts broker/topic config changes (no-op: policies applied at fetch time)</li>
  *   <li>{@link ApiKeys#GET_TELEMETRY_SUBSCRIPTIONS} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  *   <li>{@link ApiKeys#PUSH_TELEMETRY} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  * </ul>
@@ -254,8 +255,9 @@ public final class KafkaProtocolHandler {
                 case OFFSET_COMMIT    -> consumerDataApiHandler.generateOffsetCommitResponse(header, buffer);
                 case LIST_OFFSETS     -> consumerDataApiHandler.generateListOffsetsResponse(header, buffer);
                 case FETCH                      -> consumerDataApiHandler.generateFetchResponse(header, buffer);
-                case CREATE_TOPICS              -> adminApiHandler.generateCreateTopicsResponse(header, buffer);
-                case DESCRIBE_TOPIC_PARTITIONS  -> clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
+                case CREATE_TOPICS                -> adminApiHandler.generateCreateTopicsResponse(header, buffer);
+                case INCREMENTAL_ALTER_CONFIGS   -> adminApiHandler.generateIncrementalAlterConfigsResponse(header, buffer);
+                case DESCRIBE_TOPIC_PARTITIONS   -> clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
                 case GET_TELEMETRY_SUBSCRIPTIONS, PUSH_TELEMETRY -> {
                     log.debug("Telemetry API not supported: {}", apiKey);
                     yield clusterApiHandler.generateUnsupportedResponse(header, apiKey);

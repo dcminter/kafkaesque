@@ -11,6 +11,6 @@
         <appender-ref ref="STDOUT" />
     </root>
 
-    <!-- Set Kafkaesque components to DEBUG for better test visibility -->
-    <logger name="eu.kafkaesque" level="DEBUG" />
+    <!-- Set Kafkaesque components to INFO for better test visibility -->
+    <logger name="eu.kafkaesque" level="INFO" />
 </configuration>

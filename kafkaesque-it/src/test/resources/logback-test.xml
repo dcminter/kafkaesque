@@ -5,7 +5,7 @@
         </encoder>
     </appender>
 
-    <logger name="eu.kafkaesque" level="DEBUG"/>
+    <logger name="eu.kafkaesque" level="INFO"/>
     <logger name="org.testcontainers" level="INFO"/>
     <logger name="org.apache.kafka" level="WARN"/>
 

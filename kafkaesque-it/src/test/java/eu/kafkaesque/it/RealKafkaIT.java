@@ -22,7 +22,10 @@ class RealKafkaIT extends AbstractKafkaBehaviorIT {
     @Container
     private static final KafkaContainer kafka = new KafkaContainer(
         DockerImageName.parse("confluentinc/cp-kafka:7.8.0")
-    );
+    ).withEnv("KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS", "1000")
+     .withEnv("KAFKA_LOG_CLEANER_BACKOFF_MS", "100")
+     .withEnv("KAFKA_LOG_ROLL_MS", "2000")
+     .withEnv("KAFKA_LOG_ROLL_JITTER_MS", "0");
 
     /**
      * {@inheritDoc}

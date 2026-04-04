@@ -20,6 +20,9 @@ import org.junit.jupiter.api.Nested;
  * @see AbstractProducerBehaviorIT
  * @see AbstractConsumerBehaviorIT
  * @see AbstractCompressionBehaviorIT
+ * @see AbstractCompactionBehaviorIT
+ * @see AbstractRetentionBehaviorIT
+ * @see AbstractCompactDeleteBehaviorIT
  */
 abstract class AbstractKafkaBehaviorIT {
 
@@ -69,6 +72,39 @@ abstract class AbstractKafkaBehaviorIT {
      */
     @Nested
     class CompressionBehavior extends AbstractCompressionBehaviorIT {
+        @Override
+        protected String getBootstrapServers() throws Exception {
+            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
+        }
+    }
+
+    /**
+     * Runs the log-compaction behavior tests against this backend.
+     */
+    @Nested
+    class CompactionBehavior extends AbstractCompactionBehaviorIT {
+        @Override
+        protected String getBootstrapServers() throws Exception {
+            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
+        }
+    }
+
+    /**
+     * Runs the retention-deletion behavior tests against this backend.
+     */
+    @Nested
+    class RetentionBehavior extends AbstractRetentionBehaviorIT {
+        @Override
+        protected String getBootstrapServers() throws Exception {
+            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
+        }
+    }
+
+    /**
+     * Runs the combined compact-and-delete behavior tests against this backend.
+     */
+    @Nested
+    class CompactDeleteBehavior extends AbstractCompactDeleteBehaviorIT {
         @Override
         protected String getBootstrapServers() throws Exception {
             return AbstractKafkaBehaviorIT.this.getBootstrapServers();
