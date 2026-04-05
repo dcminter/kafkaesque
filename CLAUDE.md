@@ -12,10 +12,14 @@ Several directories exist. They are:
  * kafkaesque-bom - This contains the "bill of materials" pom that defines all of the versions for dependencies of the project
  * kafkaesque-core - This will contain the core implementation classes of the library.
  * kafkaesque-it - This contains the integration tests (behavioural tests) for the library
+ * kafkaesque-junit5 - This contains support (including annotations) for using the library in JUnit 5 (Jupiter) tests
 
-The library is going to implement the wire protocol directly - it will NOT run a real instance of Kafka at any point; instead it will create its own sockets etc. however it WILL make use of the Kafka libraries to have access to Kafka's own data transfer types used in the Kafka wire protocol(s).
+The library implements the wire protocol directly - it does NOT run a real instance of Kafka at any point (outside of
+the library's own test scenarios); instead it creates its own sockets etc. but it DOES make use of the Kafka 
+libraries to have access to Kafka's own data transfer types used in the Kafka wire protocol(s).
 
-Ultimately we will provide the features of this library as DSL-like configuration and also as annotations & types compatible with JUnit 5 - just like Wiremock does for normal Http server stuff.
+We'll probably provide a small DSL to aid in writing test scenarios once we've worked out what we want to express 
+with it! For now the JUnit 5 annotations should work well in existing test cases.
 
 ## Development standards
 
