@@ -1,5 +1,8 @@
 package eu.kafkaesque.core.handler;
 
+import eu.kafkaesque.core.handler.FetchSessionCoordinator.FetchSession;
+import eu.kafkaesque.core.handler.FetchSessionCoordinator.PartitionFetchState;
+import eu.kafkaesque.core.handler.FetchSessionCoordinator.TopicPartitionKey;
 import eu.kafkaesque.core.storage.CleanupPolicy;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.StoredRecord;
@@ -30,9 +33,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static eu.kafkaesque.core.handler.FetchSessionCoordinator.FINAL_EPOCH;
+import static eu.kafkaesque.core.handler.FetchSessionCoordinator.INITIAL_EPOCH;
 import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT;
 import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT_DELETE;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static org.apache.kafka.common.protocol.Errors.FETCH_SESSION_ID_NOT_FOUND;
 import static org.apache.kafka.common.record.CompressionType.NONE;
 
 /**
@@ -51,21 +57,26 @@ final class ConsumerDataApiHandler {
     private final EventStore eventStore;
     private final GroupCoordinator groupCoordinator;
     private final TopicStore topicStore;
+    private final FetchSessionCoordinator fetchSessionCoordinator;
 
     /**
-     * Creates a new handler backed by the given event store, group coordinator, and topic store.
+     * Creates a new handler backed by the given event store, group coordinator, topic store,
+     * and fetch session coordinator.
      *
-     * @param eventStore       the store holding produced records
-     * @param groupCoordinator the coordinator managing committed offsets
-     * @param topicStore       the store holding topic definitions (used to resolve per-topic compression)
+     * @param eventStore              the store holding produced records
+     * @param groupCoordinator        the coordinator managing committed offsets
+     * @param topicStore              the store holding topic definitions (used to resolve per-topic compression)
+     * @param fetchSessionCoordinator the coordinator managing incremental fetch sessions
      */
     ConsumerDataApiHandler(
             final EventStore eventStore,
             final GroupCoordinator groupCoordinator,
-            final TopicStore topicStore) {
+            final TopicStore topicStore,
+            final FetchSessionCoordinator fetchSessionCoordinator) {
         this.eventStore = eventStore;
         this.groupCoordinator = groupCoordinator;
         this.topicStore = topicStore;
+        this.fetchSessionCoordinator = fetchSessionCoordinator;
     }
 
     /**
@@ -184,8 +195,18 @@ final class ConsumerDataApiHandler {
     /**
      * Generates a FETCH response containing stored records for the requested partitions.
      *
-     * <p>Session tracking is not implemented; responding with {@code sessionId=0} signals
-     * to the client that it should send a full (non-incremental) fetch each time.</p>
+     * <p>Implements KIP-227 incremental fetch sessions. The behaviour depends on the
+     * {@code sessionId} and {@code sessionEpoch} fields in the request:</p>
+     * <ul>
+     *   <li>{@code sessionId=0, sessionEpoch=0} – full fetch; a new session is created and
+     *       all requested partitions are returned (even if empty)</li>
+     *   <li>{@code sessionId=0, sessionEpoch=-1} – legacy mode; full fetch with no session,
+     *       {@code sessionId=0} is returned in the response</li>
+     *   <li>{@code sessionId&gt;0, sessionEpoch&gt;0} – incremental fetch; only partitions with
+     *       new records since the last fetch are included in the response</li>
+     *   <li>{@code sessionId&gt;0, sessionEpoch=-1} – session close; the session is removed and
+     *       the response carries {@code sessionId=0}</li>
+     * </ul>
      *
      * <p>The {@code isolationLevel} field in the request is respected:</p>
      * <ul>
@@ -204,44 +225,251 @@ final class ConsumerDataApiHandler {
             final var accessor = new ByteBufferAccessor(buffer);
             final var request = new FetchRequestData(accessor, requestHeader.apiVersion());
 
-            final var isolationLevel = request.isolationLevel();
+            final int sessionId = request.sessionId();
+            final int epoch = request.sessionEpoch();
 
-            final var topicResponses = request.topics().stream()
-                .map(topic -> new FetchResponseData.FetchableTopicResponse()
-                    .setTopic(topic.topic())
-                    .setPartitions(topic.partitions().stream()
-                        .map(partition -> {
-                            final var highWatermark =
-                                eventStore.getRecordCount(topic.topic(), partition.partition());
-                            final long lso = (isolationLevel == 1)
-                                ? eventStore.getLastStableOffset(topic.topic(), partition.partition())
-                                : highWatermark;
-                            final var records = buildFetchRecords(
-                                topic.topic(), partition.partition(),
-                                partition.fetchOffset(), isolationLevel, lso);
-                            return new FetchResponseData.PartitionData()
-                                .setPartitionIndex(partition.partition())
-                                .setErrorCode((short) 0)
-                                .setHighWatermark(highWatermark)
-                                .setLastStableOffset(lso)
-                                .setLogStartOffset(0L)
-                                .setRecords(records);
-                        })
-                        .toList()))
-                .toList();
-
-            final var data = new FetchResponseData()
-                .setThrottleTimeMs(0)
-                .setErrorCode((short) 0)
-                .setSessionId(0)
-                .setResponses(topicResponses);
-
-            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.FETCH);
+            if (sessionId == 0 && epoch == INITIAL_EPOCH) {
+                return generateFullFetchResponse(requestHeader, request, true);
+            } else if (sessionId == 0) {
+                return generateFullFetchResponse(requestHeader, request, false);
+            } else if (epoch == FINAL_EPOCH) {
+                return generateSessionCloseFetchResponse(requestHeader, request);
+            } else {
+                return generateIncrementalFetchResponse(requestHeader, request, sessionId, epoch);
+            }
 
         } catch (final Exception e) {
             log.error("Error generating Fetch response", e);
             return null;
         }
+    }
+
+    /**
+     * Generates a full FETCH response for all partitions in the request.
+     *
+     * <p>When {@code createSession} is {@code true} a new fetch session is established and
+     * its ID is returned in the response; when {@code false} (legacy mode) the response
+     * carries {@code sessionId=0}.</p>
+     *
+     * @param requestHeader the request header
+     * @param request       the parsed fetch request
+     * @param createSession {@code true} to create a new session, {@code false} for legacy mode
+     * @return the serialised response buffer
+     */
+    private ByteBuffer generateFullFetchResponse(
+            final RequestHeader requestHeader,
+            final FetchRequestData request,
+            final boolean createSession) {
+        final var isolationLevel = request.isolationLevel();
+        final var topicResponses = request.topics().stream()
+            .map(topic -> buildFetchableTopicResponse(topic, isolationLevel))
+            .toList();
+
+        final int responseSessionId;
+        if (createSession) {
+            final var partitions = extractPartitions(request.topics());
+            final var session = fetchSessionCoordinator.createSession(partitions);
+            responseSessionId = session.sessionId();
+        } else {
+            responseSessionId = 0;
+        }
+
+        final var data = new FetchResponseData()
+            .setThrottleTimeMs(0)
+            .setErrorCode((short) 0)
+            .setSessionId(responseSessionId)
+            .setResponses(topicResponses);
+
+        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.FETCH);
+    }
+
+    /**
+     * Generates a FETCH response that closes an existing session.
+     *
+     * <p>If the session does not exist, {@code FETCH_SESSION_ID_NOT_FOUND} is returned.
+     * Otherwise the session is removed and the response carries {@code sessionId=0} with
+     * an empty partition list, per KIP-227.</p>
+     *
+     * @param requestHeader the request header
+     * @param request       the parsed fetch request
+     * @return the serialised response buffer
+     */
+    private ByteBuffer generateSessionCloseFetchResponse(
+            final RequestHeader requestHeader,
+            final FetchRequestData request) {
+        if (!fetchSessionCoordinator.closeSession(request.sessionId())) {
+            return ResponseSerializer.serialize(requestHeader,
+                new FetchResponseData()
+                    .setThrottleTimeMs(0)
+                    .setErrorCode(FETCH_SESSION_ID_NOT_FOUND.code())
+                    .setSessionId(0),
+                ApiKeys.FETCH);
+        }
+
+        return ResponseSerializer.serialize(requestHeader,
+            new FetchResponseData()
+                .setThrottleTimeMs(0)
+                .setErrorCode((short) 0)
+                .setSessionId(0)
+                .setResponses(List.of()),
+            ApiKeys.FETCH);
+    }
+
+    /**
+     * Generates an incremental FETCH response for an existing session.
+     *
+     * <p>The request's partition list is merged into the session's tracked partitions
+     * (forgotten topics are removed). Only partitions that have records available at or
+     * beyond their current fetch offset are included in the response; empty partitions are
+     * omitted so the client infers no new data from their absence.</p>
+     *
+     * <p>On session-not-found or invalid-epoch errors the error code is returned in the
+     * response and the client is expected to fall back to a full fetch.</p>
+     *
+     * @param requestHeader the request header
+     * @param request       the parsed fetch request
+     * @param sessionId     the session ID from the request
+     * @param epoch         the session epoch from the request
+     * @return the serialised response buffer
+     */
+    private ByteBuffer generateIncrementalFetchResponse(
+            final RequestHeader requestHeader,
+            final FetchRequestData request,
+            final int sessionId,
+            final int epoch) {
+        final var updates = extractPartitions(request.topics());
+        final var result = fetchSessionCoordinator.updateSession(
+            sessionId, epoch, updates, request.forgottenTopicsData());
+
+        if (result.isError()) {
+            final var data = new FetchResponseData()
+                .setThrottleTimeMs(0)
+                .setErrorCode(result.errorCode())
+                .setSessionId(0);
+            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.FETCH);
+        }
+
+        final var isolationLevel = request.isolationLevel();
+        final var topicResponses = buildIncrementalTopicResponses(result.session(), isolationLevel);
+
+        final var data = new FetchResponseData()
+            .setThrottleTimeMs(0)
+            .setErrorCode((short) 0)
+            .setSessionId(sessionId)
+            .setResponses(topicResponses);
+
+        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.FETCH);
+    }
+
+    /**
+     * Builds a {@link FetchResponseData.FetchableTopicResponse} for all partitions in the
+     * given request topic, including empty partitions.
+     *
+     * @param topic          the topic from the fetch request
+     * @param isolationLevel the isolation level for record filtering
+     * @return the populated topic response
+     */
+    private FetchResponseData.FetchableTopicResponse buildFetchableTopicResponse(
+            final FetchRequestData.FetchTopic topic,
+            final byte isolationLevel) {
+        return new FetchResponseData.FetchableTopicResponse()
+            .setTopic(topic.topic())
+            .setPartitions(topic.partitions().stream()
+                .map(partition -> buildPartitionData(
+                    topic.topic(), partition.partition(), partition.fetchOffset(), isolationLevel))
+                .toList());
+    }
+
+    /**
+     * Builds the incremental topic responses for an existing session, including only
+     * partitions that have records available at or beyond their tracked fetch offset.
+     *
+     * @param session        the updated fetch session with the effective partition set
+     * @param isolationLevel the isolation level for record filtering
+     * @return the list of topic responses containing only partitions with new data
+     */
+    private List<FetchResponseData.FetchableTopicResponse> buildIncrementalTopicResponses(
+            final FetchSession session,
+            final byte isolationLevel) {
+        final var grouped = session.partitions().entrySet().stream()
+            .filter(entry -> hasData(entry.getKey().topic(), entry.getKey().partition(),
+                entry.getValue().fetchOffset(), isolationLevel))
+            .collect(Collectors.groupingBy(
+                entry -> entry.getKey().topic(),
+                Collectors.toList()));
+
+        return grouped.entrySet().stream()
+            .map(topicEntry -> new FetchResponseData.FetchableTopicResponse()
+                .setTopic(topicEntry.getKey())
+                .setPartitions(topicEntry.getValue().stream()
+                    .map(entry -> buildPartitionData(
+                        entry.getKey().topic(), entry.getKey().partition(),
+                        entry.getValue().fetchOffset(), isolationLevel))
+                    .toList()))
+            .toList();
+    }
+
+    /**
+     * Builds a {@link FetchResponseData.PartitionData} for a single topic-partition.
+     *
+     * @param topic          the topic name
+     * @param partition      the partition index
+     * @param fetchOffset    the offset from which to start fetching
+     * @param isolationLevel the isolation level for record filtering
+     * @return the populated partition data
+     */
+    private FetchResponseData.PartitionData buildPartitionData(
+            final String topic,
+            final int partition,
+            final long fetchOffset,
+            final byte isolationLevel) {
+        final var highWatermark = eventStore.getRecordCount(topic, partition);
+        final long lso = (isolationLevel == 1)
+            ? eventStore.getLastStableOffset(topic, partition)
+            : highWatermark;
+        final var records = buildFetchRecords(topic, partition, fetchOffset, isolationLevel, lso);
+        return new FetchResponseData.PartitionData()
+            .setPartitionIndex(partition)
+            .setErrorCode((short) 0)
+            .setHighWatermark(highWatermark)
+            .setLastStableOffset(lso)
+            .setLogStartOffset(0L)
+            .setRecords(records);
+    }
+
+    /**
+     * Returns {@code true} if there are records available for the given topic-partition
+     * at or beyond the specified fetch offset, taking the isolation level into account.
+     *
+     * @param topic          the topic name
+     * @param partition      the partition index
+     * @param fetchOffset    the offset from which the client wants to start fetching
+     * @param isolationLevel {@code 0} for READ_UNCOMMITTED, {@code 1} for READ_COMMITTED
+     * @return {@code true} if at least one record is available at or beyond {@code fetchOffset}
+     */
+    private boolean hasData(
+            final String topic, final int partition,
+            final long fetchOffset, final byte isolationLevel) {
+        final long limit = (isolationLevel == 1)
+            ? eventStore.getLastStableOffset(topic, partition)
+            : eventStore.getRecordCount(topic, partition);
+        return limit > fetchOffset;
+    }
+
+    /**
+     * Extracts the partition fetch states from the topic list in a fetch request.
+     *
+     * @param topics the fetch topics from the request
+     * @return a map from topic-partition keys to their fetch state
+     */
+    private Map<TopicPartitionKey, PartitionFetchState> extractPartitions(
+            final List<FetchRequestData.FetchTopic> topics) {
+        return topics.stream()
+            .flatMap(topic -> topic.partitions().stream()
+                .map(p -> Map.entry(
+                    new TopicPartitionKey(topic.topic(), p.partition()),
+                    new PartitionFetchState(p.fetchOffset(), p.partitionMaxBytes()))))
+            .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
     }
 
     /**

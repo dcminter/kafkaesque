@@ -162,10 +162,12 @@ public final class KafkaProtocolHandler {
         this.eventStore = eventStore;
         final var groupCoordinator = new GroupCoordinator();
         final var transactionCoordinator = new TransactionCoordinator(eventStore);
+        final var fetchSessionCoordinator = new FetchSessionCoordinator();
         this.topicStore = new TopicStore();
         this.clusterApiHandler = new ClusterApiHandler(serverInfo, this.topicStore, autoCreateTopicsEnabled);
         this.consumerGroupApiHandler = new ConsumerGroupApiHandler(groupCoordinator, this::enqueueResponse);
-        this.consumerDataApiHandler = new ConsumerDataApiHandler(eventStore, groupCoordinator, this.topicStore);
+        this.consumerDataApiHandler = new ConsumerDataApiHandler(
+            eventStore, groupCoordinator, this.topicStore, fetchSessionCoordinator);
         this.producerApiHandler = new ProducerApiHandler(eventStore, this.topicStore, autoCreateTopicsEnabled);
         this.adminApiHandler = new AdminApiHandler(this.topicStore);
         this.transactionApiHandler = new TransactionApiHandler(transactionCoordinator, groupCoordinator);
