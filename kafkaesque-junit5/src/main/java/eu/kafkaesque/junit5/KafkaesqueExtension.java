@@ -2,6 +2,10 @@ package eu.kafkaesque.junit5;
 
 import eu.kafkaesque.core.KafkaesqueServer;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.junit.jupiter.api.extension.AfterAllCallback;
 import org.junit.jupiter.api.extension.AfterEachCallback;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
@@ -9,11 +13,16 @@ import org.junit.jupiter.api.extension.BeforeEachCallback;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
 import org.junit.jupiter.api.extension.ParameterContext;
+import org.junit.jupiter.api.extension.ParameterResolutionException;
 import org.junit.jupiter.api.extension.ParameterResolver;
+
+import java.io.IOException;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -36,17 +45,19 @@ import java.util.stream.Stream;
  * store parent-inheritance from conflating the two when both a class and a method carry
  * {@link Kafkaesque} simultaneously.</p>
  *
- * <p>To receive the server in a test or lifecycle method, declare a parameter of type
- * {@link KafkaesqueServer}:</p>
- * <pre>{@code
- * &#64;Test
- * void myTest(KafkaesqueServer server) throws Exception {
- *     String bootstrapServers = server.getBootstrapServers();
- * }
- * }</pre>
+ * <p>The extension supports three kinds of parameter injection:</p>
+ * <ul>
+ *   <li>{@link KafkaesqueServer} — the running server instance</li>
+ *   <li>{@link KafkaProducer} annotated with {@link KafkaesqueProducer} — a configured producer
+ *       that is automatically closed at the end of the test</li>
+ *   <li>{@link KafkaConsumer} annotated with {@link KafkaesqueConsumer} — a configured consumer,
+ *       optionally pre-subscribed to topics, that is automatically closed at the end of the test</li>
+ * </ul>
  *
  * @see Kafkaesque
  * @see KafkaesqueServer
+ * @see KafkaesqueProducer
+ * @see KafkaesqueConsumer
  */
 @Slf4j
 public final class KafkaesqueExtension
@@ -137,44 +148,52 @@ public final class KafkaesqueExtension
     }
 
     /**
-     * Returns {@code true} if the parameter type is {@link KafkaesqueServer} or a subtype.
+     * Returns {@code true} when the parameter can be resolved by this extension.
+     *
+     * <p>Supported parameter types are:</p>
+     * <ul>
+     *   <li>{@link KafkaesqueServer} or any subtype</li>
+     *   <li>{@link KafkaProducer} annotated with {@link KafkaesqueProducer}</li>
+     *   <li>{@link KafkaConsumer} annotated with {@link KafkaesqueConsumer}</li>
+     * </ul>
      *
      * @param paramCtx the context for the parameter requesting injection
      * @param extCtx   the current JUnit 5 extension context
-     * @return {@code true} when the parameter can be resolved as a {@link KafkaesqueServer}
+     * @return {@code true} when the parameter can be resolved
      */
     @Override
     public boolean supportsParameter(final ParameterContext paramCtx, final ExtensionContext extCtx) {
-        return KafkaesqueServer.class.isAssignableFrom(paramCtx.getParameter().getType());
+        return KafkaesqueServer.class.isAssignableFrom(paramCtx.getParameter().getType())
+            || isAnnotatedProducer(paramCtx)
+            || isAnnotatedConsumer(paramCtx);
     }
 
     /**
-     * Returns the {@link KafkaesqueServer} for the current test.
+     * Resolves the parameter value for the current test.
      *
-     * <p>A method-scoped server (stored under {@link #METHOD_SERVER_KEY}) is returned first
-     * when present — this gives method-annotated tests their own isolated instance even when
-     * the class also carries {@link Kafkaesque}. If no method-scoped server is found, the
-     * class-scoped server (stored under {@link #CLASS_SERVER_KEY}) is returned; JUnit 5's
-     * store parent-inheritance locates it in the enclosing class context automatically.</p>
+     * <p>Delegates to {@link #createAndStoreProducer} or {@link #createAndStoreConsumer} for
+     * annotated producer and consumer parameters respectively. Falls back to
+     * {@link #resolveServer} for {@link KafkaesqueServer} parameters.</p>
      *
      * @param paramCtx the context for the parameter requesting injection
      * @param extCtx   the current JUnit 5 extension context
-     * @return the running {@link KafkaesqueServer} for this test
-     * @throws IllegalStateException if no server is found — ensure {@link Kafkaesque}
-     *                               is applied to the test class or method
+     * @return the resolved parameter value
+     * @throws ParameterResolutionException if a Kafka client cannot be created
+     * @throws IllegalStateException        if a {@link KafkaesqueServer} is requested but none is found
      */
     @Override
     public Object resolveParameter(final ParameterContext paramCtx, final ExtensionContext extCtx) {
-        final var methodServer = extCtx.getStore(NAMESPACE).get(METHOD_SERVER_KEY, KafkaesqueServer.class);
-        if (methodServer != null) {
-            return methodServer;
+        try {
+            if (isAnnotatedProducer(paramCtx)) {
+                return createAndStoreProducer(paramCtx, extCtx);
+            }
+            if (isAnnotatedConsumer(paramCtx)) {
+                return createAndStoreConsumer(paramCtx, extCtx);
+            }
+        } catch (final IOException e) {
+            throw new ParameterResolutionException("Failed to determine Kafka bootstrap address", e);
         }
-        final var classServer = extCtx.getStore(NAMESPACE).get(CLASS_SERVER_KEY, KafkaesqueServer.class);
-        if (classServer != null) {
-            return classServer;
-        }
-        throw new IllegalStateException(
-            "KafkaesqueServer not found — ensure @Kafkaesque is applied to the test class or method");
+        return resolveServer(extCtx);
     }
 
     /**
@@ -260,6 +279,123 @@ public final class KafkaesqueExtension
     }
 
     /**
+     * Locates the active {@link KafkaesqueServer} for the current test.
+     *
+     * <p>A method-scoped server is returned first when present. If none is found, the
+     * class-scoped server is returned via JUnit 5's store parent-inheritance.</p>
+     *
+     * @param extCtx the current JUnit 5 extension context
+     * @return the active {@link KafkaesqueServer}
+     * @throws IllegalStateException if no server is found
+     */
+    private KafkaesqueServer resolveServer(final ExtensionContext extCtx) {
+        final var methodServer = extCtx.getStore(NAMESPACE).get(METHOD_SERVER_KEY, KafkaesqueServer.class);
+        if (methodServer != null) {
+            return methodServer;
+        }
+        final var classServer = extCtx.getStore(NAMESPACE).get(CLASS_SERVER_KEY, KafkaesqueServer.class);
+        if (classServer != null) {
+            return classServer;
+        }
+        throw new IllegalStateException(
+            "KafkaesqueServer not found — ensure @Kafkaesque is applied to the test class or method");
+    }
+
+    /**
+     * Creates a {@link KafkaProducer} from the {@link KafkaesqueProducer} annotation on the
+     * given parameter, stores it for auto-close, and returns it.
+     *
+     * @param paramCtx the parameter context bearing the {@link KafkaesqueProducer} annotation
+     * @param extCtx   the current JUnit 5 extension context
+     * @return a configured, ready-to-use {@link KafkaProducer}
+     * @throws IOException if the server's bootstrap address cannot be determined
+     */
+    private KafkaProducer<?, ?> createAndStoreProducer(
+            final ParameterContext paramCtx, final ExtensionContext extCtx) throws IOException {
+        final var annotation = paramCtx.findAnnotation(KafkaesqueProducer.class).orElseThrow();
+        final var bootstrapServers = resolveServer(extCtx).getBootstrapServers();
+        final var producer = new KafkaProducer<>(buildProducerProperties(annotation, bootstrapServers));
+        extCtx.getStore(NAMESPACE).put(
+            "producer-" + paramCtx.getIndex(),
+            (ExtensionContext.Store.CloseableResource) producer::close);
+        return producer;
+    }
+
+    /**
+     * Builds the {@link Properties} for a {@link KafkaProducer} from the given annotation.
+     *
+     * @param annotation       the {@link KafkaesqueProducer} annotation to read configuration from
+     * @param bootstrapServers the broker address string
+     * @return a fully populated {@link Properties} instance
+     */
+    private Properties buildProducerProperties(
+            final KafkaesqueProducer annotation, final String bootstrapServers) {
+        final var props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, annotation.keySerializer().getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, annotation.valueSerializer().getName());
+        props.put(ProducerConfig.ACKS_CONFIG, annotation.acks());
+        props.put(ProducerConfig.RETRIES_CONFIG, annotation.retries());
+        if (annotation.idempotent()) {
+            props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true");
+            if (annotation.retries() == 0) {
+                // Kafka requires retries > 0 for idempotent producers; apply a safe default
+                // when the user has not overridden the zero-valued annotation default.
+                props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
+            }
+        }
+        if (!annotation.transactionalId().isEmpty()) {
+            props.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, annotation.transactionalId());
+        }
+        return props;
+    }
+
+    /**
+     * Creates a {@link KafkaConsumer} from the {@link KafkaesqueConsumer} annotation on the
+     * given parameter, optionally subscribes it to the declared topics, stores it for
+     * auto-close, and returns it.
+     *
+     * @param paramCtx the parameter context bearing the {@link KafkaesqueConsumer} annotation
+     * @param extCtx   the current JUnit 5 extension context
+     * @return a configured, optionally subscribed {@link KafkaConsumer}
+     * @throws IOException if the server's bootstrap address cannot be determined
+     */
+    private KafkaConsumer<?, ?> createAndStoreConsumer(
+            final ParameterContext paramCtx, final ExtensionContext extCtx) throws IOException {
+        final var annotation = paramCtx.findAnnotation(KafkaesqueConsumer.class).orElseThrow();
+        final var bootstrapServers = resolveServer(extCtx).getBootstrapServers();
+        final var consumer = new KafkaConsumer<>(buildConsumerProperties(annotation, bootstrapServers));
+        if (annotation.topics().length > 0) {
+            consumer.subscribe(List.of(annotation.topics()));
+        }
+        extCtx.getStore(NAMESPACE).put(
+            "consumer-" + paramCtx.getIndex(),
+            (ExtensionContext.Store.CloseableResource) consumer::close);
+        return consumer;
+    }
+
+    /**
+     * Builds the {@link Properties} for a {@link KafkaConsumer} from the given annotation.
+     *
+     * @param annotation       the {@link KafkaesqueConsumer} annotation to read configuration from
+     * @param bootstrapServers the broker address string
+     * @return a fully populated {@link Properties} instance
+     */
+    private Properties buildConsumerProperties(
+            final KafkaesqueConsumer annotation, final String bootstrapServers) {
+        final var props = new Properties();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ConsumerConfig.GROUP_ID_CONFIG,
+            annotation.groupId().isEmpty() ? "test-group-" + UUID.randomUUID() : annotation.groupId());
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, annotation.keyDeserializer().getName());
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, annotation.valueDeserializer().getName());
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, annotation.autoOffsetReset());
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
+        props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, annotation.isolationLevel().toString().toLowerCase());
+        return props;
+    }
+
+    /**
      * Returns the {@link Kafkaesque.Lifecycle} configured on the test class, or {@code null}
      * if the class carries no {@link Kafkaesque} annotation (e.g. when the extension was
      * registered only via a method annotation).
@@ -283,5 +419,29 @@ public final class KafkaesqueExtension
         return context.getTestMethod()
             .map(m -> m.isAnnotationPresent(Kafkaesque.class))
             .orElse(false);
+    }
+
+    /**
+     * Returns {@code true} if the parameter is a {@link KafkaProducer} annotated with
+     * {@link KafkaesqueProducer}.
+     *
+     * @param paramCtx the parameter context to inspect
+     * @return {@code true} when the parameter should be resolved as an injected producer
+     */
+    private boolean isAnnotatedProducer(final ParameterContext paramCtx) {
+        return KafkaProducer.class.isAssignableFrom(paramCtx.getParameter().getType())
+            && paramCtx.isAnnotated(KafkaesqueProducer.class);
+    }
+
+    /**
+     * Returns {@code true} if the parameter is a {@link KafkaConsumer} annotated with
+     * {@link KafkaesqueConsumer}.
+     *
+     * @param paramCtx the parameter context to inspect
+     * @return {@code true} when the parameter should be resolved as an injected consumer
+     */
+    private boolean isAnnotatedConsumer(final ParameterContext paramCtx) {
+        return KafkaConsumer.class.isAssignableFrom(paramCtx.getParameter().getType())
+            && paramCtx.isAnnotated(KafkaesqueConsumer.class);
     }
 }
