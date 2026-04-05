@@ -133,6 +133,13 @@
                 <artifactId>logback-classic</artifactId>
                 <version>${logback.version}</version>
             </dependency>
+
+            <!-- Kafkaesque modules -->
+            <dependency>
+                <groupId>eu.kafkaesque</groupId>
+                <artifactId>kafkaesque-junit5</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 </project>

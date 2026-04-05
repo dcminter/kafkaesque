@@ -140,6 +140,7 @@
     <modules>
         <module>kafkaesque-bom</module>
         <module>kafkaesque-core</module>
+        <module>kafkaesque-junit5</module>
         <module>kafkaesque-it</module>
     </modules>
 
