@@ -164,6 +164,15 @@ public final class KafkaProtocolHandler {
     }
 
     /**
+     * Gets the topic store used by this protocol handler.
+     *
+     * @return the topic store
+     */
+    public TopicStore getTopicStore() {
+        return topicStore;
+    }
+
+    /**
      * Pre-registers a topic with the given configuration and compression.
      *
      * @param name              the topic name

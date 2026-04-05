@@ -441,6 +441,23 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
     }
 
     /**
+     * Gets all topics that have been explicitly registered with this server, regardless of
+     * whether any records have been published to them.
+     *
+     * <p>This includes topics pre-created via {@link #createTopic} and topics created via the
+     * Kafka admin API. Unlike {@link #getKnownTopics()}, this method returns topics that exist
+     * in the topic registry even if they have never received a record.</p>
+     *
+     * @return unmodifiable list of registered topic names
+     */
+    public java.util.List<String> getRegisteredTopics() {
+        return protocolHandler.getTopicStore().getTopics()
+            .stream()
+            .map(eu.kafkaesque.core.storage.TopicStore.TopicDefinition::name)
+            .toList();
+    }
+
+    /**
      * Clears all stored records.
      *
      * <p>This is useful for testing scenarios where you want to reset state

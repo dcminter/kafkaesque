@@ -11,6 +11,11 @@ import org.junit.jupiter.api.extension.ExtensionContext.Namespace;
 import org.junit.jupiter.api.extension.ParameterContext;
 import org.junit.jupiter.api.extension.ParameterResolver;
 
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Stream;
+
 /**
  * JUnit 5 extension that starts a {@link KafkaesqueServer} and makes it available for
  * parameter injection into test and lifecycle methods.
@@ -183,8 +188,41 @@ public final class KafkaesqueExtension
     private void startServer(final ExtensionContext context, final String key) throws Exception {
         final var server = new KafkaesqueServer("localhost", 0, resolveAutoCreateTopics(context));
         server.start();
+        createTopics(server, context);
         context.getStore(NAMESPACE).put(key, server);
         log.info("Kafkaesque server started on {}", server.getBootstrapServers());
+    }
+
+    /**
+     * Pre-creates all topics declared via {@link Kafkaesque#topics()} on the given server.
+     * Topics from both the class-level and method-level annotations are created.
+     *
+     * @param server  the server on which to create topics
+     * @param context the current extension context
+     */
+    private void createTopics(final KafkaesqueServer server, final ExtensionContext context) {
+        resolveTopics(context).forEach(t -> server.createTopic(t.name(), t.numPartitions(), t.replicationFactor()));
+    }
+
+    /**
+     * Collects all {@link KafkaesqueTopic} declarations from both the class-level and
+     * method-level {@link Kafkaesque} annotations. Class-level topics come first; method-level
+     * topics are appended so that per-test extras are created after any shared setup topics.
+     *
+     * @param context the current extension context
+     * @return ordered list of topic declarations to pre-create; never {@code null}
+     */
+    private List<KafkaesqueTopic> resolveTopics(final ExtensionContext context) {
+        final var classTopics = Optional.ofNullable(context.getRequiredTestClass().getAnnotation(Kafkaesque.class))
+            .map(Kafkaesque::topics)
+            .map(Arrays::asList)
+            .orElse(List.of());
+        final var methodTopics = context.getTestMethod()
+            .map(m -> m.getAnnotation(Kafkaesque.class))
+            .map(Kafkaesque::topics)
+            .map(Arrays::asList)
+            .orElse(List.of());
+        return Stream.concat(classTopics.stream(), methodTopics.stream()).toList();
     }
 
     /**

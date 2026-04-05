@@ -81,6 +81,24 @@ public @interface Kafkaesque {
     boolean autoCreateTopics() default true;
 
     /**
+     * Topics to pre-create on the {@link eu.kafkaesque.core.KafkaesqueServer} before any test
+     * code runs.
+     *
+     * <p>Topics declared here are created immediately after the server starts, so test methods
+     * never need to use the Kafka admin client to set up required topics. This is particularly
+     * useful in combination with {@link #autoCreateTopics() autoCreateTopics = false}, where
+     * producing to an undeclared topic would otherwise fail.</p>
+     *
+     * <p>When both the class and a test method carry {@link Kafkaesque}, topics from
+     * <em>both</em> annotations are created — class-level topics act as shared setup and
+     * method-level topics add per-test extras.</p>
+     *
+     * @return the topics to pre-create; defaults to none
+     * @see KafkaesqueTopic
+     */
+    KafkaesqueTopic[] topics() default {};
+
+    /**
      * Defines when the Kafkaesque server is started and stopped relative to test execution.
      * Only relevant when {@link Kafkaesque} is applied at the class level.
      *
