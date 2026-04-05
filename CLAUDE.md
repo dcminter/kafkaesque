@@ -1,6 +1,8 @@
 # Claude's context:
 
-The goal of this project is to build Kafkaesque, a library that provides a mock Kafka service for testing applications that have strong dependencies on Kafka's capabilities. It is analagous to Wiremock's provision of mocking APIs for applications that make use of web servers and services.
+The goal of this project is to build Kafkaesque, a library that provides a mock Kafka service for testing applications 
+that have strong dependencies on Kafka's capabilities. It is analogous to Wiremock's provision of mocking APIs for 
+applications that make use of web servers and other http based services.
 
 ## Project overview
 

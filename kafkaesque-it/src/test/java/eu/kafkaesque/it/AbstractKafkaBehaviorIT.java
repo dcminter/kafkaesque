@@ -122,4 +122,15 @@ abstract class AbstractKafkaBehaviorIT {
             return AbstractKafkaBehaviorIT.this.getBootstrapServers();
         }
     }
+
+    /**
+     * Runs the idempotent producer behavior tests against this backend.
+     */
+    @Nested
+    class IdempotentProducerBehavior extends AbstractIdempotentProducerBehaviorIT {
+        @Override
+        protected String getBootstrapServers() throws Exception {
+            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
+        }
+    }
 }

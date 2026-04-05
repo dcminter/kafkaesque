@@ -60,6 +60,38 @@ final class KafkaTestClientFactory {
     }
 
     /**
+     * Creates a {@link KafkaProducer} configured for idempotent (exactly-once) delivery.
+     *
+     * <p>The producer is configured with:</p>
+     * <ul>
+     *   <li>{@code enable.idempotence=true} — enables per-partition sequence tracking</li>
+     *   <li>{@code acks=all} — waits for all in-sync replicas</li>
+     *   <li>{@code retries=Integer.MAX_VALUE} — retries indefinitely within the delivery timeout</li>
+     *   <li>{@code max.in.flight.requests.per.connection=1} — strictly sequential
+     *       request/response on each connection, required for correct proxy-based tests</li>
+     *   <li>{@code request.timeout.ms=3000} — short individual-request timeout so retry
+     *       tests complete quickly</li>
+     *   <li>{@code delivery.timeout.ms=30000} — total delivery budget across all retries</li>
+     * </ul>
+     *
+     * @param bootstrapServers the broker address (may be a proxy address in retry tests)
+     * @return a new idempotent producer instance
+     */
+    static KafkaProducer<String, String> createIdempotentProducer(final String bootstrapServers) {
+        final Properties props = new Properties();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        props.put(ProducerConfig.ACKS_CONFIG, "all");
+        props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true");
+        props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
+        props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 1);
+        props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 3000);
+        props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30_000);
+        return new KafkaProducer<>(props);
+    }
+
+    /**
      * Creates a {@link KafkaConsumer} configured to read from the earliest available offset,
      * using a randomly generated group ID so the consumer is isolated from other test consumers.
      *

@@ -17,6 +17,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import static org.apache.kafka.common.protocol.Errors.INVALID_PRODUCER_EPOCH;
+import static org.apache.kafka.common.protocol.Errors.OUT_OF_ORDER_SEQUENCE_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -96,6 +99,109 @@ class ProducerApiHandlerTest {
         assertThat(response).isNull();
     }
 
+    @Test
+    void generateProduceResponse_duplicateIdempotentBatch_shouldNotStoreAgain() {
+        final var topic = "idempotent-topic";
+        final var partition = 0;
+        final long producerId = 42L;
+        final short producerEpoch = 0;
+        final int baseSequence = 0;
+
+        // First send — should store the record
+        invokeIdempotentProduceRequest(topic, partition, producerId, producerEpoch, baseSequence, "k", "v");
+        assertThat(eventStore.getRecordCount(topic, partition)).isEqualTo(1L);
+
+        // Second send with the same (producerId, epoch, baseSequence) — duplicate, must not store again
+        final var response = invokeIdempotentProduceRequest(
+            topic, partition, producerId, producerEpoch, baseSequence, "k", "v");
+
+        assertThat(eventStore.getRecordCount(topic, partition)).isEqualTo(1L);
+        final var responseData = parseProduceResponse(response);
+        assertThat(responseData.responses().iterator().next()
+            .partitionResponses().get(0).errorCode()).isZero();
+    }
+
+    @Test
+    void generateProduceResponse_outOfOrderIdempotentSequence_shouldReturnError() {
+        final var topic = "idempotent-topic";
+        final var partition = 0;
+        final long producerId = 99L;
+        final short producerEpoch = 0;
+
+        // First batch for this producer must have baseSequence=0; sending 5 is out-of-order
+        final var response = invokeIdempotentProduceRequest(
+            topic, partition, producerId, producerEpoch, 5, "k", "v");
+
+        assertThat(eventStore.getRecordCount(topic, partition)).isZero();
+        final var responseData = parseProduceResponse(response);
+        assertThat(responseData.responses().iterator().next()
+            .partitionResponses().get(0).errorCode())
+            .isEqualTo(OUT_OF_ORDER_SEQUENCE_NUMBER.code());
+    }
+
+    @Test
+    void generateProduceResponse_duplicateIdempotentBatch_shouldReturnCachedOffset() {
+        final var topic = "idempotent-topic";
+        final var partition = 0;
+        final long producerId = 55L;
+        final short producerEpoch = 0;
+
+        // First send — offset 0 is assigned
+        final var firstResponse = invokeIdempotentProduceRequest(
+            topic, partition, producerId, producerEpoch, 0, "k", "v");
+        final var firstOffset = parseProduceResponse(firstResponse)
+            .responses().iterator().next().partitionResponses().get(0).baseOffset();
+
+        // Duplicate — must return the original cached offset, not a new one
+        final var duplicateResponse = invokeIdempotentProduceRequest(
+            topic, partition, producerId, producerEpoch, 0, "k", "v");
+
+        assertThat(eventStore.getRecordCount(topic, partition)).isEqualTo(1L);
+        final var duplicateOffset = parseProduceResponse(duplicateResponse)
+            .responses().iterator().next().partitionResponses().get(0).baseOffset();
+        assertThat(duplicateOffset)
+            .as("duplicate response must return the original cached offset")
+            .isEqualTo(firstOffset);
+    }
+
+    @Test
+    void generateProduceResponse_sequentialIdempotentBatches_shouldStoreAll() {
+        final var topic = "idempotent-topic";
+        final var partition = 0;
+        final long producerId = 77L;
+        final short producerEpoch = 0;
+
+        invokeIdempotentProduceRequest(topic, partition, producerId, producerEpoch, 0, "k0", "v0");
+        invokeIdempotentProduceRequest(topic, partition, producerId, producerEpoch, 1, "k1", "v1");
+        final var response = invokeIdempotentProduceRequest(
+            topic, partition, producerId, producerEpoch, 2, "k2", "v2");
+
+        assertThat(eventStore.getRecordCount(topic, partition)).isEqualTo(3L);
+        assertThat(parseProduceResponse(response)
+            .responses().iterator().next()
+            .partitionResponses().get(0).errorCode()).isZero();
+    }
+
+    @Test
+    void generateProduceResponse_staleEpoch_shouldReturnInvalidProducerEpochError() {
+        final var topic = "idempotent-topic";
+        final var partition = 0;
+        final long producerId = 88L;
+
+        // Establish epoch 0, then advance to epoch 1
+        invokeIdempotentProduceRequest(topic, partition, producerId, (short) 0, 0, "k", "v");
+        invokeIdempotentProduceRequest(topic, partition, producerId, (short) 1, 0, "k", "v");
+
+        // A retry from the old epoch-0 producer must be fenced
+        final var response = invokeIdempotentProduceRequest(
+            topic, partition, producerId, (short) 0, 1, "k", "v");
+
+        assertThat(parseProduceResponse(response)
+            .responses().iterator().next()
+            .partitionResponses().get(0).errorCode())
+            .isEqualTo(INVALID_PRODUCER_EPOCH.code());
+    }
+
     // --- helpers ---
 
     private ByteBuffer invokeProduceRequest(
@@ -104,13 +210,28 @@ class ProducerApiHandlerTest {
         return invokeProduceRequest(handler, topic, partition, transactionalId, key, value);
     }
 
+    private ByteBuffer invokeIdempotentProduceRequest(
+            final String topic, final int partition,
+            final long producerId, final short producerEpoch, final int baseSequence,
+            final String key, final String value) {
+        return invokeProduceRequest(
+            handler, topic, partition, null,
+            buildIdempotentMemoryRecords(producerId, producerEpoch, baseSequence, key, value));
+    }
+
     private static ByteBuffer invokeProduceRequest(
             final ProducerApiHandler producerHandler,
             final String topic, final int partition,
             final String transactionalId, final String key, final String value) {
-        final var apiVersion = ApiKeys.PRODUCE.latestVersion();
+        return invokeProduceRequest(
+            producerHandler, topic, partition, transactionalId, buildMemoryRecords(key, value));
+    }
 
-        final var records = buildMemoryRecords(key, value);
+    private static ByteBuffer invokeProduceRequest(
+            final ProducerApiHandler producerHandler,
+            final String topic, final int partition,
+            final String transactionalId, final MemoryRecords records) {
+        final var apiVersion = ApiKeys.PRODUCE.latestVersion();
 
         final var partitionData = new ProduceRequestData.PartitionProduceData()
             .setIndex(partition)
@@ -135,12 +256,23 @@ class ProducerApiHandlerTest {
         return producerHandler.generateProduceResponse(header, buffer);
     }
 
+    private static MemoryRecords buildIdempotentMemoryRecords(
+            final long producerId, final short producerEpoch, final int baseSequence,
+            final String key, final String value) {
+        final var builder = MemoryRecords.idempotentBuilder(
+            ByteBuffer.allocate(1024), Compression.NONE, 0L, producerId, producerEpoch, baseSequence);
+        builder.append(System.currentTimeMillis(),
+            key == null ? null : key.getBytes(StandardCharsets.UTF_8),
+            value == null ? null : value.getBytes(StandardCharsets.UTF_8));
+        return builder.build();
+    }
+
     private static MemoryRecords buildMemoryRecords(final String key, final String value) {
         final var builder = MemoryRecords.builder(
             ByteBuffer.allocate(1024), Compression.NONE, TimestampType.CREATE_TIME, 0L);
         builder.append(System.currentTimeMillis(),
-            key == null ? null : key.getBytes(java.nio.charset.StandardCharsets.UTF_8),
-            value == null ? null : value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            key == null ? null : key.getBytes(StandardCharsets.UTF_8),
+            value == null ? null : value.getBytes(StandardCharsets.UTF_8));
         return builder.build();
     }
 

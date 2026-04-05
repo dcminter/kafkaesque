@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <p>Responsibilities:</p>
  * <ul>
- *   <li>Assigning stable producer IDs and epochs via {@link #initProducerId(String)}</li>
+ *   <li>Assigning stable producer IDs and epochs via {@link #initProducerId(String, long, short)}</li>
  *   <li>Committing or aborting open transactions via {@link #endTransaction(String, boolean)}</li>
  * </ul>
  *
@@ -67,21 +67,52 @@ public final class TransactionCoordinator {
     }
 
     /**
-     * Initialises (or re-initialises) a transactional producer.
+     * Initialises a producer with no pre-existing producer ID.
      *
-     * <p>If {@code transactionalId} is {@code null} or blank an ephemeral
-     * producer ID is assigned with epoch {@code 0} and nothing is persisted
-     * (non-transactional producers do not have stable IDs). Otherwise the
-     * existing epoch is incremented or, for new producers, epoch {@code 0}
-     * is assigned.</p>
+     * <p>Convenience overload equivalent to calling
+     * {@link #initProducerId(String, long, short) initProducerId(transactionalId,
+     * RecordBatch.NO_PRODUCER_ID, (short) 0)}.</p>
      *
      * @param transactionalId the client-supplied transactional ID; may be null or blank
      * @return the assigned producer ID and epoch
      */
     public ProducerIdAndEpoch initProducerId(final String transactionalId) {
+        return initProducerId(
+            transactionalId,
+            org.apache.kafka.common.record.RecordBatch.NO_PRODUCER_ID,
+            (short) 0);
+    }
+
+    /**
+     * Initialises (or re-initialises) a transactional producer.
+     *
+     * <p>If {@code transactionalId} is {@code null} or blank an ephemeral producer ID is
+     * assigned. When {@code existingProducerId} is not {@link org.apache.kafka.common.record.RecordBatch#NO_PRODUCER_ID},
+     * the client is reconnecting after a temporary failure and the existing ID is returned
+     * unchanged so that idempotency sequence tracking is preserved across reconnections.
+     * Otherwise a new ID with epoch {@code 0} is assigned.</p>
+     *
+     * <p>For transactional producers the existing epoch is incremented, or epoch {@code 0}
+     * is assigned for new producers.</p>
+     *
+     * @param transactionalId    the client-supplied transactional ID; may be null or blank
+     * @param existingProducerId the producer ID included in the request, or
+     *                           {@link org.apache.kafka.common.record.RecordBatch#NO_PRODUCER_ID} for a first-time init
+     * @param existingEpoch      the producer epoch included in the request
+     * @return the assigned producer ID and epoch
+     */
+    public ProducerIdAndEpoch initProducerId(
+            final String transactionalId,
+            final long existingProducerId,
+            final short existingEpoch) {
         if (transactionalId == null || transactionalId.isBlank()) {
+            if (existingProducerId != org.apache.kafka.common.record.RecordBatch.NO_PRODUCER_ID) {
+                log.debug("Reconnecting ephemeral producer: returning existing producerId={}, epoch={}",
+                    existingProducerId, existingEpoch);
+                return new ProducerIdAndEpoch(existingProducerId, existingEpoch);
+            }
             final long pid = nextProducerId.getAndIncrement();
-            log.debug("Assigned ephemeral producerId={}", pid);
+            log.debug("Assigned new ephemeral producerId={}", pid);
             return new ProducerIdAndEpoch(pid, (short) 0);
         }
 

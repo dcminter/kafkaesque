@@ -68,10 +68,12 @@ final class TransactionApiHandler {
             final var accessor = new ByteBufferAccessor(buffer);
             final var request = new InitProducerIdRequestData(accessor, requestHeader.apiVersion());
 
-            final var result = transactionCoordinator.initProducerId(request.transactionalId());
+            final var result = transactionCoordinator.initProducerId(
+                request.transactionalId(), request.producerId(), request.producerEpoch());
 
-            log.debug("INIT_PRODUCER_ID: transactionalId={}, producerId={}, epoch={}",
-                request.transactionalId(), result.producerId(), result.epoch());
+            log.info("INIT_PRODUCER_ID: transactionalId={}, requestProducerId={}, requestEpoch={} → producerId={}, epoch={}",
+                request.transactionalId(), request.producerId(), request.producerEpoch(),
+                result.producerId(), result.epoch());
 
             final var response = new InitProducerIdResponseData()
                 .setThrottleTimeMs(0)
