@@ -1,6 +1,9 @@
 package eu.kafkaesque.it;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -12,7 +15,10 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Properties;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
@@ -212,5 +218,109 @@ abstract class AbstractConsumerBehaviorIT {
             .isEqualTo("order-service");
 
         log.info("All {} headers preserved correctly", headers.length);
+    }
+
+    /**
+     * Verifies that two consumers in <em>different</em> groups both receive all messages
+     * published to the same topic.
+     *
+     * <p>Each group maintains an independent read position, so every group receives the
+     * complete message stream regardless of what other groups have consumed.</p>
+     *
+     * @throws Exception if bootstrap address lookup fails
+     */
+    @Test
+    void shouldAllowIndependentGroupsToEachReceiveAllMessages() throws Exception {
+        // Given
+        final String sharedTopic = "multi-group-topic-" + UUID.randomUUID();
+        final String groupA = "group-a-" + UUID.randomUUID();
+        final String groupB = "group-b-" + UUID.randomUUID();
+
+        try (
+            final KafkaConsumer<String, String> consumerA =
+                KafkaTestClientFactory.createConsumer(getBootstrapServers(), groupA);
+            final KafkaConsumer<String, String> consumerB =
+                KafkaTestClientFactory.createConsumer(getBootstrapServers(), groupB)
+        ) {
+            final var producerLocal = KafkaTestClientFactory.createProducer(getBootstrapServers());
+            producerLocal.send(new ProducerRecord<>(sharedTopic, "k1", "v1"));
+            producerLocal.send(new ProducerRecord<>(sharedTopic, "k2", "v2"));
+            producerLocal.flush();
+            producerLocal.close();
+
+            consumerA.subscribe(List.of(sharedTopic));
+            consumerB.subscribe(List.of(sharedTopic));
+
+            // When – poll both consumers until each has received both messages
+            final List<String> receivedByA = new ArrayList<>();
+            final List<String> receivedByB = new ArrayList<>();
+
+            await().atMost(15, SECONDS).until(() -> {
+                consumerA.poll(Duration.ofMillis(100)).forEach(r -> receivedByA.add(r.value()));
+                consumerB.poll(Duration.ofMillis(100)).forEach(r -> receivedByB.add(r.value()));
+                return receivedByA.size() >= 2 && receivedByB.size() >= 2;
+            });
+
+            // Then – each group sees the full message stream
+            assertThat(receivedByA).containsExactlyInAnyOrder("v1", "v2");
+            assertThat(receivedByB).containsExactlyInAnyOrder("v1", "v2");
+
+            log.info("Both groups independently received {} messages each", receivedByA.size());
+        }
+    }
+
+    /**
+     * Verifies that two consumers in the <em>same</em> group together receive all messages
+     * from a multi-partition topic without duplicates.
+     *
+     * <p>Kafka distributes partitions across the members of a consumer group so that each
+     * partition is consumed by exactly one member. The test uses a two-partition topic and
+     * publishes one batch of messages to each partition, then checks that the combined output
+     * of both consumers covers every message exactly once.</p>
+     *
+     * @throws Exception if topic creation or bootstrap address lookup fails
+     */
+    @Test
+    void shouldDistributePartitionsAcrossConsumersInSameGroup() throws Exception {
+        // Given – create a 2-partition topic so partitions can be spread across two consumers
+        final String groupId = "shared-group-" + UUID.randomUUID();
+        final String multiPartitionTopic = "multi-partition-topic-" + UUID.randomUUID();
+
+        final Properties adminProps = new Properties();
+        adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
+        adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
+        try (final AdminClient adminClient = AdminClient.create(adminProps)) {
+            adminClient.createTopics(List.of(new NewTopic(multiPartitionTopic, 2, (short) 1))).all().get();
+        }
+
+        try (
+            final KafkaConsumer<String, String> consumerA =
+                KafkaTestClientFactory.createConsumer(getBootstrapServers(), groupId);
+            final KafkaConsumer<String, String> consumerB =
+                KafkaTestClientFactory.createConsumer(getBootstrapServers(), groupId)
+        ) {
+            // Publish two messages, one per partition, so each consumer will receive exactly one
+            final var producerLocal = KafkaTestClientFactory.createProducer(getBootstrapServers());
+            producerLocal.send(new ProducerRecord<>(multiPartitionTopic, 0, "key", "msg-p0")).get();
+            producerLocal.send(new ProducerRecord<>(multiPartitionTopic, 1, "key", "msg-p1")).get();
+            producerLocal.close();
+
+            // Subscribe both consumers to trigger the rebalance
+            consumerA.subscribe(List.of(multiPartitionTopic));
+            consumerB.subscribe(List.of(multiPartitionTopic));
+
+            // When – poll both until the combined set contains all messages
+            final Set<String> received = new HashSet<>();
+            await().atMost(20, SECONDS).until(() -> {
+                consumerA.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                consumerB.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                return received.size() >= 2;
+            });
+
+            // Then – exactly the two messages were received with no duplicates
+            assertThat(received).containsExactlyInAnyOrder("msg-p0", "msg-p1");
+
+            log.info("Same-group consumers together received {} unique messages", received.size());
+        }
     }
 }

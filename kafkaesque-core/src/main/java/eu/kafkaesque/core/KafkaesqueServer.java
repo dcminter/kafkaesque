@@ -104,6 +104,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
         final var sel = Selector.open();
         channel.register(sel, SelectionKey.OP_ACCEPT);
         selector.set(sel);
+        protocolHandler.setSelector(sel);
 
         running.set(true);
 
@@ -194,6 +195,8 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
                         handleWrite(key);
                     }
                 }
+
+                protocolHandler.drainDeferredResponses();
             } catch (final ClosedSelectorException e) {
                 break;
             } catch (final IOException e) {
@@ -291,6 +294,8 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
         }
 
         log.info("Stopping Kafkaesque server");
+
+        protocolHandler.close();
 
         try {
             final var sel = selector.get();

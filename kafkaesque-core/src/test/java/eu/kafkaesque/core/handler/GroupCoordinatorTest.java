@@ -21,36 +21,62 @@ class GroupCoordinatorTest {
 
     @Test
     void joinGroup_withBlankMemberId_shouldGenerateUniqueMemberId() {
-        final var memberId = coordinator.joinGroup("group-1", "");
+        final var memberId = coordinator.joinGroup("group-1", "", new byte[0]);
 
         assertThat(memberId).isNotBlank().startsWith("group-1-");
     }
 
     @Test
     void joinGroup_withNullMemberId_shouldGenerateUniqueMemberId() {
-        final var memberId = coordinator.joinGroup("group-1", null);
+        final var memberId = coordinator.joinGroup("group-1", null, new byte[0]);
 
         assertThat(memberId).isNotBlank().startsWith("group-1-");
     }
 
     @Test
     void joinGroup_withExistingMemberId_shouldReuseSuppliedId() {
-        final var memberId = coordinator.joinGroup("group-1", "existing-member-id");
+        final var memberId = coordinator.joinGroup("group-1", "existing-member-id", new byte[0]);
 
         assertThat(memberId).isEqualTo("existing-member-id");
     }
 
     @Test
     void joinGroup_differentGroups_shouldBeIndependent() {
-        final var memberId1 = coordinator.joinGroup("group-1", "");
-        final var memberId2 = coordinator.joinGroup("group-2", "");
+        final var memberId1 = coordinator.joinGroup("group-1", "", new byte[0]);
+        final var memberId2 = coordinator.joinGroup("group-2", "", new byte[0]);
 
         assertThat(memberId1).isNotEqualTo(memberId2);
     }
 
     @Test
+    void joinGroup_secondMember_shouldBeTrackedAlongsideFirstMember() {
+        final var memberId1 = coordinator.joinGroup("group-1", "member-a", new byte[]{1});
+        final var memberId2 = coordinator.joinGroup("group-1", "member-b", new byte[]{2});
+
+        final var members = coordinator.getMembers("group-1");
+        assertThat(members).containsKey(memberId1);
+        assertThat(members).containsKey(memberId2);
+    }
+
+    @Test
+    void joinGroup_firstMemberBecomesLeader() {
+        coordinator.joinGroup("group-1", "member-a", new byte[0]);
+        coordinator.joinGroup("group-1", "member-b", new byte[0]);
+
+        assertThat(coordinator.getLeader("group-1")).isEqualTo("member-a");
+    }
+
+    @Test
+    void joinGroup_storesSubscriptionMetadata() {
+        final var metadata = new byte[]{10, 20, 30};
+        coordinator.joinGroup("group-1", "member-1", metadata);
+
+        assertThat(coordinator.getMembers("group-1").get("member-1")).isEqualTo(metadata);
+    }
+
+    @Test
     void getGenerationId_forKnownGroup_shouldReturnOne() {
-        coordinator.joinGroup("group-1", "member-1");
+        coordinator.joinGroup("group-1", "member-1", new byte[0]);
 
         assertThat(coordinator.getGenerationId("group-1")).isEqualTo(1);
     }
@@ -61,13 +87,34 @@ class GroupCoordinatorTest {
     }
 
     @Test
+    void getMembers_forUnknownGroup_shouldReturnEmptyMap() {
+        assertThat(coordinator.getMembers("unknown-group")).isEmpty();
+    }
+
+    @Test
+    void getLeader_forUnknownGroup_shouldReturnEmptyString() {
+        assertThat(coordinator.getLeader("unknown-group")).isEmpty();
+    }
+
+    @Test
     void syncGroup_shouldStoreAssignments() {
-        coordinator.joinGroup("group-1", "member-1");
+        coordinator.joinGroup("group-1", "member-1", new byte[0]);
         final var assignmentBytes = new byte[]{1, 2, 3};
         coordinator.syncGroup("group-1", Map.of("member-1", assignmentBytes));
 
         assertThat(coordinator.getMemberAssignment("group-1", "member-1"))
             .isEqualTo(assignmentBytes);
+    }
+
+    @Test
+    void syncGroup_shouldPreserveMemberList() {
+        coordinator.joinGroup("group-1", "member-a", new byte[]{1});
+        coordinator.joinGroup("group-1", "member-b", new byte[]{2});
+        coordinator.syncGroup("group-1", Map.of(
+            "member-a", new byte[]{10},
+            "member-b", new byte[]{20}));
+
+        assertThat(coordinator.getMembers("group-1")).containsKeys("member-a", "member-b");
     }
 
     @Test
@@ -79,7 +126,7 @@ class GroupCoordinatorTest {
 
     @Test
     void getMemberAssignment_withNoSyncGroupCalled_shouldReturnEmptyArray() {
-        coordinator.joinGroup("group-1", "member-1");
+        coordinator.joinGroup("group-1", "member-1", new byte[0]);
 
         assertThat(coordinator.getMemberAssignment("group-1", "member-1")).isEmpty();
     }
@@ -87,6 +134,42 @@ class GroupCoordinatorTest {
     @Test
     void getMemberAssignment_forUnknownGroup_shouldReturnEmptyArray() {
         assertThat(coordinator.getMemberAssignment("unknown-group", "member-1")).isEmpty();
+    }
+
+    @Test
+    void removeMember_shouldRemoveFromMemberList() {
+        coordinator.joinGroup("group-1", "member-a", new byte[0]);
+        coordinator.joinGroup("group-1", "member-b", new byte[0]);
+
+        coordinator.removeMember("group-1", "member-b");
+
+        assertThat(coordinator.getMembers("group-1")).containsOnlyKeys("member-a");
+    }
+
+    @Test
+    void removeMember_lastMember_shouldRemoveGroupEntirely() {
+        coordinator.joinGroup("group-1", "member-a", new byte[0]);
+
+        coordinator.removeMember("group-1", "member-a");
+
+        assertThat(coordinator.getMembers("group-1")).isEmpty();
+        assertThat(coordinator.getLeader("group-1")).isEmpty();
+    }
+
+    @Test
+    void removeMember_whenLeaderLeaves_shouldPromoteAnotherMember() {
+        coordinator.joinGroup("group-1", "member-a", new byte[0]);
+        coordinator.joinGroup("group-1", "member-b", new byte[0]);
+
+        coordinator.removeMember("group-1", "member-a");
+
+        assertThat(coordinator.getLeader("group-1")).isEqualTo("member-b");
+    }
+
+    @Test
+    void removeMember_forUnknownGroup_shouldNotFail() {
+        coordinator.removeMember("unknown-group", "member-1");
+        // No assertion needed — just verifying no exception is thrown
     }
 
     @Test
@@ -121,12 +204,13 @@ class GroupCoordinatorTest {
 
     @Test
     void clear_shouldRemoveAllGroupStateAndOffsets() {
-        coordinator.joinGroup("group-1", "member-1");
+        coordinator.joinGroup("group-1", "member-1", new byte[0]);
         coordinator.commitOffset("group-1", "topic-a", 0, 50L);
 
         coordinator.clear();
 
         assertThat(coordinator.getCommittedOffset("group-1", "topic-a", 0)).isEqualTo(-1L);
         assertThat(coordinator.getMemberAssignment("group-1", "member-1")).isEmpty();
+        assertThat(coordinator.getMembers("group-1")).isEmpty();
     }
 }

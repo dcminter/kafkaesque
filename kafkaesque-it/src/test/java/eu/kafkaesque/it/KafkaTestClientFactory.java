@@ -60,15 +60,28 @@ final class KafkaTestClientFactory {
     }
 
     /**
-     * Creates a {@link KafkaConsumer} configured to read from the earliest available offset.
+     * Creates a {@link KafkaConsumer} configured to read from the earliest available offset,
+     * using a randomly generated group ID so the consumer is isolated from other test consumers.
      *
      * @param bootstrapServers the broker address
      * @return a new consumer instance
      */
     static KafkaConsumer<String, String> createConsumer(final String bootstrapServers) {
+        return createConsumer(bootstrapServers, "test-group-" + UUID.randomUUID());
+    }
+
+    /**
+     * Creates a {@link KafkaConsumer} configured to read from the earliest available offset,
+     * using the specified group ID.
+     *
+     * @param bootstrapServers the broker address
+     * @param groupId          the consumer group ID to use
+     * @return a new consumer instance
+     */
+    static KafkaConsumer<String, String> createConsumer(final String bootstrapServers, final String groupId) {
         final Properties props = new Properties();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "test-group-" + UUID.randomUUID());
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class.getName());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");

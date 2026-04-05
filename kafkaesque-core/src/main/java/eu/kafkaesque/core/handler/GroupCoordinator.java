@@ -10,10 +10,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * Manages consumer group membership, partition assignments, and committed offsets
  * for the Kafkaesque mock server.
  *
- * <p>A single active member per group is supported, which is sufficient for the
- * single-consumer test scenarios Kafkaesque targets. The joining member is always
- * designated as the group leader so it can compute and submit its own partition
- * assignments during the SYNC_GROUP phase.</p>
+ * <p>Multiple members per group are supported. The first member to join a group is
+ * designated as the leader so it can compute and submit partition assignments for all
+ * members during the SYNC_GROUP phase.</p>
  *
  * <p>This class is thread-safe.</p>
  */
@@ -23,8 +22,20 @@ public final class GroupCoordinator {
     /** Identifies a single partition within a topic. */
     private record TopicPartitionKey(String topic, int partition) {}
 
-    /** Immutable snapshot of a consumer group's current state. */
-    private record GroupState(String memberId, int generationId, Map<String, byte[]> assignments) {}
+    /**
+     * Immutable snapshot of a consumer group's current state.
+     *
+     * @param memberSubscriptions map from member ID to serialised subscription metadata
+     * @param generationId        current rebalance generation
+     * @param leaderId            the member elected as group leader
+     * @param assignments         map from member ID to serialised partition assignment bytes
+     */
+    private record GroupState(
+        Map<String, byte[]> memberSubscriptions,
+        int generationId,
+        String leaderId,
+        Map<String, byte[]> assignments
+    ) {}
 
     /** Active group states keyed by group ID. */
     private final Map<String, GroupState> groups = new ConcurrentHashMap<>();
@@ -36,18 +47,35 @@ public final class GroupCoordinator {
      * Records a member joining a consumer group.
      *
      * <p>If {@code requestedMemberId} is blank a unique ID is generated, otherwise
-     * the supplied ID is reused (re-join after rebalance). The joining member is
-     * always designated the group leader.</p>
+     * the supplied ID is reused (re-join after rebalance). The first member to join
+     * a group is designated its leader.</p>
      *
-     * @param groupId           the consumer group ID
-     * @param requestedMemberId the member ID proposed by the client; may be blank for new members
+     * @param groupId              the consumer group ID
+     * @param requestedMemberId    the member ID proposed by the client; may be blank for new members
+     * @param subscriptionMetadata the serialised subscription metadata from the JoinGroup request
      * @return the member ID assigned by this coordinator
      */
-    public String joinGroup(final String groupId, final String requestedMemberId) {
+    public String joinGroup(
+            final String groupId,
+            final String requestedMemberId,
+            final byte[] subscriptionMetadata) {
         final var memberId = (requestedMemberId == null || requestedMemberId.isBlank())
             ? groupId + "-" + UUID.randomUUID()
             : requestedMemberId;
-        groups.put(groupId, new GroupState(memberId, 1, new ConcurrentHashMap<>()));
+
+        groups.compute(groupId, (gid, existing) -> {
+            final var members = existing == null
+                ? new ConcurrentHashMap<String, byte[]>()
+                : new ConcurrentHashMap<>(existing.memberSubscriptions());
+            members.put(memberId, subscriptionMetadata);
+            final var leader = existing == null ? memberId : existing.leaderId();
+            final var generationId = existing == null ? 1 : existing.generationId();
+            final var assignments = existing == null
+                ? new ConcurrentHashMap<String, byte[]>()
+                : existing.assignments();
+            return new GroupState(members, generationId, leader, assignments);
+        });
+
         log.debug("Member {} joined group {}", memberId, groupId);
         return memberId;
     }
@@ -61,7 +89,11 @@ public final class GroupCoordinator {
     public void syncGroup(final String groupId, final Map<String, byte[]> assignments) {
         final var existing = groups.get(groupId);
         if (existing != null) {
-            groups.put(groupId, new GroupState(existing.memberId(), existing.generationId(), assignments));
+            groups.put(groupId, new GroupState(
+                existing.memberSubscriptions(),
+                existing.generationId(),
+                existing.leaderId(),
+                assignments));
             log.debug("Synced group {} with {} assignment(s)", groupId, assignments.size());
         }
     }
@@ -75,6 +107,29 @@ public final class GroupCoordinator {
     public int getGenerationId(final String groupId) {
         final var state = groups.get(groupId);
         return state != null ? state.generationId() : 1;
+    }
+
+    /**
+     * Returns all current members of a consumer group with their subscription metadata.
+     *
+     * @param groupId the consumer group ID
+     * @return unmodifiable map from member ID to serialised subscription metadata;
+     *         empty if the group is unknown
+     */
+    public Map<String, byte[]> getMembers(final String groupId) {
+        final var state = groups.get(groupId);
+        return state != null ? Map.copyOf(state.memberSubscriptions()) : Map.of();
+    }
+
+    /**
+     * Returns the leader member ID for a consumer group.
+     *
+     * @param groupId the consumer group ID
+     * @return the leader member ID, or an empty string if the group is unknown
+     */
+    public String getLeader(final String groupId) {
+        final var state = groups.get(groupId);
+        return state != null ? state.leaderId() : "";
     }
 
     /**
@@ -93,6 +148,29 @@ public final class GroupCoordinator {
             }
         }
         return new byte[0];
+    }
+
+    /**
+     * Removes a member from a consumer group.
+     *
+     * <p>If the group becomes empty after removal, its state is deleted entirely.</p>
+     *
+     * @param groupId  the consumer group ID
+     * @param memberId the member ID to remove
+     */
+    public void removeMember(final String groupId, final String memberId) {
+        groups.computeIfPresent(groupId, (gid, existing) -> {
+            final var members = new ConcurrentHashMap<>(existing.memberSubscriptions());
+            members.remove(memberId);
+            if (members.isEmpty()) {
+                return null;
+            }
+            final var newLeader = members.containsKey(existing.leaderId())
+                ? existing.leaderId()
+                : members.keySet().iterator().next();
+            return new GroupState(members, existing.generationId(), newLeader, existing.assignments());
+        });
+        log.debug("Member {} left group {}", memberId, groupId);
     }
 
     /**

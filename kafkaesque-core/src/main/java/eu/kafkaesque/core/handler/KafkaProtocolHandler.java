@@ -12,6 +12,8 @@ import org.apache.kafka.common.requests.RequestHeader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Handles the Kafka wire protocol for client connections.
@@ -21,6 +23,8 @@ import java.nio.channels.SelectionKey;
  *   <li>Parsing incoming Kafka protocol requests</li>
  *   <li>Dispatching to the appropriate API handler</li>
  *   <li>Managing the read/write lifecycle for client connections</li>
+ *   <li>Draining deferred responses (e.g. deferred JoinGroup responses) that are enqueued
+ *       by background threads and must be flushed on the NIO event loop thread</li>
  * </ul>
  *
  * <p>The handler supports the following Kafka APIs:</p>
@@ -30,7 +34,7 @@ import java.nio.channels.SelectionKey;
  *   <li>{@link ApiKeys#DESCRIBE_CLUSTER} - Returns cluster information</li>
  *   <li>{@link ApiKeys#FIND_COORDINATOR} - Returns this broker as the group/transaction coordinator</li>
  *   <li>{@link ApiKeys#PRODUCE} - Accepts and stores published records</li>
- *   <li>{@link ApiKeys#JOIN_GROUP} - Handles consumer group join</li>
+ *   <li>{@link ApiKeys#JOIN_GROUP} - Handles consumer group join (response is deferred)</li>
  *   <li>{@link ApiKeys#SYNC_GROUP} - Stores and returns partition assignments</li>
  *   <li>{@link ApiKeys#HEARTBEAT} - Acknowledges consumer liveness</li>
  *   <li>{@link ApiKeys#LEAVE_GROUP} - Acknowledges consumer departure</li>
@@ -66,6 +70,19 @@ public final class KafkaProtocolHandler {
     private final ProducerApiHandler producerApiHandler;
     private final AdminApiHandler adminApiHandler;
     private final TransactionApiHandler transactionApiHandler;
+
+    /**
+     * Queue of responses that could not be written immediately (e.g. deferred JoinGroup
+     * responses) and must be dispatched on the NIO event loop thread via
+     * {@link #drainDeferredResponses()}.
+     */
+    private final ConcurrentLinkedQueue<DeferredResponse> pendingResponses = new ConcurrentLinkedQueue<>();
+
+    /**
+     * The NIO selector for the server event loop; used to wake the selector when a deferred
+     * response is enqueued so it is delivered promptly. Set via {@link #setSelector(Selector)}.
+     */
+    private volatile Selector selector;
 
     /**
      * Creates a new protocol handler with the given server info and a fresh event store,
@@ -147,7 +164,7 @@ public final class KafkaProtocolHandler {
         final var transactionCoordinator = new TransactionCoordinator(eventStore);
         this.topicStore = new TopicStore();
         this.clusterApiHandler = new ClusterApiHandler(serverInfo, this.topicStore, autoCreateTopicsEnabled);
-        this.consumerGroupApiHandler = new ConsumerGroupApiHandler(groupCoordinator);
+        this.consumerGroupApiHandler = new ConsumerGroupApiHandler(groupCoordinator, this::enqueueResponse);
         this.consumerDataApiHandler = new ConsumerDataApiHandler(eventStore, groupCoordinator, this.topicStore);
         this.producerApiHandler = new ProducerApiHandler(eventStore, this.topicStore, autoCreateTopicsEnabled);
         this.adminApiHandler = new AdminApiHandler(this.topicStore);
@@ -187,6 +204,36 @@ public final class KafkaProtocolHandler {
     }
 
     /**
+     * Sets the NIO selector for this handler.
+     *
+     * <p>Must be called after the selector is opened and before the event loop starts.
+     * The selector is used to wake the select loop when a deferred response is ready.</p>
+     *
+     * @param sel the server's NIO selector
+     */
+    public void setSelector(final Selector sel) {
+        this.selector = sel;
+    }
+
+    /**
+     * Drains all pending deferred responses, writing each response to its connection's
+     * write buffer and registering {@code OP_WRITE} on the corresponding selection key.
+     *
+     * <p>Must be called from the NIO event loop thread on each loop iteration so that
+     * deferred responses (e.g. JoinGroup responses held until the rebalance window
+     * closes) are delivered promptly.</p>
+     */
+    public void drainDeferredResponses() {
+        DeferredResponse deferred;
+        while ((deferred = pendingResponses.poll()) != null) {
+            if (deferred.key().isValid()) {
+                writeResponse(deferred.connection(), deferred.response());
+                deferred.key().interestOps(deferred.key().interestOps() | SelectionKey.OP_WRITE);
+            }
+        }
+    }
+
+    /**
      * Handles incoming data from a client connection.
      *
      * <p>This method reads data from the client, processes complete requests,
@@ -207,7 +254,7 @@ public final class KafkaProtocolHandler {
 
         if (bytesRead > 0) {
             log.debug("Read {} bytes from client", bytesRead);
-            processCompleteRequests(connection, buffer);
+            processCompleteRequests(connection, buffer, key);
 
             if (connection.writeBuffer().position() > 0) {
                 key.interestOps(SelectionKey.OP_READ | SelectionKey.OP_WRITE);
@@ -237,6 +284,13 @@ public final class KafkaProtocolHandler {
     }
 
     /**
+     * Shuts down background resources owned by this handler (e.g. the rebalance scheduler).
+     */
+    public void close() {
+        consumerGroupApiHandler.close();
+    }
+
+    /**
      * Handles a client disconnection.
      *
      * @param connection the client connection that disconnected
@@ -254,8 +308,12 @@ public final class KafkaProtocolHandler {
      *
      * @param connection the client connection
      * @param buffer     the buffer containing request data
+     * @param key        the selection key for this connection
      */
-    private void processCompleteRequests(final ClientConnection connection, final ByteBuffer buffer) {
+    private void processCompleteRequests(
+            final ClientConnection connection,
+            final ByteBuffer buffer,
+            final SelectionKey key) {
         buffer.flip();
 
         while (buffer.remaining() >= 4) {
@@ -267,7 +325,7 @@ public final class KafkaProtocolHandler {
                 break;
             }
 
-            processRequest(connection, buffer, requestSize);
+            processRequest(connection, buffer, requestSize, key);
         }
 
         buffer.compact();
@@ -279,47 +337,46 @@ public final class KafkaProtocolHandler {
      * @param connection  the client connection
      * @param buffer      the buffer positioned at the start of the request
      * @param requestSize the byte length of the request
+     * @param key         the selection key for this connection
      */
-    private void processRequest(final ClientConnection connection, final ByteBuffer buffer, final int requestSize) {
+    private void processRequest(
+            final ClientConnection connection,
+            final ByteBuffer buffer,
+            final int requestSize,
+            final SelectionKey key) {
         try {
             final var startPosition = buffer.position();
-
             final var apiKeyId = buffer.getShort();
             final var apiVersion = buffer.getShort();
             final var correlationId = buffer.getInt();
-
             buffer.position(startPosition);
-
             final var apiKey = ApiKeys.forId(apiKeyId);
-
             log.debug("Processing request: apiKey={}, apiVersion={}, correlationId={}, size={}",
                 apiKey, apiVersion, correlationId, requestSize);
-
             final var header = RequestHeader.parse(buffer);
-
             final var response = switch (apiKey) {
                 case API_VERSIONS     -> clusterApiHandler.generateApiVersionsResponse(header);
                 case METADATA         -> clusterApiHandler.generateMetadataResponse(header, buffer);
                 case DESCRIBE_CLUSTER -> clusterApiHandler.generateDescribeClusterResponse(header);
                 case FIND_COORDINATOR -> clusterApiHandler.generateFindCoordinatorResponse(header, buffer);
                 case PRODUCE          -> producerApiHandler.generateProduceResponse(header, buffer);
-                case JOIN_GROUP       -> consumerGroupApiHandler.generateJoinGroupResponse(header, buffer);
+                case JOIN_GROUP       ->
+                    consumerGroupApiHandler.generateJoinGroupResponse(header, buffer, connection, key);
                 case SYNC_GROUP       -> consumerGroupApiHandler.generateSyncGroupResponse(header, buffer);
                 case HEARTBEAT        -> consumerGroupApiHandler.generateHeartbeatResponse(header, buffer);
                 case LEAVE_GROUP      -> consumerGroupApiHandler.generateLeaveGroupResponse(header, buffer);
                 case OFFSET_FETCH     -> consumerDataApiHandler.generateOffsetFetchResponse(header, buffer);
                 case OFFSET_COMMIT    -> consumerDataApiHandler.generateOffsetCommitResponse(header, buffer);
                 case LIST_OFFSETS     -> consumerDataApiHandler.generateListOffsetsResponse(header, buffer);
-                case FETCH                      -> consumerDataApiHandler.generateFetchResponse(header, buffer);
-                case CREATE_TOPICS                -> adminApiHandler.generateCreateTopicsResponse(header, buffer);
-                case INCREMENTAL_ALTER_CONFIGS   -> adminApiHandler.generateIncrementalAlterConfigsResponse(header, buffer);
-                case DESCRIBE_TOPIC_PARTITIONS   -> clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
-                case INIT_PRODUCER_ID            -> transactionApiHandler.generateInitProducerIdResponse(header, buffer);
-                case ADD_PARTITIONS_TO_TXN       -> transactionApiHandler.generateAddPartitionsToTxnResponse(header, buffer);
-                case ADD_OFFSETS_TO_TXN          -> transactionApiHandler.generateAddOffsetsToTxnResponse(header, buffer);
-                case END_TXN                     -> transactionApiHandler.generateEndTxnResponse(header, buffer);
-                case WRITE_TXN_MARKERS           -> transactionApiHandler.generateWriteTxnMarkersResponse(header, buffer);
-                case TXN_OFFSET_COMMIT           -> transactionApiHandler.generateTxnOffsetCommitResponse(header, buffer);
+                case FETCH                    -> consumerDataApiHandler.generateFetchResponse(header, buffer);
+                case CREATE_TOPICS            -> adminApiHandler.generateCreateTopicsResponse(header, buffer);
+                case INCREMENTAL_ALTER_CONFIGS ->
+                    adminApiHandler.generateIncrementalAlterConfigsResponse(header, buffer);
+                case DESCRIBE_TOPIC_PARTITIONS ->
+                    clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
+                case INIT_PRODUCER_ID, ADD_PARTITIONS_TO_TXN, ADD_OFFSETS_TO_TXN,
+                    END_TXN, WRITE_TXN_MARKERS, TXN_OFFSET_COMMIT ->
+                    dispatchTransactionRequest(apiKey, header, buffer);
                 case GET_TELEMETRY_SUBSCRIPTIONS, PUSH_TELEMETRY -> {
                     log.debug("Telemetry API not supported: {}", apiKey);
                     yield clusterApiHandler.generateUnsupportedResponse(header, apiKey);
@@ -329,12 +386,45 @@ public final class KafkaProtocolHandler {
                     yield null;
                 }
             };
-
             buffer.position(startPosition + requestSize);
             writeResponse(connection, response);
-
         } catch (final Exception e) {
             log.error("Error processing request", e);
+        }
+    }
+
+    /**
+     * Dispatches a transaction-related API request to the transaction handler.
+     *
+     * @param apiKey the transaction API key
+     * @param header the request header
+     * @param buffer the request body buffer
+     * @return the serialised response buffer, or {@code null} on error
+     */
+    private ByteBuffer dispatchTransactionRequest(
+            final ApiKeys apiKey, final RequestHeader header, final ByteBuffer buffer) {
+        return switch (apiKey) {
+            case INIT_PRODUCER_ID      -> transactionApiHandler.generateInitProducerIdResponse(header, buffer);
+            case ADD_PARTITIONS_TO_TXN -> transactionApiHandler.generateAddPartitionsToTxnResponse(header, buffer);
+            case ADD_OFFSETS_TO_TXN    -> transactionApiHandler.generateAddOffsetsToTxnResponse(header, buffer);
+            case END_TXN               -> transactionApiHandler.generateEndTxnResponse(header, buffer);
+            case WRITE_TXN_MARKERS     -> transactionApiHandler.generateWriteTxnMarkersResponse(header, buffer);
+            case TXN_OFFSET_COMMIT     -> transactionApiHandler.generateTxnOffsetCommitResponse(header, buffer);
+            default -> null;
+        };
+    }
+
+    /**
+     * Enqueues a deferred response for delivery on the next event loop iteration and
+     * wakes the selector so the response is not held until the next select timeout.
+     *
+     * @param deferred the deferred response to enqueue
+     */
+    private void enqueueResponse(final DeferredResponse deferred) {
+        pendingResponses.offer(deferred);
+        final var sel = selector;
+        if (sel != null) {
+            sel.wakeup();
         }
     }
 
