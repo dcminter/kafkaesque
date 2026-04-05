@@ -11,22 +11,21 @@ import java.util.List;
  * <p>This record captures all relevant metadata about a published event including
  * its key, value, timestamp, headers, and position within the topic partition.</p>
  *
- * @param topic the topic name this record was published to
+ * @param topic     the topic name this record was published to
  * @param partition the partition index within the topic
- * @param offset the offset assigned to this record within the partition
+ * @param offset    the offset assigned to this record within the partition
  * @param timestamp the timestamp when the record was published (epoch milliseconds)
- * @param key the record key as a string (nullable)
- * @param value the record value as a string (nullable)
- * @param headers the record headers (never null; empty if none were set)
+ * @param headers   the record headers (never null; empty if none were set)
+ * @param key       the record key as a string (nullable)
+ * @param value     the record value as a string (nullable)
  */
 public record StoredRecord(
-    String topic,
-    int partition,
-    long offset,
-    long timestamp,
-    String key,
-    String value,
-    List<Header> headers
+        String topic,
+        int partition,
+        long offset,
+        long timestamp,
+        List<Header> headers, String key,
+        String value
 ) {
     /**
      * Compact constructor that defensively copies the headers list and normalises null to empty.
@@ -51,7 +50,7 @@ public record StoredRecord(
      */
     @Override
     public String toString() {
-        return "StoredRecord[topic=%s, partition=%d, offset=%d, timestamp=%s, key=%s, value=%s, headers=%d]"
+        return "StoredRecord[topic=%s, partition=%d, offset=%d, timestamp=%s, headers=%d, key=%s, value=%s]"
             .formatted(topic, partition, offset, timestampAsInstant(), key, value, headers.size());
     }
 }

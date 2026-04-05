@@ -37,6 +37,7 @@ all reported violations before considering the task complete. This will enforce 
   * Where "external" infrastructure is needed to support integration tests then `testcontainers` should be used to support this
   * Keep method implementations fairly short - where there's opportunity for re-use, put these into private methods.
   * Public methods and classes SHOULD generally have corresponding unit tests
+    * The exception is for things like Enums or Records when they have no method implementations
   * Prefer to take "configuration" or "context" classes or records over very long parameter lists on methods and constructors. 
   * Write proper javadoc comments for ALL classes
     * and for ALL non-private methods and fields (including @param, @return and @exception entries)

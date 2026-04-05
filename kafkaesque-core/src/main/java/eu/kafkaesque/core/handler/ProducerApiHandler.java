@@ -1,6 +1,7 @@
 package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.storage.EventStore;
+import eu.kafkaesque.core.storage.RecordData;
 import eu.kafkaesque.core.storage.TopicStore;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.header.Header;
@@ -158,23 +159,22 @@ final class ProducerApiHandler {
                     count++;
                     final var key = readBufferToString(record.key(), record.keySize());
                     final var value = readBufferToString(record.value(), record.valueSize());
-                    final var headers = readHeaders(record.headers());
+                    final var recordData = new RecordData(
+                        topicName, partitionData.index(), record.timestamp(),
+                        key, value, readHeaders(record.headers()));
 
                     final long offset;
                     if (isTransactional) {
-                        offset = eventStore.storePendingRecord(
-                            transactionalId, topicName, partitionData.index(),
-                            record.timestamp(), key, value, headers);
+                        offset = eventStore.storePendingRecord(transactionalId, recordData);
                     } else {
-                        offset = eventStore.storeRecord(
-                            topicName, partitionData.index(), record.timestamp(), key, value, headers);
+                        offset = eventStore.storeRecord(recordData);
                     }
 
                     if (baseOffset < 0) {
                         baseOffset = offset;
                     }
                     log.info("      Record {}: offset={}, key='{}', value='{}', headers={}, transactional={}",
-                        count, offset, key, value, headers.size(), isTransactional);
+                        count, offset, key, value, recordData.headers().size(), isTransactional);
                 }
             }
             log.info("    Total records: {}", count);

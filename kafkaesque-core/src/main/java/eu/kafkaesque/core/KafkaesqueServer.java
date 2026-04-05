@@ -13,6 +13,7 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Main Kafkaesque server that implements the Kafka wire protocol.
@@ -44,9 +45,9 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final KafkaProtocolHandler protocolHandler;
 
-    private ServerSocketChannel serverChannel;
-    private Selector selector;
-    private Thread serverThread;
+    private final AtomicReference<ServerSocketChannel> serverChannel = new AtomicReference<>();
+    private final AtomicReference<Selector> selector = new AtomicReference<>();
+    private final AtomicReference<Thread> serverThread = new AtomicReference<>();
 
     /**
      * Creates a new Kafkaesque server that will listen on the specified host and port,
@@ -95,19 +96,21 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
             throw new IllegalStateException("Server is already running");
         }
 
-        serverChannel = ServerSocketChannel.open();
-        serverChannel.bind(new InetSocketAddress(host, port));
-        serverChannel.configureBlocking(false);
+        final var channel = ServerSocketChannel.open();
+        channel.bind(new InetSocketAddress(host, port));
+        channel.configureBlocking(false);
+        serverChannel.set(channel);
 
-        selector = Selector.open();
-        serverChannel.register(selector, SelectionKey.OP_ACCEPT);
+        final var sel = Selector.open();
+        channel.register(sel, SelectionKey.OP_ACCEPT);
+        selector.set(sel);
 
         running.set(true);
 
-        serverThread = Thread.ofPlatform()
+        serverThread.set(Thread.ofPlatform()
             .name("kafkaesque-server")
             .daemon(false)
-            .start(this::runEventLoop);
+            .start(this::runEventLoop));
 
         log.info("Kafkaesque server started on {}:{}", host, port);
     }
@@ -124,10 +127,10 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      */
     @Override
     public int getPort() throws IOException {
-        if (serverChannel == null) {
+        if (serverChannel.get() == null) {
             throw new IllegalStateException("Server not started");
         }
-        return switch (serverChannel.getLocalAddress()) {
+        return switch (serverChannel.get().getLocalAddress()) {
             case InetSocketAddress addr -> addr.getPort();
             case null, default -> throw new IOException("Cannot determine port");
         };
@@ -165,15 +168,16 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
     private void runEventLoop() {
         log.debug("Server event loop started");
 
+        final var sel = selector.get();
         while (running.get()) {
             try {
-                selector.select(1000);
+                sel.select(1000);
 
-                if (!running.get() || !selector.isOpen()) {
+                if (!running.get() || !sel.isOpen()) {
                     break;
                 }
 
-                final var selectedKeys = selector.selectedKeys();
+                final var selectedKeys = sel.selectedKeys();
                 for (final var iterator = selectedKeys.iterator(); iterator.hasNext();) {
                     final var key = iterator.next();
                     iterator.remove();
@@ -215,12 +219,12 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
         if (clientChannel != null) {
             clientChannel.configureBlocking(false);
 
-            if (!selector.isOpen()) {
+            if (!selector.get().isOpen()) {
                 clientChannel.close();
                 return;
             }
 
-            final var clientKey = clientChannel.register(selector, SelectionKey.OP_READ);
+            final var clientKey = clientChannel.register(selector.get(), SelectionKey.OP_READ);
 
             final var connection = new ClientConnection(clientChannel);
             clientKey.attach(connection);
@@ -289,14 +293,17 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
         log.info("Stopping Kafkaesque server");
 
         try {
-            if (selector != null) {
-                selector.close();
+            final var sel = selector.get();
+            if (sel != null) {
+                sel.close();
             }
-            if (serverChannel != null) {
-                serverChannel.close();
+            final var channel = serverChannel.get();
+            if (channel != null) {
+                channel.close();
             }
-            if (serverThread != null) {
-                serverThread.join(5000);
+            final var thread = serverThread.get();
+            if (thread != null) {
+                thread.join(5000);
             }
         } catch (final IOException | InterruptedException e) {
             log.warn("Error during server shutdown", e);

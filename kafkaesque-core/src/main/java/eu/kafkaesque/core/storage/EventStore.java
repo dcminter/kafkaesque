@@ -1,8 +1,6 @@
 package eu.kafkaesque.core.storage;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.common.header.Header;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -55,18 +53,14 @@ public final class EventStore {
          * eliminating the TOCTOU race that would arise if the caller pre-built the record
          * using a separate {@link #getNextOffset()} peek.</p>
          *
-         * @param topic     the topic name
-         * @param partition the partition index
-         * @param timestamp the record timestamp (epoch milliseconds)
-         * @param key       the record key (nullable)
-         * @param value     the record value (nullable)
-         * @param headers   the record headers (may be empty)
+         * @param data the record data to store
          * @return the offset assigned to the stored record
          */
-        long store(final String topic, final int partition, final long timestamp,
-                   final String key, final String value, final List<Header> headers) {
+        long store(final RecordData data) {
             final var offset = nextOffset.getAndIncrement();
-            records.add(new StoredRecord(topic, partition, offset, timestamp, key, value, headers));
+            records.add(new StoredRecord(
+                data.topic(), data.partition(), offset, data.timestamp(),
+                    data.headers(), data.key(), data.value()));
             return offset;
         }
 
@@ -144,8 +138,7 @@ public final class EventStore {
      * Stores a published record with no headers and assigns it an offset.
      *
      * <p>Convenience overload for callers that do not need to supply headers;
-     * delegates to {@link #storeRecord(String, int, long, String, String, List)}
-     * with an empty header list.</p>
+     * delegates to {@link #storeRecord(RecordData)} with an empty header list.</p>
      *
      * @param topic     the topic name
      * @param partition the partition index
@@ -160,7 +153,7 @@ public final class EventStore {
             final long timestamp,
             final String key,
             final String value) {
-        return storeRecord(topic, partition, timestamp, key, value, List.of());
+        return storeRecord(new RecordData(topic, partition, timestamp, key, value, List.of()));
     }
 
     /**
@@ -168,28 +161,16 @@ public final class EventStore {
      *
      * <p>The offset is assigned atomically per partition, starting from 0.</p>
      *
-     * @param topic     the topic name
-     * @param partition the partition index
-     * @param timestamp the record timestamp (epoch milliseconds)
-     * @param key       the record key (nullable)
-     * @param value     the record value (nullable)
-     * @param headers   the record headers (may be null or empty)
+     * @param data the record data to store
      * @return the assigned offset
      */
-    public long storeRecord(
-            final String topic,
-            final int partition,
-            final long timestamp,
-            final String key,
-            final String value,
-            final List<Header> headers) {
-
-        final var partitionKey = new TopicPartitionKey(topic, partition);
+    public long storeRecord(final RecordData data) {
+        final var partitionKey = new TopicPartitionKey(data.topic(), data.partition());
         final var partitionStore = partitions.computeIfAbsent(partitionKey, k -> new PartitionStore());
 
-        final var offset = partitionStore.store(topic, partition, timestamp, key, value, headers);
+        final var offset = partitionStore.store(data);
 
-        log.debug("Stored record on topic={} partition={} at offset={}", topic, partition, offset);
+        log.debug("Stored record on topic={} partition={} at offset={}", data.topic(), data.partition(), offset);
 
         return offset;
     }
@@ -202,35 +183,22 @@ public final class EventStore {
      * or aborted via {@link #commitTransaction(String)} or {@link #abortTransaction(String)}.</p>
      *
      * @param transactionalId the transactional producer ID owning this record
-     * @param topic           the topic name
-     * @param partition       the partition index
-     * @param timestamp       the record timestamp (epoch milliseconds)
-     * @param key             the record key (nullable)
-     * @param value           the record value (nullable)
-     * @param headers         the record headers (may be null or empty)
+     * @param data            the record data to store
      * @return the assigned offset
      */
-    public long storePendingRecord(
-            final String transactionalId,
-            final String topic,
-            final int partition,
-            final long timestamp,
-            final String key,
-            final String value,
-            final List<Header> headers) {
-
-        final var partitionKey = new TopicPartitionKey(topic, partition);
+    public long storePendingRecord(final String transactionalId, final RecordData data) {
+        final var partitionKey = new TopicPartitionKey(data.topic(), data.partition());
         final var partitionStore = partitions.computeIfAbsent(partitionKey, k -> new PartitionStore());
 
-        final var offset = partitionStore.store(topic, partition, timestamp, key, value, headers);
+        final var offset = partitionStore.store(data);
         partitionStore.markPending(offset);
 
         pendingByTransaction
             .computeIfAbsent(transactionalId, k -> Collections.synchronizedList(new ArrayList<>()))
-            .add(new PartitionOffset(topic, partition, offset));
+            .add(new PartitionOffset(data.topic(), data.partition(), offset));
 
         log.debug("Stored pending record for transaction {} on topic={} partition={} at offset={}",
-            transactionalId, topic, partition, offset);
+            transactionalId, data.topic(), data.partition(), offset);
 
         return offset;
     }

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
+import static java.util.Collections.emptyList;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -267,7 +268,7 @@ class EventStoreTest {
         final var topic = "test-topic";
         final var timestamp = System.currentTimeMillis();
 
-        final var offset = eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+        final var offset = eventStore.storePendingRecord("txn-1", new RecordData(topic, 0, timestamp, "key", "value", emptyList()));
 
         assertEquals(0L, offset, "First pending record should get offset 0");
         assertEquals(1L, eventStore.getRecordCount(topic, 0), "Record count should include pending records");
@@ -278,7 +279,7 @@ class EventStoreTest {
         final var topic = "test-topic";
         final var timestamp = System.currentTimeMillis();
 
-        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+        eventStore.storePendingRecord("txn-1", new RecordData(topic, 0, timestamp, "key", "value", emptyList()));
 
         final var uncommitted = eventStore.getRecords(topic, 0, (byte) 0);
         final var committed = eventStore.getRecords(topic, 0, (byte) 1);
@@ -292,7 +293,7 @@ class EventStoreTest {
         final var topic = "test-topic";
         final var timestamp = System.currentTimeMillis();
 
-        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+        eventStore.storePendingRecord("txn-1", new RecordData(topic, 0, timestamp, "key", "value", emptyList()));
         eventStore.commitTransaction("txn-1");
 
         final var records = eventStore.getRecords(topic, 0, (byte) 1);
@@ -306,7 +307,7 @@ class EventStoreTest {
         final var topic = "test-topic";
         final var timestamp = System.currentTimeMillis();
 
-        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+        eventStore.storePendingRecord("txn-1", new RecordData(topic, 0, timestamp, "key", "value", emptyList()));
         eventStore.abortTransaction("txn-1");
 
         final var uncommitted = eventStore.getRecords(topic, 0, (byte) 0);
@@ -325,7 +326,7 @@ class EventStoreTest {
 
         eventStore.storeRecord(topic, 0, timestamp, "key-0", "value-0");   // offset 0
         eventStore.storeRecord(topic, 0, timestamp, "key-1", "value-1");   // offset 1
-        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key-2", "value-2", List.of()); // offset 2
+        eventStore.storePendingRecord("txn-1", new RecordData(topic, 0, timestamp, "key-2", "value-2", emptyList())); // offset 2
 
         assertEquals(2L, eventStore.getLastStableOffset(topic, 0),
             "LSO should be the first pending offset");
@@ -348,7 +349,7 @@ class EventStoreTest {
         final var topic = "test-topic";
         final var timestamp = System.currentTimeMillis();
 
-        eventStore.storePendingRecord("txn-1", topic, 0, timestamp, "key", "value", List.of());
+        eventStore.storePendingRecord("txn-1", new RecordData(topic, 0, timestamp, "key", "value", emptyList()));
 
         assertEquals(0L, eventStore.getLastStableOffset(topic, 0), "LSO should be 0 while txn is open");
 
@@ -365,7 +366,7 @@ class EventStoreTest {
 
         final var records = eventStore.getRecords("topic", 0);
         assertThrows(UnsupportedOperationException.class,
-            () -> records.add(new StoredRecord("topic", 0, 0, timestamp, "key2", "value2", List.of())),
+            () -> records.add(new StoredRecord("topic", 0, 0, timestamp, List.of(), "key2", "value2")),
             "Returned list should be unmodifiable");
 
         final var allRecords = eventStore.getAllRecords();
