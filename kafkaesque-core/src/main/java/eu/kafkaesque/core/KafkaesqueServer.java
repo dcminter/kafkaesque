@@ -49,7 +49,8 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
     private Thread serverThread;
 
     /**
-     * Creates a new Kafkaesque server that will listen on the specified host and port.
+     * Creates a new Kafkaesque server that will listen on the specified host and port,
+     * with auto-topic-creation enabled.
      *
      * <p>The server is not started automatically; call {@link #start()} to begin accepting connections.</p>
      *
@@ -57,9 +58,27 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param port the port to bind to, or 0 to use an ephemeral port
      */
     public KafkaesqueServer(final String host, final int port) {
+        this(host, port, true);
+    }
+
+    /**
+     * Creates a new Kafkaesque server that will listen on the specified host and port,
+     * with configurable auto-topic-creation behaviour.
+     *
+     * <p>When {@code autoCreateTopicsEnabled} is {@code false}, producer requests to topics
+     * that have not been explicitly created will receive an {@code UNKNOWN_TOPIC_OR_PARTITION}
+     * error, mirroring real Kafka's {@code auto.create.topics.enable=false} setting.</p>
+     *
+     * <p>The server is not started automatically; call {@link #start()} to begin accepting connections.</p>
+     *
+     * @param host                    the host address to bind to (e.g., "localhost" or "0.0.0.0")
+     * @param port                    the port to bind to, or 0 to use an ephemeral port
+     * @param autoCreateTopicsEnabled {@code false} to prevent producers from auto-creating topics
+     */
+    public KafkaesqueServer(final String host, final int port, final boolean autoCreateTopicsEnabled) {
         this.host = host;
         this.port = port;
-        this.protocolHandler = new KafkaProtocolHandler(this);
+        this.protocolHandler = new KafkaProtocolHandler(this, autoCreateTopicsEnabled);
     }
 
     /**

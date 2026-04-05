@@ -1,12 +1,14 @@
 package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.storage.EventStore;
+import eu.kafkaesque.core.storage.TopicStore;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.message.ProduceRequestData;
 import org.apache.kafka.common.message.ProduceResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
+import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.requests.RequestHeader;
 
@@ -33,14 +35,33 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 final class ProducerApiHandler {
 
     private final EventStore eventStore;
+    private final TopicStore topicStore;
+    private final boolean autoCreateTopicsEnabled;
 
     /**
-     * Creates a new handler backed by the given event store.
+     * Creates a new handler backed by the given event store, with auto-topic-creation enabled.
      *
      * @param eventStore the store that receives produced records
      */
     ProducerApiHandler(final EventStore eventStore) {
+        this(eventStore, null, true);
+    }
+
+    /**
+     * Creates a new handler backed by the given event store and topic store.
+     *
+     * @param eventStore              the store that receives produced records
+     * @param topicStore              the topic registry, consulted when auto-create is disabled;
+     *                                may be {@code null} when {@code autoCreateTopicsEnabled} is {@code true}
+     * @param autoCreateTopicsEnabled {@code false} to reject produces to topics not in {@code topicStore}
+     */
+    ProducerApiHandler(
+            final EventStore eventStore,
+            final TopicStore topicStore,
+            final boolean autoCreateTopicsEnabled) {
         this.eventStore = eventStore;
+        this.topicStore = topicStore;
+        this.autoCreateTopicsEnabled = autoCreateTopicsEnabled;
     }
 
     /**
@@ -117,6 +138,16 @@ final class ProducerApiHandler {
             final boolean isTransactional) {
 
         log.info("    Partition: {}", partitionData.index());
+
+        if (!autoCreateTopicsEnabled && (topicStore == null || !topicStore.hasTopic(topicName))) {
+            log.warn("    Rejecting produce to unknown topic '{}': auto.create.topics.enable=false", topicName);
+            return new ProduceResponseData.PartitionProduceResponse()
+                .setIndex(partitionData.index())
+                .setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code())
+                .setBaseOffset(-1L)
+                .setLogAppendTimeMs(-1L)
+                .setLogStartOffset(-1L);
+        }
 
         long baseOffset = -1L;
 

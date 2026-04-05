@@ -181,10 +181,29 @@ public final class KafkaesqueExtension
      * @throws Exception if the server cannot be started
      */
     private void startServer(final ExtensionContext context, final String key) throws Exception {
-        final var server = new KafkaesqueServer("localhost", 0);
+        final var server = new KafkaesqueServer("localhost", 0, resolveAutoCreateTopics(context));
         server.start();
         context.getStore(NAMESPACE).put(key, server);
         log.info("Kafkaesque server started on {}", server.getBootstrapServers());
+    }
+
+    /**
+     * Resolves the {@code autoCreateTopics} flag from the nearest {@link Kafkaesque} annotation.
+     *
+     * <p>Checks the test method first, then the test class. Returns {@code true} if no annotation
+     * is found (preserving the default open behaviour).</p>
+     *
+     * @param context the current extension context
+     * @return {@code true} if auto-topic-creation should be enabled
+     */
+    private boolean resolveAutoCreateTopics(final ExtensionContext context) {
+        return context.getTestMethod()
+            .map(m -> m.getAnnotation(Kafkaesque.class))
+            .map(Kafkaesque::autoCreateTopics)
+            .orElseGet(() -> {
+                final var annotation = context.getRequiredTestClass().getAnnotation(Kafkaesque.class);
+                return annotation == null || annotation.autoCreateTopics();
+            });
     }
 
     /**

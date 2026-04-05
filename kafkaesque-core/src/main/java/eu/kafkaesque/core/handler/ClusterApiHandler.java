@@ -53,17 +53,36 @@ final class ClusterApiHandler {
 
     private final ServerInfo serverInfo;
     private final TopicStore topicStore;
+    private final boolean autoCreateTopicsEnabled;
 
     /**
-     * Creates a new handler backed by the given server info and topic store.
+     * Creates a new handler backed by the given server info and topic store,
+     * with auto-topic-creation enabled.
      *
      * @param serverInfo the server info used to advertise host and port in cluster responses;
      *                   may be {@code null} to use built-in defaults
      * @param topicStore the topic registry consulted when building metadata responses
      */
     ClusterApiHandler(final ServerInfo serverInfo, final TopicStore topicStore) {
+        this(serverInfo, topicStore, true);
+    }
+
+    /**
+     * Creates a new handler backed by the given server info and topic store.
+     *
+     * @param serverInfo              the server info used to advertise host and port in cluster responses;
+     *                                may be {@code null} to use built-in defaults
+     * @param topicStore              the topic registry consulted when building metadata responses
+     * @param autoCreateTopicsEnabled {@code false} to return {@link Errors#UNKNOWN_TOPIC_OR_PARTITION}
+     *                                for unknown topics instead of falling back to 1 partition
+     */
+    ClusterApiHandler(
+            final ServerInfo serverInfo,
+            final TopicStore topicStore,
+            final boolean autoCreateTopicsEnabled) {
         this.serverInfo = serverInfo;
         this.topicStore = topicStore;
+        this.autoCreateTopicsEnabled = autoCreateTopicsEnabled;
     }
 
     /**
@@ -134,7 +153,9 @@ final class ClusterApiHandler {
             } else if (!requestedTopics.isEmpty()) {
                 requestedTopics.stream()
                     .filter(t -> t.name() != null && !t.name().isEmpty())
-                    .map(t -> buildMetadataTopicResponse(t.name(), resolvePartitionCount(t.name())))
+                    .map(t -> autoCreateTopicsEnabled || (topicStore != null && topicStore.hasTopic(t.name()))
+                        ? buildMetadataTopicResponse(t.name(), resolvePartitionCount(t.name()))
+                        : buildMetadataTopicErrorResponse(t.name()))
                     .forEach(topics::add);
             }
 
@@ -392,6 +413,25 @@ final class ClusterApiHandler {
             .setErrorCode((short) 0)
             .setIsInternal(false)
             .setPartitions(partitions);
+    }
+
+    /**
+     * Builds a METADATA topic entry carrying {@link Errors#UNKNOWN_TOPIC_OR_PARTITION} with an
+     * empty partition list.
+     *
+     * <p>Used when {@code autoCreateTopicsEnabled} is {@code false} and the requested topic is not
+     * registered in the {@link TopicStore}.</p>
+     *
+     * @param topicName the unknown topic name
+     * @return the error topic metadata entry
+     */
+    private MetadataResponseData.MetadataResponseTopic buildMetadataTopicErrorResponse(
+            final String topicName) {
+        return new MetadataResponseData.MetadataResponseTopic()
+            .setName(topicName)
+            .setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code())
+            .setIsInternal(false)
+            .setPartitions(List.of());
     }
 
     /**

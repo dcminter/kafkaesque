@@ -69,6 +69,18 @@ public @interface Kafkaesque {
     Lifecycle lifecycle() default Lifecycle.PER_CLASS;
 
     /**
+     * Whether producers may auto-create unknown topics.
+     *
+     * <p>When {@code true} (the default), producing to an unknown topic will cause the topic to
+     * be created automatically, mirroring real Kafka's default behaviour. When {@code false},
+     * producing to an unknown topic will fail with {@code UNKNOWN_TOPIC_OR_PARTITION}, mirroring
+     * Kafka's {@code auto.create.topics.enable=false} setting.</p>
+     *
+     * @return {@code true} to enable auto-creation (default); {@code false} to disable it
+     */
+    boolean autoCreateTopics() default true;
+
+    /**
      * Defines when the Kafkaesque server is started and stopped relative to test execution.
      * Only relevant when {@link Kafkaesque} is applied at the class level.
      *

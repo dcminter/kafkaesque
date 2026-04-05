@@ -68,28 +68,44 @@ public final class KafkaProtocolHandler {
     private final TransactionApiHandler transactionApiHandler;
 
     /**
-     * Creates a new protocol handler with the given server info and a fresh event store.
+     * Creates a new protocol handler with the given server info and a fresh event store,
+     * with auto-topic-creation enabled.
      *
      * @param serverInfo the server info used to advertise host and port in cluster responses;
      *                   may be {@code null} to use built-in defaults
      */
     public KafkaProtocolHandler(final ServerInfo serverInfo) {
-        this(serverInfo, new EventStore());
+        this(serverInfo, new EventStore(), true);
     }
 
     /**
-     * Creates a new protocol handler with a fresh event store and no server info.
+     * Creates a new protocol handler with the given server info, a fresh event store,
+     * and configurable auto-topic-creation behaviour.
+     *
+     * @param serverInfo              the server info used to advertise host and port in cluster responses;
+     *                                may be {@code null} to use built-in defaults
+     * @param autoCreateTopicsEnabled {@code false} to return {@code UNKNOWN_TOPIC_OR_PARTITION}
+     *                                for unknown topics instead of auto-creating them
+     */
+    public KafkaProtocolHandler(final ServerInfo serverInfo, final boolean autoCreateTopicsEnabled) {
+        this(serverInfo, new EventStore(), autoCreateTopicsEnabled);
+    }
+
+    /**
+     * Creates a new protocol handler with a fresh event store and no server info,
+     * with auto-topic-creation enabled.
      *
      * <p>Cluster responses will use built-in default host and port values until the handler
      * is provided with real server info via the
      * {@link #KafkaProtocolHandler(ServerInfo, EventStore)} constructor.</p>
      */
     public KafkaProtocolHandler() {
-        this(null, new EventStore());
+        this(null, new EventStore(), true);
     }
 
     /**
-     * Creates a new protocol handler with the specified event store and no server info.
+     * Creates a new protocol handler with the specified event store and no server info,
+     * with auto-topic-creation enabled.
      *
      * <p>Useful in tests that inject a pre-populated event store and do not need cluster
      * metadata to reflect live server coordinates.</p>
@@ -97,25 +113,43 @@ public final class KafkaProtocolHandler {
      * @param eventStore the event store to use for storing published records
      */
     public KafkaProtocolHandler(final EventStore eventStore) {
-        this(null, eventStore);
+        this(null, eventStore, true);
     }
 
     /**
-     * Creates a new protocol handler with the specified server info and event store.
+     * Creates a new protocol handler with the specified server info and event store,
+     * with auto-topic-creation enabled.
      *
      * @param serverInfo the server info used to advertise host and port in cluster responses;
      *                   may be {@code null} to use built-in defaults
      * @param eventStore the event store to use for storing published records
      */
     public KafkaProtocolHandler(final ServerInfo serverInfo, final EventStore eventStore) {
+        this(serverInfo, eventStore, true);
+    }
+
+    /**
+     * Creates a new protocol handler with the specified server info, event store,
+     * and auto-topic-creation behaviour.
+     *
+     * @param serverInfo              the server info used to advertise host and port in cluster responses;
+     *                                may be {@code null} to use built-in defaults
+     * @param eventStore              the event store to use for storing published records
+     * @param autoCreateTopicsEnabled {@code false} to return {@code UNKNOWN_TOPIC_OR_PARTITION}
+     *                                for unknown topics instead of auto-creating them
+     */
+    public KafkaProtocolHandler(
+            final ServerInfo serverInfo,
+            final EventStore eventStore,
+            final boolean autoCreateTopicsEnabled) {
         this.eventStore = eventStore;
         final var groupCoordinator = new GroupCoordinator();
         final var transactionCoordinator = new TransactionCoordinator(eventStore);
         this.topicStore = new TopicStore();
-        this.clusterApiHandler = new ClusterApiHandler(serverInfo, this.topicStore);
+        this.clusterApiHandler = new ClusterApiHandler(serverInfo, this.topicStore, autoCreateTopicsEnabled);
         this.consumerGroupApiHandler = new ConsumerGroupApiHandler(groupCoordinator);
         this.consumerDataApiHandler = new ConsumerDataApiHandler(eventStore, groupCoordinator, this.topicStore);
-        this.producerApiHandler = new ProducerApiHandler(eventStore);
+        this.producerApiHandler = new ProducerApiHandler(eventStore, this.topicStore, autoCreateTopicsEnabled);
         this.adminApiHandler = new AdminApiHandler(this.topicStore);
         this.transactionApiHandler = new TransactionApiHandler(transactionCoordinator, groupCoordinator);
     }
