@@ -17,6 +17,7 @@ import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
+import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -84,7 +85,7 @@ abstract class AbstractNoAutoCreateTopicsBehaviorIT {
         adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
 
         try (final AdminClient adminClient = AdminClient.create(adminProps)) {
-            adminClient.createTopics(List.of(new NewTopic(topicName, 1, (short) 1))).all().get();
+            adminClient.createTopics(of(new NewTopic(topicName, 1, (short) 1))).all().get();
         }
 
         // When

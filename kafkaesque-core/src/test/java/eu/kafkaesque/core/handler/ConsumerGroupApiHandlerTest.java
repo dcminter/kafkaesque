@@ -25,7 +25,12 @@ import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
 
+import static java.lang.System.currentTimeMillis;
+import static java.util.List.of;
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static java.lang.Thread.sleep;
+import static java.lang.Thread.currentThread;
 
 /**
  * Unit tests for {@link ConsumerGroupApiHandler}.
@@ -54,7 +59,7 @@ class ConsumerGroupApiHandlerTest {
         assertThat(immediate).isNull();
 
         waitFor(() -> !dispatched.isEmpty(),
-            ConsumerGroupApiHandler.REBALANCE_WINDOW_MS * 2, TimeUnit.MILLISECONDS);
+            ConsumerGroupApiHandler.REBALANCE_WINDOW_MS * 2, MILLISECONDS);
 
         assertThat(dispatched).hasSize(1);
         final var responseData = parseJoinGroupResponse(dispatched.get(0).response(), apiVersion);
@@ -93,7 +98,7 @@ class ConsumerGroupApiHandlerTest {
             validKey());
 
         waitFor(() -> dispatched.size() >= 2,
-            ConsumerGroupApiHandler.REBALANCE_WINDOW_MS * 2, TimeUnit.MILLISECONDS);
+            ConsumerGroupApiHandler.REBALANCE_WINDOW_MS * 2, MILLISECONDS);
 
         assertThat(dispatched).hasSize(2);
 
@@ -136,7 +141,7 @@ class ConsumerGroupApiHandlerTest {
             .setGroupId("group-1")
             .setGenerationId(1)
             .setMemberId("member-1")
-            .setAssignments(List.of());
+            .setAssignments(of());
         final var syncHeader = new RequestHeader(ApiKeys.SYNC_GROUP, syncApiVersion, "client", 2);
 
         final var response = handler.generateSyncGroupResponse(
@@ -166,7 +171,7 @@ class ConsumerGroupApiHandlerTest {
         final var apiVersion = ApiKeys.LEAVE_GROUP.latestVersion();
         final var requestData = new LeaveGroupRequestData()
             .setGroupId("my-group")
-            .setMembers(List.of(new LeaveGroupRequestData.MemberIdentity().setMemberId("member-1")));
+            .setMembers(of(new LeaveGroupRequestData.MemberIdentity().setMemberId("member-1")));
         final var header = new RequestHeader(ApiKeys.LEAVE_GROUP, apiVersion, "test-client", 4);
 
         final var response = handler.generateLeaveGroupResponse(header, serialize(requestData, apiVersion));
@@ -188,7 +193,7 @@ class ConsumerGroupApiHandlerTest {
             .setSessionTimeoutMs(30000)
             .setRebalanceTimeoutMs(30000)
             .setProtocolType("consumer")
-            .setProtocols(new JoinGroupRequestData.JoinGroupRequestProtocolCollection(List.of(protocol).iterator()));
+            .setProtocols(new JoinGroupRequestData.JoinGroupRequestProtocolCollection(of(protocol).iterator()));
     }
 
     private static ByteBuffer serialize(final Message requestData, final short apiVersion) {
@@ -266,15 +271,15 @@ class ConsumerGroupApiHandlerTest {
      * @throws AssertionError if the condition does not become true within the timeout
      */
     private static void waitFor(final Callable<Boolean> condition, final long timeout, final TimeUnit unit) {
-        final long deadline = System.currentTimeMillis() + unit.toMillis(timeout);
-        while (System.currentTimeMillis() < deadline) {
+        final long deadline = currentTimeMillis() + unit.toMillis(timeout);
+        while (currentTimeMillis() < deadline) {
             try {
                 if (Boolean.TRUE.equals(condition.call())) {
                     return;
                 }
-                Thread.sleep(10);
+                sleep(10);
             } catch (final InterruptedException e) {
-                Thread.currentThread().interrupt();
+                currentThread().interrupt();
                 throw new AssertionError("Interrupted while waiting for condition", e);
             } catch (final Exception e) {
                 throw new AssertionError("Condition threw an exception", e);

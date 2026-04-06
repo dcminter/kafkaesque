@@ -6,6 +6,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static java.util.Map.copyOf;
+import static java.util.Map.of;
+
 /**
  * Manages consumer group membership, partition assignments, and committed offsets
  * for the Kafkaesque mock server.
@@ -118,7 +121,7 @@ public final class GroupCoordinator {
      */
     public Map<String, byte[]> getMembers(final String groupId) {
         final var state = groups.get(groupId);
-        return state != null ? Map.copyOf(state.memberSubscriptions()) : Map.of();
+        return state != null ? copyOf(state.memberSubscriptions()) : of();
     }
 
     /**

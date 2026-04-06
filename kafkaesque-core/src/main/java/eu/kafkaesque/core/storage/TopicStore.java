@@ -10,6 +10,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static eu.kafkaesque.core.storage.CleanupPolicy.DELETE;
+import static java.util.Optional.ofNullable;
 
 /**
  * Thread-safe registry of topics known to Kafkaesque.
@@ -158,7 +159,7 @@ public final class TopicStore {
      * @return the topic definition, or {@link Optional#empty()} if not registered
      */
     public Optional<TopicDefinition> getTopic(final String name) {
-        return Optional.ofNullable(topics.get(name));
+        return ofNullable(topics.get(name));
     }
 
     /**

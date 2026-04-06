@@ -8,9 +8,9 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
+import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -31,7 +31,7 @@ class KafkaesqueExtensionConsumerInjectionTest {
 
         producer.send(new ProducerRecord<>("consumer-injection-topic", "key", "world")).get();
 
-        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+        await().atMost(10, SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
             return !received.isEmpty();
         });
@@ -45,10 +45,10 @@ class KafkaesqueExtensionConsumerInjectionTest {
             @KafkaesqueConsumer final KafkaConsumer<String, String> consumer) throws Exception {
         final var received = new ArrayList<String>();
 
-        consumer.subscribe(List.of("consumer-injection-topic"));
+        consumer.subscribe(of("consumer-injection-topic"));
         producer.send(new ProducerRecord<>("consumer-injection-topic", "key", "manual")).get();
 
-        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+        await().atMost(10, SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
             return !received.isEmpty();
         });
@@ -71,7 +71,7 @@ class KafkaesqueExtensionConsumerInjectionTest {
         producer.send(new ProducerRecord<>("consumer-injection-topic", "k", "committed")).get();
         producer.commitTransaction();
 
-        await().atMost(10, TimeUnit.SECONDS).until(() -> {
+        await().atMost(10, SECONDS).until(() -> {
             consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
             return !received.isEmpty();
         });

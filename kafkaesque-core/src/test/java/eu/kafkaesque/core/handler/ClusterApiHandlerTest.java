@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 
+import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -95,7 +96,7 @@ class ClusterApiHandlerTest {
         // Request the specific topic by name
         final var topicRequest = new MetadataRequestData.MetadataRequestTopic().setName("existing-topic");
         final var requestData = new MetadataRequestData()
-            .setTopics(java.util.List.of(topicRequest));
+            .setTopics(of(topicRequest));
         final var header = new RequestHeader(ApiKeys.METADATA, apiVersion, "test-client", 3);
 
         final var response = handler.generateMetadataResponse(header, serializeRequest(requestData, apiVersion));
@@ -110,7 +111,7 @@ class ClusterApiHandlerTest {
         final var apiVersion = (short) 4; // v4+ uses coordinatorKeys
         final var requestData = new FindCoordinatorRequestData()
             .setKeyType((byte) 0)
-            .setCoordinatorKeys(java.util.List.of("my-group"));
+            .setCoordinatorKeys(of("my-group"));
         final var header = new RequestHeader(ApiKeys.FIND_COORDINATOR, apiVersion, "test-client", 4);
 
         final var response = handler.generateFindCoordinatorResponse(
@@ -124,7 +125,7 @@ class ClusterApiHandlerTest {
         final var apiVersion = (short) 4; // v4+ uses coordinatorKeys
         final var requestData = new FindCoordinatorRequestData()
             .setKeyType((byte) 0)
-            .setCoordinatorKeys(java.util.List.of("my-group"));
+            .setCoordinatorKeys(of("my-group"));
         final var header = new RequestHeader(ApiKeys.FIND_COORDINATOR, apiVersion, "test-client", 4);
 
         final var response = handler.generateFindCoordinatorResponse(

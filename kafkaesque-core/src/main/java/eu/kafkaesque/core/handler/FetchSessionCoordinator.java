@@ -9,6 +9,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static java.util.Map.copyOf;
 import static org.apache.kafka.common.protocol.Errors.FETCH_SESSION_ID_NOT_FOUND;
 import static org.apache.kafka.common.protocol.Errors.INVALID_FETCH_SESSION_EPOCH;
 import static org.apache.kafka.common.protocol.Errors.NONE;
@@ -96,7 +97,7 @@ final class FetchSessionCoordinator {
      */
     FetchSession createSession(final Map<TopicPartitionKey, PartitionFetchState> partitions) {
         final int sessionId = nextSessionId.getAndIncrement();
-        final var session = new FetchSession(sessionId, 1, Map.copyOf(partitions));
+        final var session = new FetchSession(sessionId, 1, copyOf(partitions));
         sessions.put(sessionId, session);
         log.debug("Created fetch session {}, tracking {} partition(s)", sessionId, partitions.size());
         return session;
@@ -142,7 +143,7 @@ final class FetchSessionCoordinator {
             final var merged = new HashMap<>(session.partitions());
             merged.putAll(updates);
             removeForgottenPartitions(merged, forgottenTopics);
-            final var updated = new FetchSession(id, epoch + 1, Map.copyOf(merged));
+            final var updated = new FetchSession(id, epoch + 1, copyOf(merged));
             log.debug("Updated fetch session {}, next epoch is {}", id, epoch + 1);
             holder[0] = new SessionResult(updated, NONE.code());
             return updated;

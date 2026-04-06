@@ -38,6 +38,7 @@ import static eu.kafkaesque.core.handler.FetchSessionCoordinator.INITIAL_EPOCH;
 import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT;
 import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT_DELETE;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.List.of;
 import static org.apache.kafka.common.protocol.Errors.FETCH_SESSION_ID_NOT_FOUND;
 import static org.apache.kafka.common.record.CompressionType.NONE;
 
@@ -311,7 +312,7 @@ final class ConsumerDataApiHandler {
                 .setThrottleTimeMs(0)
                 .setErrorCode((short) 0)
                 .setSessionId(0)
-                .setResponses(List.of()),
+                .setResponses(of()),
             ApiKeys.FETCH);
     }
 

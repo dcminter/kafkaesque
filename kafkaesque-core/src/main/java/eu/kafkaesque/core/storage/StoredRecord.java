@@ -5,6 +5,9 @@ import org.apache.kafka.common.header.Header;
 import java.time.Instant;
 import java.util.List;
 
+import static java.util.List.copyOf;
+import static java.util.List.of;
+
 /**
  * Represents a single record that was published to Kafkaesque.
  *
@@ -31,7 +34,7 @@ public record StoredRecord(
      * Compact constructor that defensively copies the headers list and normalises null to empty.
      */
     public StoredRecord {
-        headers = (headers == null) ? List.of() : List.copyOf(headers);
+        headers = (headers == null) ? of() : copyOf(headers);
     }
 
     /**

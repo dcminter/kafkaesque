@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static java.util.List.of;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -105,7 +106,7 @@ abstract class AbstractTransactionBehaviorIT {
 
         // When – READ_COMMITTED consumer subscribes and polls
         try (var consumer = KafkaTestClientFactory.createReadCommittedConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
@@ -145,7 +146,7 @@ abstract class AbstractTransactionBehaviorIT {
 
         // When – READ_COMMITTED consumer subscribes and polls until it sees the sentinel
         try (var consumer = KafkaTestClientFactory.createReadCommittedConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
@@ -184,7 +185,7 @@ abstract class AbstractTransactionBehaviorIT {
         log.info("Produced transactional records (not committed) for topic {}", topicName);
 
         try (var consumer = KafkaTestClientFactory.createReadCommittedConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             // When – poll until sentinel is received (proves consumer reached the sentinel offset)
             final List<ConsumerRecord<String, String>> phase1 = new ArrayList<>();
@@ -237,7 +238,7 @@ abstract class AbstractTransactionBehaviorIT {
 
         // When – READ_UNCOMMITTED consumer polls
         try (var consumer = KafkaTestClientFactory.createReadUncommittedConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
@@ -276,7 +277,7 @@ abstract class AbstractTransactionBehaviorIT {
 
         // When – READ_COMMITTED consumer polls
         try (var consumer = KafkaTestClientFactory.createReadCommittedConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
@@ -322,7 +323,7 @@ abstract class AbstractTransactionBehaviorIT {
 
         // When – READ_UNCOMMITTED consumer polls until all 3 records are received
         try (var consumer = KafkaTestClientFactory.createReadUncommittedConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
@@ -366,7 +367,7 @@ abstract class AbstractTransactionBehaviorIT {
 
         // When – READ_COMMITTED consumer polls until it sees the sentinel
         try (var consumer = KafkaTestClientFactory.createReadCommittedConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
@@ -415,7 +416,7 @@ abstract class AbstractTransactionBehaviorIT {
         log.info("Produced tx record (uncommitted) and after record for topic {}", topicName);
 
         try (var consumer = KafkaTestClientFactory.createReadCommittedConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             // When (phase 1) – poll for 2 seconds; READ_COMMITTED must see nothing
             // because LSO=0 (the pending tx at offset 0 blocks everything at or above it)

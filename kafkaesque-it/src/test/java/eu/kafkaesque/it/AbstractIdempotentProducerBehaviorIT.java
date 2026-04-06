@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 
+import static java.util.List.of;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -91,7 +92,7 @@ abstract class AbstractIdempotentProducerBehaviorIT {
 
         // Then - all five records are received by the consumer
         try (var consumer = KafkaTestClientFactory.createConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
@@ -141,7 +142,7 @@ abstract class AbstractIdempotentProducerBehaviorIT {
         // Then - consume directly from the real broker and verify exactly one record
         //        (two records here means the broker stored both the original and the retry)
         try (var consumer = KafkaTestClientFactory.createConsumer(getBootstrapServers())) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
 
@@ -186,7 +187,7 @@ abstract class AbstractIdempotentProducerBehaviorIT {
         final var adminProps = new Properties();
         adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         try (var admin = AdminClient.create(adminProps)) {
-            admin.createTopics(List.of(new NewTopic(topicName, 2, (short) 1))).all().get();
+            admin.createTopics(of(new NewTopic(topicName, 2, (short) 1))).all().get();
         }
 
         // Produce 3 records to partition 0 and 2 records to partition 1
@@ -201,7 +202,7 @@ abstract class AbstractIdempotentProducerBehaviorIT {
 
         // Consume all records and verify per-partition distribution
         try (var consumer = KafkaTestClientFactory.createConsumer(bootstrapServers)) {
-            consumer.subscribe(List.of(topicName));
+            consumer.subscribe(of(topicName));
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {

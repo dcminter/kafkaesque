@@ -8,10 +8,11 @@ import java.io.InputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static java.util.Arrays.copyOf;
 
 /**
  * A TCP pass-through proxy intended for use in integration tests that verify idempotent
@@ -248,7 +249,7 @@ final class DropAckProxy implements Closeable {
      */
     private byte[] rewriteBrokerPort(final byte[] responseBody) {
         final var proxyPortBytes = ByteBuffer.allocate(Integer.BYTES).putInt(getPort()).array();
-        final var result = Arrays.copyOf(responseBody, responseBody.length);
+        final var result = copyOf(responseBody, responseBody.length);
         var replaced = false;
         for (int i = 0; i <= result.length - Integer.BYTES; i++) {
             if (result[i] == targetPortBytes[0]

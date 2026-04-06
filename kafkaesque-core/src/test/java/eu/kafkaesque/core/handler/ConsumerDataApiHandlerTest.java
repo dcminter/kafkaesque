@@ -22,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -49,10 +50,10 @@ class ConsumerDataApiHandlerTest {
             .setTimestamp(-2L); // EARLIEST
         final var topicRequest = new ListOffsetsRequestData.ListOffsetsTopic()
             .setName("my-topic")
-            .setPartitions(List.of(partitionRequest));
+            .setPartitions(of(partitionRequest));
         final var requestData = new ListOffsetsRequestData()
             .setReplicaId(-1)
-            .setTopics(List.of(topicRequest));
+            .setTopics(of(topicRequest));
         final var header = new RequestHeader(ApiKeys.LIST_OFFSETS, apiVersion, "test-client", 1);
 
         final var response = handler.generateListOffsetsResponse(header, serialize(requestData, apiVersion));
@@ -69,10 +70,10 @@ class ConsumerDataApiHandlerTest {
         final var apiVersion = (short) 7; // Use version < 8 for simpler group-level request
         final var topicRequest = new OffsetFetchRequestData.OffsetFetchRequestTopic()
             .setName("my-topic")
-            .setPartitionIndexes(List.of(0));
+            .setPartitionIndexes(of(0));
         final var requestData = new OffsetFetchRequestData()
             .setGroupId("my-group")
-            .setTopics(List.of(topicRequest));
+            .setTopics(of(topicRequest));
         final var header = new RequestHeader(ApiKeys.OFFSET_FETCH, apiVersion, "test-client", 2);
 
         final var response = handler.generateOffsetFetchResponse(header, serialize(requestData, apiVersion));
@@ -90,10 +91,10 @@ class ConsumerDataApiHandlerTest {
             .setCommittedOffset(42L);
         final var topic = new OffsetCommitRequestData.OffsetCommitRequestTopic()
             .setName("my-topic")
-            .setPartitions(List.of(partition));
+            .setPartitions(of(partition));
         final var requestData = new OffsetCommitRequestData()
             .setGroupId("my-group")
-            .setTopics(List.of(topic));
+            .setTopics(of(topic));
         final var header = new RequestHeader(ApiKeys.OFFSET_COMMIT, apiVersion, "test-client", 3);
 
         final var response = handler.generateOffsetCommitResponse(header, serialize(requestData, apiVersion));
@@ -119,13 +120,13 @@ class ConsumerDataApiHandlerTest {
             .setPartitionMaxBytes(1024 * 1024);
         final var topicRequest = new FetchRequestData.FetchTopic()
             .setTopic("my-topic")
-            .setPartitions(List.of(partitionRequest));
+            .setPartitions(of(partitionRequest));
         final var requestData = new FetchRequestData()
             .setReplicaId(-1)
             .setMaxWaitMs(100)
             .setMinBytes(1)
             .setIsolationLevel((byte) 0)
-            .setTopics(List.of(topicRequest));
+            .setTopics(of(topicRequest));
         final var header = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 4);
 
         final var response = handler.generateFetchResponse(header, serialize(requestData, apiVersion));
@@ -390,13 +391,13 @@ class ConsumerDataApiHandlerTest {
 
         // When – incremental fetch that forgets partition 0
         final var forgotten = new FetchRequestData.ForgottenTopic()
-            .setTopic("my-topic").setPartitions(List.of(0));
+            .setTopic("my-topic").setPartitions(of(0));
         final var incFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 34);
         final var responseData = parseFetchResponse(
             handler.generateFetchResponse(
                 incFetchHeader,
                 serialize(buildFetchRequestWithForgottenTopics(
-                    "my-topic", 1, 0L, sessionId, 1, List.of(forgotten)), apiVersion)),
+                    "my-topic", 1, 0L, sessionId, 1, of(forgotten)), apiVersion)),
             apiVersion);
 
         // Then – partition 1 present; forgotten partition 0 absent
@@ -465,7 +466,7 @@ class ConsumerDataApiHandlerTest {
             .setPartitionMaxBytes(1024 * 1024);
         final var topicRequest = new FetchRequestData.FetchTopic()
             .setTopic(topic)
-            .setPartitions(List.of(partitionRequest));
+            .setPartitions(of(partitionRequest));
         return new FetchRequestData()
             .setReplicaId(-1)
             .setMaxWaitMs(100)
@@ -473,7 +474,7 @@ class ConsumerDataApiHandlerTest {
             .setIsolationLevel((byte) 0)
             .setSessionId(sessionId)
             .setSessionEpoch(sessionEpoch)
-            .setTopics(List.of(topicRequest));
+            .setTopics(of(topicRequest));
     }
 
     private static FetchResponseData parseFetchResponse(final ByteBuffer buffer, final short apiVersion) {
@@ -490,12 +491,12 @@ class ConsumerDataApiHandlerTest {
         final var partition1 = new FetchRequestData.FetchPartition()
             .setPartition(1).setFetchOffset(0L).setPartitionMaxBytes(1024 * 1024);
         final var topicRequest = new FetchRequestData.FetchTopic()
-            .setTopic(topic).setPartitions(List.of(partition0, partition1));
+            .setTopic(topic).setPartitions(of(partition0, partition1));
         return new FetchRequestData()
             .setReplicaId(-1).setMaxWaitMs(100).setMinBytes(1)
             .setIsolationLevel((byte) 0)
             .setSessionId(sessionId).setSessionEpoch(sessionEpoch)
-            .setTopics(List.of(topicRequest));
+            .setTopics(of(topicRequest));
     }
 
     private static FetchRequestData buildFetchRequestWithForgottenTopics(
@@ -505,12 +506,12 @@ class ConsumerDataApiHandlerTest {
         final var partitionRequest = new FetchRequestData.FetchPartition()
             .setPartition(partition).setFetchOffset(fetchOffset).setPartitionMaxBytes(1024 * 1024);
         final var topicRequest = new FetchRequestData.FetchTopic()
-            .setTopic(topic).setPartitions(List.of(partitionRequest));
+            .setTopic(topic).setPartitions(of(partitionRequest));
         return new FetchRequestData()
             .setReplicaId(-1).setMaxWaitMs(100).setMinBytes(1)
             .setIsolationLevel((byte) 0)
             .setSessionId(sessionId).setSessionEpoch(sessionEpoch)
-            .setTopics(List.of(topicRequest))
+            .setTopics(of(topicRequest))
             .setForgottenTopicsData(forgottenTopics);
     }
 }

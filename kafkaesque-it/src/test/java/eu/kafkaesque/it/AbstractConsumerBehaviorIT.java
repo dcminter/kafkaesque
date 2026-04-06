@@ -23,6 +23,7 @@ import java.util.UUID;
 import java.util.stream.IntStream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.List.of;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -91,7 +92,7 @@ abstract class AbstractConsumerBehaviorIT {
         producer.send(new ProducerRecord<>(topicName, "key-2", "value-2"));
         producer.flush();
 
-        consumer.subscribe(List.of(topicName));
+        consumer.subscribe(of(topicName));
 
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
@@ -129,7 +130,7 @@ abstract class AbstractConsumerBehaviorIT {
             producer.send(new ProducerRecord<>(topicName, commonKey, "message-" + i)).get();
         }
 
-        consumer.subscribe(List.of(topicName));
+        consumer.subscribe(of(topicName));
 
         final List<String> receivedValues = new ArrayList<>();
         await().atMost(10, SECONDS).until(() -> {
@@ -162,7 +163,7 @@ abstract class AbstractConsumerBehaviorIT {
         producer.send(record);
         producer.flush();
 
-        consumer.subscribe(List.of(topicName));
+        consumer.subscribe(of(topicName));
 
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
@@ -196,7 +197,7 @@ abstract class AbstractConsumerBehaviorIT {
         producer.send(record);
         producer.flush();
 
-        consumer.subscribe(List.of(topicName));
+        consumer.subscribe(of(topicName));
 
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
@@ -248,8 +249,8 @@ abstract class AbstractConsumerBehaviorIT {
             producerLocal.flush();
             producerLocal.close();
 
-            consumerA.subscribe(List.of(sharedTopic));
-            consumerB.subscribe(List.of(sharedTopic));
+            consumerA.subscribe(of(sharedTopic));
+            consumerB.subscribe(of(sharedTopic));
 
             // When – poll both consumers until each has received both messages
             final List<String> receivedByA = new ArrayList<>();
@@ -290,7 +291,7 @@ abstract class AbstractConsumerBehaviorIT {
         adminProps.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
         adminProps.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
         try (final AdminClient adminClient = AdminClient.create(adminProps)) {
-            adminClient.createTopics(List.of(new NewTopic(multiPartitionTopic, 2, (short) 1))).all().get();
+            adminClient.createTopics(of(new NewTopic(multiPartitionTopic, 2, (short) 1))).all().get();
         }
 
         try (
@@ -306,8 +307,8 @@ abstract class AbstractConsumerBehaviorIT {
             producerLocal.close();
 
             // Subscribe both consumers to trigger the rebalance
-            consumerA.subscribe(List.of(multiPartitionTopic));
-            consumerB.subscribe(List.of(multiPartitionTopic));
+            consumerA.subscribe(of(multiPartitionTopic));
+            consumerB.subscribe(of(multiPartitionTopic));
 
             // When – poll both until the combined set contains all messages
             final Set<String> received = new HashSet<>();

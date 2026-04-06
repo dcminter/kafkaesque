@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static java.util.Map.of;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -100,7 +101,7 @@ class GroupCoordinatorTest {
     void syncGroup_shouldStoreAssignments() {
         coordinator.joinGroup("group-1", "member-1", new byte[0]);
         final var assignmentBytes = new byte[]{1, 2, 3};
-        coordinator.syncGroup("group-1", Map.of("member-1", assignmentBytes));
+        coordinator.syncGroup("group-1", of("member-1", assignmentBytes));
 
         assertThat(coordinator.getMemberAssignment("group-1", "member-1"))
             .isEqualTo(assignmentBytes);
@@ -110,7 +111,7 @@ class GroupCoordinatorTest {
     void syncGroup_shouldPreserveMemberList() {
         coordinator.joinGroup("group-1", "member-a", new byte[]{1});
         coordinator.joinGroup("group-1", "member-b", new byte[]{2});
-        coordinator.syncGroup("group-1", Map.of(
+        coordinator.syncGroup("group-1", of(
             "member-a", new byte[]{10},
             "member-b", new byte[]{20}));
 
@@ -120,7 +121,7 @@ class GroupCoordinatorTest {
     @Test
     void syncGroup_forUnknownGroup_shouldNotFail() {
         // Should be a no-op rather than throwing
-        coordinator.syncGroup("unknown-group", Map.of("member-1", new byte[]{1}));
+        coordinator.syncGroup("unknown-group", of("member-1", new byte[]{1}));
         // No assertion needed — just verifying no exception is thrown
     }
 

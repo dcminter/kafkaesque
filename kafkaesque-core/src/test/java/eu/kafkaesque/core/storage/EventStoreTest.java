@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static java.util.Collections.emptyList;
+import static java.util.List.of;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -193,7 +194,7 @@ class EventStoreTest {
         final var topics = eventStore.getTopics();
 
         assertEquals(2, topics.size(), "Should have 2 distinct topics");
-        assertEquals(List.of("alpha-topic", "zebra-topic"), topics, "Topics should be sorted alphabetically");
+        assertEquals(of("alpha-topic", "zebra-topic"), topics, "Topics should be sorted alphabetically");
     }
 
     @Test
@@ -366,7 +367,7 @@ class EventStoreTest {
 
         final var records = eventStore.getRecords("topic", 0);
         assertThrows(UnsupportedOperationException.class,
-            () -> records.add(new StoredRecord("topic", 0, 0, timestamp, List.of(), "key2", "value2")),
+            () -> records.add(new StoredRecord("topic", 0, 0, timestamp, of(), "key2", "value2")),
             "Returned list should be unmodifiable");
 
         final var allRecords = eventStore.getAllRecords();

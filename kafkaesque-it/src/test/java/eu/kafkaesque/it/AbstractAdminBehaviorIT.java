@@ -14,6 +14,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 
+import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -80,7 +81,7 @@ abstract class AbstractAdminBehaviorIT {
 
         try (final AdminClient adminClient = AdminClient.create(props)) {
             // When
-            adminClient.createTopics(List.of(newTopic)).all().get();
+            adminClient.createTopics(of(newTopic)).all().get();
 
             // Then – the topic appears in the listing
             final Set<String> topicNames = adminClient.listTopics().names().get();
@@ -88,7 +89,7 @@ abstract class AbstractAdminBehaviorIT {
 
             // And – the topic has the expected configuration
             final Map<String, TopicDescription> descriptions =
-                adminClient.describeTopics(List.of(newTopicName)).allTopicNames().get();
+                adminClient.describeTopics(of(newTopicName)).allTopicNames().get();
             final TopicDescription description = descriptions.get(newTopicName);
             assertThat(description).isNotNull();
             assertThat(description.name()).isEqualTo(newTopicName);
@@ -119,14 +120,14 @@ abstract class AbstractAdminBehaviorIT {
         props.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
 
         try (final AdminClient adminClient = AdminClient.create(props)) {
-            adminClient.createTopics(List.of(
+            adminClient.createTopics(of(
                 new NewTopic(topicA, 1, (short) 1),
                 new NewTopic(topicB, 4, (short) 1)
             )).all().get();
 
             // When
             final Map<String, TopicDescription> descriptions =
-                adminClient.describeTopics(List.of(topicA, topicB)).allTopicNames().get();
+                adminClient.describeTopics(of(topicA, topicB)).allTopicNames().get();
 
             // Then
             assertThat(descriptions).containsKeys(topicA, topicB);

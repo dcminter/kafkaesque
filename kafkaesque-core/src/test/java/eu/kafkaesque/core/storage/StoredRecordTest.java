@@ -7,6 +7,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -23,7 +24,7 @@ class StoredRecordTest {
         final var key = "record-key";
         final var value = "record-value";
 
-        final var record = new StoredRecord(topic, partition, offset, timestamp, List.of(), key, value);
+        final var record = new StoredRecord(topic, partition, offset, timestamp, of(), key, value);
 
         assertThat(record.topic()).isEqualTo(topic);
         assertThat(record.partition()).isEqualTo(partition);
@@ -36,7 +37,7 @@ class StoredRecordTest {
 
     @Test
     void shouldAcceptNullKeyAndValue() {
-        final var record = new StoredRecord("topic", 0, 0L, 0L, List.of(), null, null);
+        final var record = new StoredRecord("topic", 0, 0L, 0L, of(), null, null);
 
         assertThat(record.key()).isNull();
         assertThat(record.value()).isNull();
@@ -60,7 +61,7 @@ class StoredRecordTest {
     @Test
     void timestampAsInstant_shouldConvertFromEpochMillis() {
         final var epochMillis = 1_700_000_000_000L;
-        final var record = new StoredRecord("topic", 0, 0L, epochMillis, List.of(), "key", "value");
+        final var record = new StoredRecord("topic", 0, 0L, epochMillis, of(), "key", "value");
 
         assertThat(record.timestampAsInstant()).isEqualTo(Instant.ofEpochMilli(epochMillis));
     }

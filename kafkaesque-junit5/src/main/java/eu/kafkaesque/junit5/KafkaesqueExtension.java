@@ -20,10 +20,12 @@ import java.io.IOException;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
-import java.util.stream.Stream;
+
+import static java.util.List.of;
+import static java.util.Optional.ofNullable;
+import static java.util.stream.Stream.concat;
 
 /**
  * JUnit 5 extension that starts a {@link KafkaesqueServer} and makes it available for
@@ -232,16 +234,16 @@ public final class KafkaesqueExtension
      * @return ordered list of topic declarations to pre-create; never {@code null}
      */
     private List<KafkaesqueTopic> resolveTopics(final ExtensionContext context) {
-        final var classTopics = Optional.ofNullable(context.getRequiredTestClass().getAnnotation(Kafkaesque.class))
+        final var classTopics = ofNullable(context.getRequiredTestClass().getAnnotation(Kafkaesque.class))
             .map(Kafkaesque::topics)
             .map(Arrays::asList)
-            .orElse(List.of());
+            .orElse(of());
         final var methodTopics = context.getTestMethod()
             .map(m -> m.getAnnotation(Kafkaesque.class))
             .map(Kafkaesque::topics)
             .map(Arrays::asList)
-            .orElse(List.of());
-        return Stream.concat(classTopics.stream(), methodTopics.stream()).toList();
+            .orElse(of());
+        return concat(classTopics.stream(), methodTopics.stream()).toList();
     }
 
     /**
@@ -366,7 +368,7 @@ public final class KafkaesqueExtension
         final var bootstrapServers = resolveServer(extCtx).getBootstrapServers();
         final var consumer = new KafkaConsumer<>(buildConsumerProperties(annotation, bootstrapServers));
         if (annotation.topics().length > 0) {
-            consumer.subscribe(List.of(annotation.topics()));
+            consumer.subscribe(of(annotation.topics()));
         }
         extCtx.getStore(NAMESPACE).put(
             "consumer-" + paramCtx.getIndex(),

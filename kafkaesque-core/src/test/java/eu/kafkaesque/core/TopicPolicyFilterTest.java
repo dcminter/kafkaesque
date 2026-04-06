@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
 
+import static java.util.List.copyOf;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -366,7 +367,7 @@ class TopicPolicyFilterTest {
                     batch.forEach(collected::add);
                 }
             }
-            return List.copyOf(collected);
+            return copyOf(collected);
         }
     }
 }

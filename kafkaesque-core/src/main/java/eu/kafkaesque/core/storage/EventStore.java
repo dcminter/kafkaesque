@@ -11,6 +11,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import static java.util.List.copyOf;
+import static java.util.List.of;
+
 /**
  * Thread-safe storage for events published to Kafkaesque.
  *
@@ -112,7 +115,7 @@ public final class EventStore {
          */
         List<StoredRecord> getRecords() {
             synchronized (records) {
-                return List.copyOf(records);
+                return copyOf(records);
             }
         }
 
@@ -153,7 +156,7 @@ public final class EventStore {
             final long timestamp,
             final String key,
             final String value) {
-        return storeRecord(new RecordData(topic, partition, timestamp, key, value, List.of()));
+        return storeRecord(new RecordData(topic, partition, timestamp, key, value, of()));
     }
 
     /**
@@ -293,7 +296,7 @@ public final class EventStore {
     public List<StoredRecord> getRecords(final String topic, final int partition) {
         final var partitionKey = new TopicPartitionKey(topic, partition);
         final var partitionStore = partitions.get(partitionKey);
-        return partitionStore != null ? partitionStore.getRecords() : List.of();
+        return partitionStore != null ? partitionStore.getRecords() : of();
     }
 
     /**
@@ -314,7 +317,7 @@ public final class EventStore {
         final var partitionKey = new TopicPartitionKey(topic, partition);
         final var ps = partitions.get(partitionKey);
         if (ps == null) {
-            return List.of();
+            return of();
         }
         return ps.getRecords().stream()
             .filter(r -> passesIsolationFilter(ps, r.offset(), isolationLevel))

@@ -12,11 +12,11 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+import static java.util.concurrent.TimeUnit.SECONDS;
 
+import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 
@@ -35,10 +35,10 @@ class KafkaesqueExtensionTest {
 
         try (var producer = createProducer(bootstrapServers);
              var consumer = createConsumer(bootstrapServers)) {
-            consumer.subscribe(List.of(topic));
+            consumer.subscribe(of(topic));
             producer.send(new ProducerRecord<>(topic, "key1", "value1")).get();
 
-            await().atMost(10, TimeUnit.SECONDS).until(() -> {
+            await().atMost(10, SECONDS).until(() -> {
                 consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
                 return !received.isEmpty();
             });

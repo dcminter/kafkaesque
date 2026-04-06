@@ -27,6 +27,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static java.util.List.of;
+
 /**
  * Handles Kafka consumer group lifecycle API responses.
  *
@@ -189,7 +191,7 @@ final class ConsumerGroupApiHandler {
                     .setLeader(leader)
                     .setSkipAssignment(false)
                     .setMemberId(join.memberId())
-                    .setMembers(isLeader ? memberList : List.of());
+                    .setMembers(isLeader ? memberList : of());
 
                 final var responseBuffer = ResponseSerializer.serialize(
                     join.requestHeader(), data, ApiKeys.JOIN_GROUP);

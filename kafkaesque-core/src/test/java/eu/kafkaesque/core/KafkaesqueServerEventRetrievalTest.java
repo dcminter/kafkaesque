@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
 
+import static java.util.List.of;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -246,7 +247,7 @@ class KafkaesqueServerEventRetrievalTest {
     @Test
     void shouldHandleMultiplePartitions() throws ExecutionException, InterruptedException {
         final var topic = "test-topic";
-        adminClient.createTopics(List.of(new NewTopic(topic, 2, (short) 1))).all().get();
+        adminClient.createTopics(of(new NewTopic(topic, 2, (short) 1))).all().get();
 
         // Publish to different partitions
         producer.send(new ProducerRecord<>(topic, 0, "key1", "value1")).get();

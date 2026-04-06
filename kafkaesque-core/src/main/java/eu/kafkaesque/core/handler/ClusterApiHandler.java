@@ -23,9 +23,11 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.IntStream;
+
+import static java.util.Arrays.stream;
+import static java.util.List.of;
 
 /**
  * Handles Kafka cluster and topology API responses.
@@ -312,7 +314,7 @@ final class ClusterApiHandler {
     private ApiVersionsResponseData.ApiVersionCollection buildSupportedApiVersions() {
         final var apiVersions = new ApiVersionsResponseData.ApiVersionCollection();
 
-        Arrays.stream(ApiKeys.values())
+        stream(ApiKeys.values())
             .filter(apiKey -> apiKey != ApiKeys.CONTROLLED_SHUTDOWN
                 && apiKey != ApiKeys.GET_TELEMETRY_SUBSCRIPTIONS
                 && apiKey != ApiKeys.PUSH_TELEMETRY
@@ -345,7 +347,7 @@ final class ClusterApiHandler {
                 .setTopicId(Uuid.ZERO_UUID)
                 .setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code())
                 .setIsInternal(false)
-                .setPartitions(List.of())
+                .setPartitions(of())
                 .setTopicAuthorizedOperations(Integer.MIN_VALUE);
         }
 
@@ -356,11 +358,11 @@ final class ClusterApiHandler {
                 .setPartitionIndex(i)
                 .setLeaderId(1)
                 .setLeaderEpoch(0)
-                .setReplicaNodes(List.of(1))
-                .setIsrNodes(List.of(1))
-                .setEligibleLeaderReplicas(List.of())
-                .setLastKnownElr(List.of())
-                .setOfflineReplicas(List.of()))
+                .setReplicaNodes(of(1))
+                .setIsrNodes(of(1))
+                .setEligibleLeaderReplicas(of())
+                .setLastKnownElr(of())
+                .setOfflineReplicas(of()))
             .toList();
 
         return new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopic()
@@ -403,8 +405,8 @@ final class ClusterApiHandler {
                 .setPartitionIndex(i)
                 .setLeaderId(1)
                 .setLeaderEpoch(0)
-                .setReplicaNodes(List.of(1))
-                .setIsrNodes(List.of(1))
+                .setReplicaNodes(of(1))
+                .setIsrNodes(of(1))
                 .setErrorCode((short) 0))
             .toList();
 
@@ -431,7 +433,7 @@ final class ClusterApiHandler {
             .setName(topicName)
             .setErrorCode(Errors.UNKNOWN_TOPIC_OR_PARTITION.code())
             .setIsInternal(false)
-            .setPartitions(List.of());
+            .setPartitions(of());
     }
 
     /**

@@ -17,7 +17,9 @@ import org.apache.kafka.common.requests.RequestHeader;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import static java.lang.Math.max;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.List.of;
 
 /**
  * Handles Kafka producer API responses.
@@ -201,7 +203,7 @@ final class ProducerApiHandler {
             }
         }
 
-        return successPartitionResponse(partitionData.index(), Math.max(baseOffset, 0L));
+        return successPartitionResponse(partitionData.index(), max(baseOffset, 0L));
     }
 
     /**
@@ -343,8 +345,8 @@ final class ProducerApiHandler {
      */
     private static List<Header> readHeaders(final Header[] headerArray) {
         if (headerArray == null || headerArray.length == 0) {
-            return List.of();
+            return of();
         }
-        return List.of(headerArray);
+        return of(headerArray);
     }
 }

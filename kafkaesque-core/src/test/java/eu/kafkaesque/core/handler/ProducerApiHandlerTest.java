@@ -18,6 +18,8 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+
+import static java.util.List.of;
 import static org.apache.kafka.common.protocol.Errors.INVALID_PRODUCER_EPOCH;
 import static org.apache.kafka.common.protocol.Errors.OUT_OF_ORDER_SEQUENCE_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -239,13 +241,13 @@ class ProducerApiHandlerTest {
 
         final var topicData = new ProduceRequestData.TopicProduceData()
             .setName(topic)
-            .setPartitionData(java.util.List.of(partitionData));
+            .setPartitionData(of(partitionData));
 
         final var requestData = new ProduceRequestData()
             .setAcks((short) 1)
             .setTimeoutMs(5000)
             .setTransactionalId(transactionalId)
-            .setTopicData(new ProduceRequestData.TopicProduceDataCollection(java.util.List.of(topicData).iterator()));
+            .setTopicData(new ProduceRequestData.TopicProduceDataCollection(of(topicData).iterator()));
 
         final var cache = new ObjectSerializationCache();
         final var buffer = ByteBuffer.allocate(requestData.size(cache, apiVersion));

@@ -10,6 +10,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static java.util.List.copyOf;
+import static java.util.List.of;
+
 /**
  * Manages transactional producer state for the Kafkaesque mock server.
  *
@@ -164,7 +167,7 @@ public final class TransactionCoordinator {
      */
     public List<PendingOffsetCommit> drainPendingOffsetCommits(final String transactionalId) {
         final var commits = pendingOffsetCommits.remove(transactionalId);
-        return commits != null ? List.copyOf(commits) : List.of();
+        return commits != null ? copyOf(commits) : of();
     }
 
     /**
