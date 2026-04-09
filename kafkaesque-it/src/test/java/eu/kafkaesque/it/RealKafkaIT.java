@@ -25,7 +25,10 @@ class RealKafkaIT extends AbstractKafkaBehaviorIT {
     ).withEnv("KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS", "1000")
      .withEnv("KAFKA_LOG_CLEANER_BACKOFF_MS", "100")
      .withEnv("KAFKA_LOG_ROLL_MS", "2000")
-     .withEnv("KAFKA_LOG_ROLL_JITTER_MS", "0");
+     .withEnv("KAFKA_LOG_ROLL_JITTER_MS", "0")
+     .withEnv("KAFKA_AUTHORIZER_CLASS_NAME", "kafka.security.authorizer.AclAuthorizer")
+     .withEnv("KAFKA_ALLOW_EVERYONE_IF_NO_ACL_FOUND", "true")
+     .withEnv("KAFKA_SUPER_USERS", "User:ANONYMOUS");
 
     /**
      * {@inheritDoc}

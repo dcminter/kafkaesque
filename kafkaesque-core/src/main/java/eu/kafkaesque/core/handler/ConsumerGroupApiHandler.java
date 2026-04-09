@@ -2,12 +2,18 @@ package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.connection.ClientConnection;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.kafka.common.message.ConsumerGroupDescribeRequestData;
+import org.apache.kafka.common.message.ConsumerGroupDescribeResponseData;
+import org.apache.kafka.common.message.DeleteGroupsRequestData;
+import org.apache.kafka.common.message.DeleteGroupsResponseData;
 import org.apache.kafka.common.message.HeartbeatRequestData;
 import org.apache.kafka.common.message.HeartbeatResponseData;
 import org.apache.kafka.common.message.JoinGroupRequestData;
 import org.apache.kafka.common.message.JoinGroupResponseData;
 import org.apache.kafka.common.message.LeaveGroupRequestData;
 import org.apache.kafka.common.message.LeaveGroupResponseData;
+import org.apache.kafka.common.message.ListGroupsRequestData;
+import org.apache.kafka.common.message.ListGroupsResponseData;
 import org.apache.kafka.common.message.SyncGroupRequestData;
 import org.apache.kafka.common.message.SyncGroupResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -294,6 +300,118 @@ final class ConsumerGroupApiHandler {
 
         } catch (final Exception e) {
             log.error("Error generating LeaveGroup response", e);
+            return null;
+        }
+    }
+
+    /**
+     * Generates a LIST_GROUPS response listing all known consumer groups.
+     *
+     * @param requestHeader the request header
+     * @param buffer        the buffer containing the request body
+     * @return the serialised response buffer, or null on error
+     */
+    ByteBuffer generateListGroupsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
+        try {
+            final var accessor = new ByteBufferAccessor(buffer);
+            new ListGroupsRequestData(accessor, requestHeader.apiVersion());
+
+            final var groups = groupCoordinator.getGroupIds().stream()
+                .map(gid -> new ListGroupsResponseData.ListedGroup()
+                    .setGroupId(gid)
+                    .setProtocolType("consumer")
+                    .setGroupState("Stable")
+                    .setGroupType("consumer"))
+                .toList();
+
+            final var response = new ListGroupsResponseData()
+                .setThrottleTimeMs(0)
+                .setErrorCode((short) 0)
+                .setGroups(groups);
+
+            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.LIST_GROUPS);
+        } catch (final Exception e) {
+            log.error("Error generating ListGroups response", e);
+            return null;
+        }
+    }
+
+    /**
+     * Generates a CONSUMER_GROUP_DESCRIBE response with member details for the
+     * requested consumer groups.
+     *
+     * @param requestHeader the request header
+     * @param buffer        the buffer containing the request body
+     * @return the serialised response buffer, or null on error
+     */
+    ByteBuffer generateConsumerGroupDescribeResponse(
+            final RequestHeader requestHeader, final ByteBuffer buffer) {
+        try {
+            final var accessor = new ByteBufferAccessor(buffer);
+            final var request = new ConsumerGroupDescribeRequestData(accessor, requestHeader.apiVersion());
+
+            final var groups = request.groupIds().stream()
+                .map(gid -> {
+                    final var members = groupCoordinator.getMembers(gid).entrySet().stream()
+                        .map(entry -> new ConsumerGroupDescribeResponseData.Member()
+                            .setMemberId(entry.getKey())
+                            .setClientId("")
+                            .setClientHost(""))
+                        .toList();
+                    return new ConsumerGroupDescribeResponseData.DescribedGroup()
+                        .setGroupId(gid)
+                        .setErrorCode((short) 0)
+                        .setGroupState("Stable")
+                        .setGroupEpoch(groupCoordinator.getGenerationId(gid))
+                        .setAssignmentEpoch(groupCoordinator.getGenerationId(gid))
+                        .setAssignorName("range")
+                        .setMembers(members)
+                        .setAuthorizedOperations(-2147483648);
+                })
+                .toList();
+
+            final var response = new ConsumerGroupDescribeResponseData()
+                .setThrottleTimeMs(0)
+                .setGroups(groups);
+
+            return ResponseSerializer.serialize(
+                requestHeader, response, ApiKeys.CONSUMER_GROUP_DESCRIBE);
+        } catch (final Exception e) {
+            log.error("Error generating ConsumerGroupDescribe response", e);
+            return null;
+        }
+    }
+
+    /**
+     * Generates a DELETE_GROUPS response after removing the requested consumer groups.
+     *
+     * @param requestHeader the request header
+     * @param buffer        the buffer containing the request body
+     * @return the serialised response buffer, or null on error
+     */
+    ByteBuffer generateDeleteGroupsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
+        try {
+            final var accessor = new ByteBufferAccessor(buffer);
+            final var request = new DeleteGroupsRequestData(accessor, requestHeader.apiVersion());
+
+            final var results = new DeleteGroupsResponseData.DeletableGroupResultCollection();
+            request.groupsNames().stream()
+                .map(gid -> {
+                    groupCoordinator.deleteGroup(gid);
+                    log.info("Deleted consumer group: {}", gid);
+                    return new DeleteGroupsResponseData.DeletableGroupResult()
+                        .setGroupId(gid)
+                        .setErrorCode((short) 0);
+                })
+                .forEach(results::add);
+
+            final var response = new DeleteGroupsResponseData()
+                .setThrottleTimeMs(0)
+                .setResults(results);
+
+            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DELETE_GROUPS);
+        } catch (final Exception e) {
+            log.error("Error generating DeleteGroups response", e);
             return null;
         }
     }

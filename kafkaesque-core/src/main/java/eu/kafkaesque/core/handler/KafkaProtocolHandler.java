@@ -2,6 +2,7 @@ package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.ServerInfo;
 import eu.kafkaesque.core.connection.ClientConnection;
+import eu.kafkaesque.core.storage.AclStore;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.TopicStore;
 import lombok.extern.slf4j.Slf4j;
@@ -51,6 +52,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *   <li>{@link ApiKeys#END_TXN} - Commits or aborts an open transaction</li>
  *   <li>{@link ApiKeys#WRITE_TXN_MARKERS} - Broker-internal marker writing (returns success)</li>
  *   <li>{@link ApiKeys#TXN_OFFSET_COMMIT} - Commits offsets transactionally</li>
+ *   <li>{@link ApiKeys#CREATE_ACLS} - Creates ACL bindings in the store</li>
+ *   <li>{@link ApiKeys#DESCRIBE_ACLS} - Returns ACL bindings matching the request filter</li>
+ *   <li>{@link ApiKeys#DELETE_ACLS} - Deletes ACL bindings matching the request filters</li>
  *   <li>{@link ApiKeys#GET_TELEMETRY_SUBSCRIPTIONS} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  *   <li>{@link ApiKeys#PUSH_TELEMETRY} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  * </ul>
@@ -70,6 +74,7 @@ public final class KafkaProtocolHandler {
     private final ProducerApiHandler producerApiHandler;
     private final AdminApiHandler adminApiHandler;
     private final TransactionApiHandler transactionApiHandler;
+    private final AclApiHandler aclApiHandler;
 
     /**
      * Queue of responses that could not be written immediately (e.g. deferred JoinGroup
@@ -169,8 +174,9 @@ public final class KafkaProtocolHandler {
         this.consumerDataApiHandler = new ConsumerDataApiHandler(
             eventStore, groupCoordinator, this.topicStore, fetchSessionCoordinator);
         this.producerApiHandler = new ProducerApiHandler(eventStore, this.topicStore, autoCreateTopicsEnabled);
-        this.adminApiHandler = new AdminApiHandler(this.topicStore);
+        this.adminApiHandler = new AdminApiHandler(this.topicStore, eventStore);
         this.transactionApiHandler = new TransactionApiHandler(transactionCoordinator, groupCoordinator);
+        this.aclApiHandler = new AclApiHandler(new AclStore());
     }
 
     /**
@@ -367,17 +373,25 @@ public final class KafkaProtocolHandler {
                 case SYNC_GROUP       -> consumerGroupApiHandler.generateSyncGroupResponse(header, buffer);
                 case HEARTBEAT        -> consumerGroupApiHandler.generateHeartbeatResponse(header, buffer);
                 case LEAVE_GROUP      -> consumerGroupApiHandler.generateLeaveGroupResponse(header, buffer);
+                case LIST_GROUPS      -> consumerGroupApiHandler.generateListGroupsResponse(header, buffer);
+                case CONSUMER_GROUP_DESCRIBE ->
+                    consumerGroupApiHandler.generateConsumerGroupDescribeResponse(header, buffer);
+                case DELETE_GROUPS    -> consumerGroupApiHandler.generateDeleteGroupsResponse(header, buffer);
                 case OFFSET_FETCH     -> consumerDataApiHandler.generateOffsetFetchResponse(header, buffer);
                 case OFFSET_COMMIT    -> consumerDataApiHandler.generateOffsetCommitResponse(header, buffer);
                 case LIST_OFFSETS     -> consumerDataApiHandler.generateListOffsetsResponse(header, buffer);
                 case FETCH                    -> consumerDataApiHandler.generateFetchResponse(header, buffer);
-                case CREATE_TOPICS            -> adminApiHandler.generateCreateTopicsResponse(header, buffer);
-                case INCREMENTAL_ALTER_CONFIGS ->
-                    adminApiHandler.generateIncrementalAlterConfigsResponse(header, buffer);
+                case CREATE_TOPICS, DELETE_TOPICS, DESCRIBE_CONFIGS, ALTER_CONFIGS,
+                    CREATE_PARTITIONS, DELETE_RECORDS, INCREMENTAL_ALTER_CONFIGS,
+                    ELECT_LEADERS, DESCRIBE_LOG_DIRS, ALTER_REPLICA_LOG_DIRS ->
+                    dispatchAdminRequest(apiKey, header, buffer);
                 case DESCRIBE_TOPIC_PARTITIONS ->
                     clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
+                case CREATE_ACLS, DESCRIBE_ACLS, DELETE_ACLS ->
+                    dispatchAclRequest(apiKey, header, buffer);
                 case INIT_PRODUCER_ID, ADD_PARTITIONS_TO_TXN, ADD_OFFSETS_TO_TXN,
-                    END_TXN, WRITE_TXN_MARKERS, TXN_OFFSET_COMMIT ->
+                    END_TXN, WRITE_TXN_MARKERS, TXN_OFFSET_COMMIT,
+                    LIST_TRANSACTIONS, DESCRIBE_TRANSACTIONS ->
                     dispatchTransactionRequest(apiKey, header, buffer);
                 case GET_TELEMETRY_SUBSCRIPTIONS, PUSH_TELEMETRY -> {
                     log.debug("Telemetry API not supported: {}", apiKey);
@@ -393,6 +407,33 @@ public final class KafkaProtocolHandler {
         } catch (final Exception e) {
             log.error("Error processing request", e);
         }
+    }
+
+    /**
+     * Dispatches an admin API request to the admin handler.
+     *
+     * @param apiKey the admin API key
+     * @param header the request header
+     * @param buffer the request body buffer
+     * @return the serialised response buffer, or {@code null} on error
+     */
+    private ByteBuffer dispatchAdminRequest(
+            final ApiKeys apiKey, final RequestHeader header, final ByteBuffer buffer) {
+        return switch (apiKey) {
+            case CREATE_TOPICS            -> adminApiHandler.generateCreateTopicsResponse(header, buffer);
+            case DELETE_TOPICS            -> adminApiHandler.generateDeleteTopicsResponse(header, buffer);
+            case DESCRIBE_CONFIGS         -> adminApiHandler.generateDescribeConfigsResponse(header, buffer);
+            case ALTER_CONFIGS            -> adminApiHandler.generateAlterConfigsResponse(header, buffer);
+            case CREATE_PARTITIONS        -> adminApiHandler.generateCreatePartitionsResponse(header, buffer);
+            case DELETE_RECORDS           -> adminApiHandler.generateDeleteRecordsResponse(header, buffer);
+            case INCREMENTAL_ALTER_CONFIGS ->
+                adminApiHandler.generateIncrementalAlterConfigsResponse(header, buffer);
+            case ELECT_LEADERS            -> adminApiHandler.generateElectLeadersResponse(header, buffer);
+            case DESCRIBE_LOG_DIRS        -> adminApiHandler.generateDescribeLogDirsResponse(header, buffer);
+            case ALTER_REPLICA_LOG_DIRS   ->
+                adminApiHandler.generateAlterReplicaLogDirsResponse(header, buffer);
+            default -> null;
+        };
     }
 
     /**
@@ -412,6 +453,27 @@ public final class KafkaProtocolHandler {
             case END_TXN               -> transactionApiHandler.generateEndTxnResponse(header, buffer);
             case WRITE_TXN_MARKERS     -> transactionApiHandler.generateWriteTxnMarkersResponse(header, buffer);
             case TXN_OFFSET_COMMIT     -> transactionApiHandler.generateTxnOffsetCommitResponse(header, buffer);
+            case LIST_TRANSACTIONS     -> transactionApiHandler.generateListTransactionsResponse(header, buffer);
+            case DESCRIBE_TRANSACTIONS ->
+                transactionApiHandler.generateDescribeTransactionsResponse(header, buffer);
+            default -> null;
+        };
+    }
+
+    /**
+     * Dispatches an ACL-related API request to the ACL handler.
+     *
+     * @param apiKey the ACL API key
+     * @param header the request header
+     * @param buffer the request body buffer
+     * @return the serialised response buffer, or {@code null} on error
+     */
+    private ByteBuffer dispatchAclRequest(
+            final ApiKeys apiKey, final RequestHeader header, final ByteBuffer buffer) {
+        return switch (apiKey) {
+            case CREATE_ACLS   -> aclApiHandler.generateCreateAclsResponse(header, buffer);
+            case DESCRIBE_ACLS -> aclApiHandler.generateDescribeAclsResponse(header, buffer);
+            case DELETE_ACLS   -> aclApiHandler.generateDeleteAclsResponse(header, buffer);
             default -> null;
         };
     }

@@ -361,6 +361,69 @@ class EventStoreTest {
     }
 
     @Test
+    void deleteRecordsBefore_shouldAdvanceLogStartOffset() {
+        final var topic = "test-topic";
+        final var timestamp = System.currentTimeMillis();
+
+        for (int i = 0; i < 5; i++) {
+            eventStore.storeRecord(topic, 0, timestamp, "key-" + i, "value-" + i);
+        }
+
+        final var newStartOffset = eventStore.deleteRecordsBefore(topic, 0, 3);
+
+        assertEquals(3L, newStartOffset, "New log start offset should be 3");
+        final var remaining = eventStore.getRecords(topic, 0);
+        assertEquals(2, remaining.size(), "Should have 2 records remaining at offsets 3 and 4");
+        assertEquals(3L, remaining.get(0).offset(), "First remaining record should be at offset 3");
+    }
+
+    @Test
+    void deleteRecordsBefore_shouldReturnZeroForNonExistentPartition() {
+        final var result = eventStore.deleteRecordsBefore("ghost", 0, 5);
+
+        assertEquals(0L, result, "Should return 0 for non-existent partition");
+    }
+
+    @Test
+    void deleteRecordsBefore_shouldNotMoveLogStartOffsetBackward() {
+        final var topic = "test-topic";
+        final var timestamp = System.currentTimeMillis();
+
+        for (int i = 0; i < 5; i++) {
+            eventStore.storeRecord(topic, 0, timestamp, "key-" + i, "value-" + i);
+        }
+
+        eventStore.deleteRecordsBefore(topic, 0, 4);
+        eventStore.deleteRecordsBefore(topic, 0, 2);
+
+        final var remaining = eventStore.getRecords(topic, 0);
+        assertEquals(1, remaining.size(), "Should still have only 1 record after backward move attempt");
+        assertEquals(4L, remaining.get(0).offset(), "Record should be at offset 4");
+    }
+
+    @Test
+    void deleteTopicData_shouldRemoveAllPartitionsForTopicAndLeaveOthersIntact() {
+        final var timestamp = System.currentTimeMillis();
+
+        eventStore.storeRecord("topic-a", 0, timestamp, "key1", "value1");
+        eventStore.storeRecord("topic-a", 1, timestamp, "key2", "value2");
+        eventStore.storeRecord("topic-b", 0, timestamp, "key3", "value3");
+
+        eventStore.deleteTopicData("topic-a");
+
+        assertTrue(eventStore.getRecords("topic-a", 0).isEmpty(),
+            "topic-a partition 0 should be empty");
+        assertTrue(eventStore.getRecords("topic-a", 1).isEmpty(),
+            "topic-a partition 1 should be empty");
+        assertEquals(1, eventStore.getRecords("topic-b", 0).size(),
+            "topic-b should be unaffected");
+        assertFalse(eventStore.getTopics().contains("topic-a"),
+            "topic-a should no longer appear in topics");
+        assertTrue(eventStore.getTopics().contains("topic-b"),
+            "topic-b should still appear in topics");
+    }
+
+    @Test
     void returnedLists_shouldBeUnmodifiable() {
         final var timestamp = System.currentTimeMillis();
         eventStore.storeRecord("topic", 0, timestamp, "key", "value");

@@ -1,11 +1,17 @@
 package eu.kafkaesque.core.handler;
 
+import org.apache.kafka.common.message.ConsumerGroupDescribeRequestData;
+import org.apache.kafka.common.message.ConsumerGroupDescribeResponseData;
+import org.apache.kafka.common.message.DeleteGroupsRequestData;
+import org.apache.kafka.common.message.DeleteGroupsResponseData;
 import org.apache.kafka.common.message.HeartbeatRequestData;
 import org.apache.kafka.common.message.HeartbeatResponseData;
 import org.apache.kafka.common.message.JoinGroupRequestData;
 import org.apache.kafka.common.message.JoinGroupResponseData;
 import org.apache.kafka.common.message.LeaveGroupRequestData;
 import org.apache.kafka.common.message.LeaveGroupResponseData;
+import org.apache.kafka.common.message.ListGroupsRequestData;
+import org.apache.kafka.common.message.ListGroupsResponseData;
 import org.apache.kafka.common.message.SyncGroupRequestData;
 import org.apache.kafka.common.message.SyncGroupResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -181,6 +187,68 @@ class ConsumerGroupApiHandlerTest {
         assertThat(responseData.errorCode()).isZero();
     }
 
+    @Test
+    void generateListGroupsResponse_shouldReturnRegisteredGroups() {
+        groupCoordinator.joinGroup("group-a", "", new byte[0]);
+        groupCoordinator.joinGroup("group-b", "", new byte[0]);
+
+        final var apiVersion = ApiKeys.LIST_GROUPS.latestVersion();
+        final var requestData = new ListGroupsRequestData();
+        final var header = new RequestHeader(ApiKeys.LIST_GROUPS, apiVersion, "test-client", 10);
+
+        final var response = handler.generateListGroupsResponse(header, serialize(requestData, apiVersion));
+
+        assertThat(response).isNotNull();
+        final var responseData = parseListGroupsResponse(response, apiVersion);
+        assertThat(responseData.errorCode()).isZero();
+        final var groupIds = responseData.groups().stream()
+            .map(ListGroupsResponseData.ListedGroup::groupId)
+            .toList();
+        assertThat(groupIds).containsExactlyInAnyOrder("group-a", "group-b");
+    }
+
+    @Test
+    void generateConsumerGroupDescribeResponse_shouldReturnMembersForGroup() {
+        groupCoordinator.joinGroup("test-group", "", new byte[0]);
+
+        final var apiVersion = ApiKeys.CONSUMER_GROUP_DESCRIBE.latestVersion();
+        final var requestData = new ConsumerGroupDescribeRequestData()
+            .setGroupIds(of("test-group"));
+        final var header = new RequestHeader(
+            ApiKeys.CONSUMER_GROUP_DESCRIBE, apiVersion, "test-client", 11);
+
+        final var response = handler.generateConsumerGroupDescribeResponse(
+            header, serialize(requestData, apiVersion));
+
+        assertThat(response).isNotNull();
+        final var responseData = parseConsumerGroupDescribeResponse(response, apiVersion);
+        assertThat(responseData.groups()).hasSize(1);
+        final var group = responseData.groups().get(0);
+        assertThat(group.groupId()).isEqualTo("test-group");
+        assertThat(group.errorCode()).isZero();
+        assertThat(group.members()).hasSize(1);
+    }
+
+    @Test
+    void generateDeleteGroupsResponse_shouldDeleteGroupAndReturnSuccess() {
+        groupCoordinator.joinGroup("doomed-group", "", new byte[0]);
+        assertThat(groupCoordinator.getGroupIds()).contains("doomed-group");
+
+        final var apiVersion = ApiKeys.DELETE_GROUPS.latestVersion();
+        final var requestData = new DeleteGroupsRequestData()
+            .setGroupsNames(of("doomed-group"));
+        final var header = new RequestHeader(ApiKeys.DELETE_GROUPS, apiVersion, "test-client", 12);
+
+        final var response = handler.generateDeleteGroupsResponse(header, serialize(requestData, apiVersion));
+
+        assertThat(response).isNotNull();
+        final var responseData = parseDeleteGroupsResponse(response, apiVersion);
+        final var result = responseData.results().find("doomed-group");
+        assertThat(result).isNotNull();
+        assertThat(result.errorCode()).isZero();
+        assertThat(groupCoordinator.getGroupIds()).doesNotContain("doomed-group");
+    }
+
     // --- helpers ---
 
     private static JoinGroupRequestData buildJoinGroupRequest(final String groupId, final String memberId) {
@@ -234,6 +302,33 @@ class ConsumerGroupApiHandlerTest {
         skipResponseHeader(buffer, ApiKeys.LEAVE_GROUP, apiVersion);
         final var data = new LeaveGroupResponseData();
         data.read(new ByteBufferAccessor(buffer), apiVersion);
+        return data;
+    }
+
+    private static ListGroupsResponseData parseListGroupsResponse(
+            final ByteBuffer buffer, final short apiVersion) {
+        final var copy = buffer.duplicate();
+        skipResponseHeader(copy, ApiKeys.LIST_GROUPS, apiVersion);
+        final var data = new ListGroupsResponseData();
+        data.read(new ByteBufferAccessor(copy), apiVersion);
+        return data;
+    }
+
+    private static ConsumerGroupDescribeResponseData parseConsumerGroupDescribeResponse(
+            final ByteBuffer buffer, final short apiVersion) {
+        final var copy = buffer.duplicate();
+        skipResponseHeader(copy, ApiKeys.CONSUMER_GROUP_DESCRIBE, apiVersion);
+        final var data = new ConsumerGroupDescribeResponseData();
+        data.read(new ByteBufferAccessor(copy), apiVersion);
+        return data;
+    }
+
+    private static DeleteGroupsResponseData parseDeleteGroupsResponse(
+            final ByteBuffer buffer, final short apiVersion) {
+        final var copy = buffer.duplicate();
+        skipResponseHeader(copy, ApiKeys.DELETE_GROUPS, apiVersion);
+        final var data = new DeleteGroupsResponseData();
+        data.read(new ByteBufferAccessor(copy), apiVersion);
         return data;
     }
 

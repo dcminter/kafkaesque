@@ -3,6 +3,7 @@ package eu.kafkaesque.core.handler;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -204,6 +205,78 @@ public final class GroupCoordinator {
         committedOffsets.computeIfAbsent(groupId, k -> new ConcurrentHashMap<>())
             .put(new TopicPartitionKey(topic, partition), offset);
         log.debug("Committed offset {} for group={}, topic={}, partition={}", offset, groupId, topic, partition);
+    }
+
+    /**
+     * Returns the IDs of all known consumer groups.
+     *
+     * @return unmodifiable set of group IDs
+     */
+    public Set<String> getGroupIds() {
+        return Set.copyOf(groups.keySet());
+    }
+
+    /**
+     * Returns whether a consumer group with the given ID exists.
+     *
+     * @param groupId the consumer group ID
+     * @return {@code true} if the group is known
+     */
+    public boolean hasGroup(final String groupId) {
+        return groups.containsKey(groupId);
+    }
+
+    /**
+     * Returns the number of members currently in a consumer group.
+     *
+     * @param groupId the consumer group ID
+     * @return the member count, or {@code 0} if the group is unknown
+     */
+    public int getMemberCount(final String groupId) {
+        final var state = groups.get(groupId);
+        return state != null ? state.memberSubscriptions().size() : 0;
+    }
+
+    /**
+     * A committed offset entry for a specific topic and partition.
+     *
+     * @param topic     the topic name
+     * @param partition the partition index
+     * @param offset    the committed offset
+     */
+    public record CommittedOffsetEntry(String topic, int partition, long offset) {}
+
+    /**
+     * Returns all committed offsets for a consumer group.
+     *
+     * @param groupId the consumer group ID
+     * @return list of committed offset entries; empty if the group has no committed offsets
+     */
+    public java.util.List<CommittedOffsetEntry> getCommittedOffsets(final String groupId) {
+        final var groupOffsets = committedOffsets.get(groupId);
+        if (groupOffsets == null) {
+            return java.util.List.of();
+        }
+        return groupOffsets.entrySet().stream()
+            .map(e -> new CommittedOffsetEntry(e.getKey().topic(), e.getKey().partition(), e.getValue()))
+            .toList();
+    }
+
+    /**
+     * Deletes a consumer group and all its committed offsets.
+     *
+     * <p>If the group does not exist, this method does nothing.</p>
+     *
+     * @param groupId the consumer group ID to delete
+     * @return {@code true} if the group existed and was deleted
+     */
+    public boolean deleteGroup(final String groupId) {
+        final var removed = groups.remove(groupId) != null;
+        committedOffsets.remove(groupId);
+        if (removed) {
+            log.debug("Deleted group {}", groupId);
+        }
+        return removed;
     }
 
     /**

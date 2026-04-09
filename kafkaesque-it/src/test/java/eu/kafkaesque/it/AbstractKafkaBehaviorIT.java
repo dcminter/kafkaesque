@@ -24,6 +24,8 @@ import org.junit.jupiter.api.Nested;
  * @see AbstractRetentionBehaviorIT
  * @see AbstractCompactDeleteBehaviorIT
  * @see AbstractTransactionBehaviorIT
+ * @see AbstractConsumerGroupAdminBehaviorIT
+ * @see AbstractAclBehaviorIT
  */
 abstract class AbstractKafkaBehaviorIT {
 
@@ -128,6 +130,39 @@ abstract class AbstractKafkaBehaviorIT {
      */
     @Nested
     class IdempotentProducerBehavior extends AbstractIdempotentProducerBehaviorIT {
+        @Override
+        protected String getBootstrapServers() throws Exception {
+            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
+        }
+    }
+
+    /**
+     * Runs the consumer group admin behavior tests against this backend.
+     */
+    @Nested
+    class ConsumerGroupAdminBehavior extends AbstractConsumerGroupAdminBehaviorIT {
+        @Override
+        protected String getBootstrapServers() throws Exception {
+            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
+        }
+    }
+
+    /**
+     * Runs the ACL behavior tests against this backend.
+     */
+    @Nested
+    class AclBehavior extends AbstractAclBehaviorIT {
+        @Override
+        protected String getBootstrapServers() throws Exception {
+            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
+        }
+    }
+
+    /**
+     * Runs the transaction admin behavior tests against this backend.
+     */
+    @Nested
+    class TransactionAdminBehavior extends AbstractTransactionAdminBehaviorIT {
         @Override
         protected String getBootstrapServers() throws Exception {
             return AbstractKafkaBehaviorIT.this.getBootstrapServers();

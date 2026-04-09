@@ -14,13 +14,13 @@ public enum CleanupPolicy {
      * Records are deleted after the configured retention period.
      * This is the default Kafka behavior.
      */
-    DELETE,
+    DELETE("delete"),
 
     /**
      * Log compaction: only the most-recent record for each key is retained.
      * Records with {@code null} values act as tombstones and are removed during compaction.
      */
-    COMPACT,
+    COMPACT("compact"),
 
     /**
      * Combined compaction and deletion: log compaction is applied first (retaining only the
@@ -30,5 +30,20 @@ public enum CleanupPolicy {
      * <p>Corresponds to Kafka's {@code cleanup.policy=compact,delete} (or {@code delete,compact})
      * topic configuration.</p>
      */
-    COMPACT_DELETE
+    COMPACT_DELETE("compact,delete");
+
+    private final String configValue;
+
+    CleanupPolicy(final String configValue) {
+        this.configValue = configValue;
+    }
+
+    /**
+     * Returns the Kafka config string value for this cleanup policy.
+     *
+     * @return the config value (e.g. {@code "delete"}, {@code "compact"}, {@code "compact,delete"})
+     */
+    public String configValue() {
+        return configValue;
+    }
 }

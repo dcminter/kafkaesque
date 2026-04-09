@@ -67,4 +67,50 @@ class TopicStoreTest {
     void shouldReturnEmptyCollectionWhenNoTopicsCreated() {
         assertThat(topicStore.getTopics()).isEmpty();
     }
+
+    @Test
+    void shouldUpdatePartitionCountWhenNewCountIsGreater() {
+        topicStore.createTopic("my-topic", 3, (short) 1);
+        final var originalId = topicStore.getTopic("my-topic").orElseThrow().topicId();
+
+        final var result = topicStore.updatePartitionCount("my-topic", 6);
+
+        assertThat(result).isTrue();
+        assertThat(topicStore.getTopic("my-topic")).hasValueSatisfying(def -> {
+            assertThat(def.numPartitions()).isEqualTo(6);
+            assertThat(def.topicId()).isEqualTo(originalId);
+        });
+    }
+
+    @Test
+    void shouldReturnFalseWhenUpdatingPartitionCountToSameValue() {
+        topicStore.createTopic("my-topic", 3, (short) 1);
+
+        assertThat(topicStore.updatePartitionCount("my-topic", 3)).isFalse();
+        assertThat(topicStore.getTopic("my-topic")).hasValueSatisfying(def ->
+            assertThat(def.numPartitions()).isEqualTo(3));
+    }
+
+    @Test
+    void shouldReturnFalseWhenDecreasingPartitionCount() {
+        topicStore.createTopic("my-topic", 5, (short) 1);
+
+        assertThat(topicStore.updatePartitionCount("my-topic", 2)).isFalse();
+        assertThat(topicStore.getTopic("my-topic")).hasValueSatisfying(def ->
+            assertThat(def.numPartitions()).isEqualTo(5));
+    }
+
+    @Test
+    void shouldReturnFalseWhenUpdatingPartitionCountForNonExistentTopic() {
+        assertThat(topicStore.updatePartitionCount("ghost", 5)).isFalse();
+    }
+
+    @Test
+    void shouldDeleteExistingTopicAndReturnTrue() {
+        topicStore.createTopic("my-topic", 3, (short) 1);
+
+        assertThat(topicStore.deleteTopic("my-topic")).isTrue();
+        assertThat(topicStore.hasTopic("my-topic")).isFalse();
+        assertThat(topicStore.deleteTopic("my-topic")).isFalse();
+    }
 }

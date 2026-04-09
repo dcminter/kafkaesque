@@ -143,6 +143,41 @@ public final class TopicStore {
     }
 
     /**
+     * Updates the partition count for an existing topic.
+     *
+     * <p>The new count must be greater than the current count. If the topic does not
+     * exist or the new count is not greater, this method does nothing.</p>
+     *
+     * @param name     the topic name
+     * @param newCount the new partition count (must exceed the current count)
+     * @return {@code true} if the partition count was updated
+     */
+    public boolean updatePartitionCount(final String name, final int newCount) {
+        final var existing = topics.get(name);
+        if (existing == null || newCount <= existing.numPartitions()) {
+            return false;
+        }
+        topics.put(name, new TopicDefinition(
+            existing.name(), newCount, existing.replicationFactor(), existing.topicId(),
+            existing.compression(), existing.cleanupPolicy(), existing.retentionMs(), existing.retentionBytes()));
+        return true;
+    }
+
+    /**
+     * Removes a topic registration by name.
+     *
+     * <p>If no topic with the given name exists, this method does nothing.
+     * This method does <em>not</em> remove stored records from the {@link EventStore};
+     * callers are responsible for purging record data separately.</p>
+     *
+     * @param name the topic name to delete
+     * @return {@code true} if the topic was registered and has been removed
+     */
+    public boolean deleteTopic(final String name) {
+        return topics.remove(name) != null;
+    }
+
+    /**
      * Returns whether a topic with the given name is registered.
      *
      * @param name the topic name

@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -192,6 +193,26 @@ public final class TransactionCoordinator {
             log.debug("Aborting transaction for transactionalId={}", transactionalId);
             eventStore.abortTransaction(transactionalId);
         }
+    }
+
+    /**
+     * Returns the transactional IDs of all known producers.
+     *
+     * @return unmodifiable set of transactional IDs
+     */
+    public Set<String> getTransactionalIds() {
+        return Set.copyOf(producers.keySet());
+    }
+
+    /**
+     * Returns the producer ID and epoch for a given transactional ID.
+     *
+     * @param transactionalId the transactional producer ID
+     * @return the producer ID and epoch, or {@code null} if unknown
+     */
+    public ProducerIdAndEpoch getProducerIdAndEpoch(final String transactionalId) {
+        final var state = producers.get(transactionalId);
+        return state != null ? new ProducerIdAndEpoch(state.producerId(), state.epoch()) : null;
     }
 
     /**

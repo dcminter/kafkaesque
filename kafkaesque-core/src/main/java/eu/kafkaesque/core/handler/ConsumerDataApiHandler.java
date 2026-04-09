@@ -503,13 +503,21 @@ final class ConsumerDataApiHandler {
     /**
      * Builds the list of topic responses for an OFFSET_FETCH group reply (v8+).
      *
+     * <p>If the topics list is {@code null} or empty, all committed offsets for the
+     * group are returned (admin {@code listConsumerGroupOffsets} variant).</p>
+     *
      * @param groupId the consumer group ID
-     * @param topics  the topics to fetch offsets for (v8+ plural request type)
+     * @param topics  the topics to fetch offsets for (v8+ plural request type);
+     *                may be null/empty when listing all offsets
      * @return the list of topic responses (v8+ plural response type)
      */
     private List<OffsetFetchResponseData.OffsetFetchResponseTopics> buildOffsetFetchGroupTopicResponses(
             final String groupId,
             final List<OffsetFetchRequestData.OffsetFetchRequestTopics> topics) {
+
+        if (topics == null || topics.isEmpty()) {
+            return buildAllCommittedOffsetsResponse(groupId);
+        }
 
         return topics.stream()
             .map(topic -> new OffsetFetchResponseData.OffsetFetchResponseTopics()
@@ -525,6 +533,30 @@ final class ConsumerDataApiHandler {
                             .setMetadata("")
                             .setErrorCode((short) 0);
                     })
+                    .toList()))
+            .toList();
+    }
+
+    /**
+     * Builds topic responses containing all committed offsets for a consumer group.
+     *
+     * @param groupId the consumer group ID
+     * @return topic responses for all committed offsets
+     */
+    private List<OffsetFetchResponseData.OffsetFetchResponseTopics> buildAllCommittedOffsetsResponse(
+            final String groupId) {
+        return groupCoordinator.getCommittedOffsets(groupId).stream()
+            .collect(java.util.stream.Collectors.groupingBy(GroupCoordinator.CommittedOffsetEntry::topic))
+            .entrySet().stream()
+            .map(entry -> new OffsetFetchResponseData.OffsetFetchResponseTopics()
+                .setName(entry.getKey())
+                .setPartitions(entry.getValue().stream()
+                    .map(coe -> new OffsetFetchResponseData.OffsetFetchResponsePartitions()
+                        .setPartitionIndex(coe.partition())
+                        .setCommittedOffset(coe.offset())
+                        .setCommittedLeaderEpoch(-1)
+                        .setMetadata("")
+                        .setErrorCode((short) 0))
                     .toList()))
             .toList();
     }

@@ -1,10 +1,14 @@
 package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.storage.EventStore;
+import org.apache.kafka.common.message.DescribeTransactionsRequestData;
+import org.apache.kafka.common.message.DescribeTransactionsResponseData;
 import org.apache.kafka.common.message.EndTxnRequestData;
 import org.apache.kafka.common.message.EndTxnResponseData;
 import org.apache.kafka.common.message.InitProducerIdRequestData;
 import org.apache.kafka.common.message.InitProducerIdResponseData;
+import org.apache.kafka.common.message.ListTransactionsRequestData;
+import org.apache.kafka.common.message.ListTransactionsResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Message;
@@ -126,6 +130,70 @@ class TransactionApiHandlerTest {
         assertThat(response).isNull();
     }
 
+    @Test
+    void generateListTransactionsResponse_shouldReturnRegisteredTransactions() {
+        // Register a transactional producer by calling initProducerId
+        final var initVersion = ApiKeys.INIT_PRODUCER_ID.latestVersion();
+        final var initRequest = new InitProducerIdRequestData()
+            .setTransactionalId("txn-A")
+            .setTransactionTimeoutMs(60000);
+        final var initHeader = new RequestHeader(ApiKeys.INIT_PRODUCER_ID, initVersion, "test-client", 1);
+        handler.generateInitProducerIdResponse(initHeader, serialize(initRequest, initVersion));
+
+        // List transactions
+        final var apiVersion = ApiKeys.LIST_TRANSACTIONS.latestVersion();
+        final var requestData = new ListTransactionsRequestData();
+        final var header = new RequestHeader(ApiKeys.LIST_TRANSACTIONS, apiVersion, "test-client", 10);
+
+        final var response = handler.generateListTransactionsResponse(header, serialize(requestData, apiVersion));
+
+        assertThat(response).isNotNull();
+        final var responseData = parseListTransactionsResponse(response, apiVersion);
+        assertThat(responseData.errorCode()).isZero();
+        final var txnIds = responseData.transactionStates().stream()
+            .map(ListTransactionsResponseData.TransactionState::transactionalId)
+            .toList();
+        assertThat(txnIds).contains("txn-A");
+    }
+
+    @Test
+    void generateDescribeTransactionsResponse_shouldReturnDetailsForKnownTransaction() {
+        // Register a transactional producer
+        final var initVersion = ApiKeys.INIT_PRODUCER_ID.latestVersion();
+        final var initRequest = new InitProducerIdRequestData()
+            .setTransactionalId("txn-X")
+            .setTransactionTimeoutMs(60000);
+        final var initHeader = new RequestHeader(ApiKeys.INIT_PRODUCER_ID, initVersion, "test-client", 1);
+        handler.generateInitProducerIdResponse(initHeader, serialize(initRequest, initVersion));
+
+        // Describe transactions
+        final var apiVersion = ApiKeys.DESCRIBE_TRANSACTIONS.latestVersion();
+        final var requestData = new DescribeTransactionsRequestData()
+            .setTransactionalIds(java.util.List.of("txn-X", "txn-unknown"));
+        final var header = new RequestHeader(
+            ApiKeys.DESCRIBE_TRANSACTIONS, apiVersion, "test-client", 11);
+
+        final var response = handler.generateDescribeTransactionsResponse(
+            header, serialize(requestData, apiVersion));
+
+        assertThat(response).isNotNull();
+        final var responseData = parseDescribeTransactionsResponse(response, apiVersion);
+        assertThat(responseData.transactionStates()).hasSize(2);
+
+        final var known = responseData.transactionStates().stream()
+            .filter(s -> "txn-X".equals(s.transactionalId()))
+            .findFirst().orElseThrow();
+        assertThat(known.producerId()).isPositive();
+        assertThat(known.producerEpoch()).isZero();
+        assertThat(known.transactionState()).isEqualTo("Ongoing");
+
+        final var unknown = responseData.transactionStates().stream()
+            .filter(s -> "txn-unknown".equals(s.transactionalId()))
+            .findFirst().orElseThrow();
+        assertThat(unknown.producerId()).isEqualTo(-1L);
+        assertThat(unknown.transactionState()).isEmpty();
+    }
+
     // --- helpers ---
 
     private static ByteBuffer serialize(final Message requestData, final short apiVersion) {
@@ -147,6 +215,22 @@ class TransactionApiHandlerTest {
     private static EndTxnResponseData parseEndTxnResponse(final ByteBuffer buffer, final short apiVersion) {
         skipResponseHeader(buffer, ApiKeys.END_TXN, apiVersion);
         final var data = new EndTxnResponseData();
+        data.read(new ByteBufferAccessor(buffer), apiVersion);
+        return data;
+    }
+
+    private static ListTransactionsResponseData parseListTransactionsResponse(
+            final ByteBuffer buffer, final short apiVersion) {
+        skipResponseHeader(buffer, ApiKeys.LIST_TRANSACTIONS, apiVersion);
+        final var data = new ListTransactionsResponseData();
+        data.read(new ByteBufferAccessor(buffer), apiVersion);
+        return data;
+    }
+
+    private static DescribeTransactionsResponseData parseDescribeTransactionsResponse(
+            final ByteBuffer buffer, final short apiVersion) {
+        skipResponseHeader(buffer, ApiKeys.DESCRIBE_TRANSACTIONS, apiVersion);
+        final var data = new DescribeTransactionsResponseData();
         data.read(new ByteBufferAccessor(buffer), apiVersion);
         return data;
     }

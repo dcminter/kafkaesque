@@ -46,6 +46,7 @@ public final class EventStore {
     private static final class PartitionStore {
         private final List<StoredRecord> records = Collections.synchronizedList(new ArrayList<>());
         private final AtomicLong nextOffset = new AtomicLong(0L);
+        private final AtomicLong logStartOffset = new AtomicLong(0L);
         private final Map<Long, TransactionState> transactionStates = new ConcurrentHashMap<>();
 
         /**
@@ -109,13 +110,35 @@ public final class EventStore {
         }
 
         /**
-         * Gets all records in this partition.
+         * Sets the log start offset, causing records below this offset to be excluded
+         * from {@link #getRecords()} results.
+         *
+         * @param offset the new log start offset
+         */
+        void setLogStartOffset(final long offset) {
+            logStartOffset.updateAndGet(current -> Math.max(current, offset));
+        }
+
+        /**
+         * Returns the current log start offset.
+         *
+         * @return the log start offset
+         */
+        long getLogStartOffset() {
+            return logStartOffset.get();
+        }
+
+        /**
+         * Gets all records in this partition at or above the log start offset.
          *
          * @return unmodifiable list of records
          */
         List<StoredRecord> getRecords() {
+            final long startOffset = logStartOffset.get();
             synchronized (records) {
-                return copyOf(records);
+                return records.stream()
+                    .filter(r -> r.offset() >= startOffset)
+                    .toList();
             }
         }
 
@@ -442,6 +465,38 @@ public final class EventStore {
      */
     public long getRecordCount(final String topic, final int partition) {
         return getRecords(topic, partition).size();
+    }
+
+    /**
+     * Marks records before the given offset as deleted by advancing the log start offset.
+     *
+     * <p>Records below the new log start offset are excluded from subsequent
+     * {@link #getRecords} calls. The log start offset only moves forward.</p>
+     *
+     * @param topic        the topic name
+     * @param partition    the partition index
+     * @param beforeOffset the offset before which records are considered deleted
+     * @return the new log start offset for this partition
+     */
+    public long deleteRecordsBefore(final String topic, final int partition, final long beforeOffset) {
+        final var partitionKey = new TopicPartitionKey(topic, partition);
+        final var ps = partitions.get(partitionKey);
+        if (ps == null) {
+            return 0L;
+        }
+        ps.setLogStartOffset(beforeOffset);
+        log.debug("Set log start offset to {} for topic={} partition={}", beforeOffset, topic, partition);
+        return ps.getLogStartOffset();
+    }
+
+    /**
+     * Removes all stored records and partition state for a given topic.
+     *
+     * @param topic the topic name whose data should be purged
+     */
+    public void deleteTopicData(final String topic) {
+        partitions.keySet().removeIf(key -> key.topic().equals(topic));
+        log.debug("Deleted all data for topic={}", topic);
     }
 
     /**

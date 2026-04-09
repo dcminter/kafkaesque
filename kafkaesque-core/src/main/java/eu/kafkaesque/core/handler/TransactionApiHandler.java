@@ -5,10 +5,14 @@ import org.apache.kafka.common.message.AddOffsetsToTxnRequestData;
 import org.apache.kafka.common.message.AddOffsetsToTxnResponseData;
 import org.apache.kafka.common.message.AddPartitionsToTxnRequestData;
 import org.apache.kafka.common.message.AddPartitionsToTxnResponseData;
+import org.apache.kafka.common.message.DescribeTransactionsRequestData;
+import org.apache.kafka.common.message.DescribeTransactionsResponseData;
 import org.apache.kafka.common.message.EndTxnRequestData;
 import org.apache.kafka.common.message.EndTxnResponseData;
 import org.apache.kafka.common.message.InitProducerIdRequestData;
 import org.apache.kafka.common.message.InitProducerIdResponseData;
+import org.apache.kafka.common.message.ListTransactionsRequestData;
+import org.apache.kafka.common.message.ListTransactionsResponseData;
 import org.apache.kafka.common.message.TxnOffsetCommitRequestData;
 import org.apache.kafka.common.message.TxnOffsetCommitResponseData;
 import org.apache.kafka.common.message.WriteTxnMarkersRequestData;
@@ -18,6 +22,7 @@ import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
+import java.util.List;
 
 /**
  * Handles Kafka transaction coordinator API responses.
@@ -337,5 +342,86 @@ final class TransactionApiHandler {
         return new WriteTxnMarkersResponseData.WritableTxnMarkerResult()
             .setProducerId(marker.producerId())
             .setTopics(topicResults);
+    }
+
+    /**
+     * Generates a LIST_TRANSACTIONS response listing all known transactional producers.
+     *
+     * @param requestHeader the request header
+     * @param buffer        the buffer containing the request body
+     * @return the serialised response buffer, or null on error
+     */
+    ByteBuffer generateListTransactionsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
+        try {
+            final var accessor = new ByteBufferAccessor(buffer);
+            new ListTransactionsRequestData(accessor, requestHeader.apiVersion());
+
+            final var states = transactionCoordinator.getTransactionalIds().stream()
+                .map(txnId -> new ListTransactionsResponseData.TransactionState()
+                    .setTransactionalId(txnId)
+                    .setProducerId(transactionCoordinator.getProducerIdAndEpoch(txnId).producerId())
+                    .setTransactionState("Ongoing"))
+                .toList();
+
+            final var response = new ListTransactionsResponseData()
+                .setErrorCode((short) 0)
+                .setTransactionStates(states);
+
+            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.LIST_TRANSACTIONS);
+        } catch (final Exception e) {
+            log.error("Error generating ListTransactions response", e);
+            return null;
+        }
+    }
+
+    /**
+     * Generates a DESCRIBE_TRANSACTIONS response with details for the requested
+     * transactional producers.
+     *
+     * @param requestHeader the request header
+     * @param buffer        the buffer containing the request body
+     * @return the serialised response buffer, or null on error
+     */
+    ByteBuffer generateDescribeTransactionsResponse(
+            final RequestHeader requestHeader, final ByteBuffer buffer) {
+        try {
+            final var accessor = new ByteBufferAccessor(buffer);
+            final var request = new DescribeTransactionsRequestData(accessor, requestHeader.apiVersion());
+
+            final var states = request.transactionalIds().stream()
+                .map(txnId -> {
+                    final var idAndEpoch = transactionCoordinator.getProducerIdAndEpoch(txnId);
+                    if (idAndEpoch == null) {
+                        return new DescribeTransactionsResponseData.TransactionState()
+                            .setTransactionalId(txnId)
+                            .setErrorCode((short) 0)
+                            .setTransactionState("")
+                            .setProducerId(-1L)
+                            .setProducerEpoch((short) -1)
+                            .setTransactionTimeoutMs(0)
+                            .setTransactionStartTimeMs(-1L)
+                            .setTopics(new DescribeTransactionsResponseData.TopicDataCollection());
+                    }
+                    return new DescribeTransactionsResponseData.TransactionState()
+                        .setTransactionalId(txnId)
+                        .setErrorCode((short) 0)
+                        .setTransactionState("Ongoing")
+                        .setProducerId(idAndEpoch.producerId())
+                        .setProducerEpoch(idAndEpoch.epoch())
+                        .setTransactionTimeoutMs(60000)
+                        .setTransactionStartTimeMs(System.currentTimeMillis())
+                        .setTopics(new DescribeTransactionsResponseData.TopicDataCollection());
+                })
+                .toList();
+
+            final var response = new DescribeTransactionsResponseData()
+                .setTransactionStates(states);
+
+            return ResponseSerializer.serialize(
+                requestHeader, response, ApiKeys.DESCRIBE_TRANSACTIONS);
+        } catch (final Exception e) {
+            log.error("Error generating DescribeTransactions response", e);
+            return null;
+        }
     }
 }
