@@ -1,6 +1,7 @@
 package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.storage.EventStore;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -30,6 +31,7 @@ import static java.util.List.of;
  * <p>This class is thread-safe.</p>
  */
 @Slf4j
+@RequiredArgsConstructor
 public final class TransactionCoordinator {
 
     /**
@@ -60,15 +62,6 @@ public final class TransactionCoordinator {
     private final Map<String, ProducerState> producers = new ConcurrentHashMap<>();
     private final Map<String, List<PendingOffsetCommit>> pendingOffsetCommits = new ConcurrentHashMap<>();
     private final EventStore eventStore;
-
-    /**
-     * Creates a new coordinator backed by the given event store.
-     *
-     * @param eventStore the store used to commit or abort pending records
-     */
-    public TransactionCoordinator(final EventStore eventStore) {
-        this.eventStore = eventStore;
-    }
 
     /**
      * Initialises a producer with no pre-existing producer ID.

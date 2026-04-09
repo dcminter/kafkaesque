@@ -3,6 +3,7 @@ package eu.kafkaesque.core.handler;
 import eu.kafkaesque.core.storage.CleanupPolicy;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.TopicStore;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.compress.Compression;
@@ -52,21 +53,11 @@ import static eu.kafkaesque.core.storage.CleanupPolicy.DELETE;
  * @see EventStore
  */
 @Slf4j
+@RequiredArgsConstructor
 final class AdminApiHandler {
 
     private final TopicStore topicStore;
     private final EventStore eventStore;
-
-    /**
-     * Creates a new handler backed by the given topic and event stores.
-     *
-     * @param topicStore the store that receives newly created/deleted topics
-     * @param eventStore the store that holds published records (used for topic deletion)
-     */
-    AdminApiHandler(final TopicStore topicStore, final EventStore eventStore) {
-        this.topicStore = topicStore;
-        this.eventStore = eventStore;
-    }
 
     /**
      * Registers a topic in the store and builds the corresponding CREATE_TOPICS response entry.

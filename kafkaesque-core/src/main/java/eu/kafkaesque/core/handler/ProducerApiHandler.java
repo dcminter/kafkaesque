@@ -3,6 +3,7 @@ package eu.kafkaesque.core.handler;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.RecordData;
 import eu.kafkaesque.core.storage.TopicStore;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.message.ProduceRequestData;
@@ -42,6 +43,7 @@ import static java.util.List.of;
  * @see IdempotentProducerRegistry
  */
 @Slf4j
+@RequiredArgsConstructor
 final class ProducerApiHandler {
 
     private final EventStore eventStore;
@@ -71,25 +73,6 @@ final class ProducerApiHandler {
             final TopicStore topicStore,
             final boolean autoCreateTopicsEnabled) {
         this(eventStore, topicStore, autoCreateTopicsEnabled, new IdempotentProducerRegistry());
-    }
-
-    /**
-     * Creates a new handler with explicit dependencies, including the idempotency registry.
-     *
-     * @param eventStore                  the store that receives produced records
-     * @param topicStore                  the topic registry; may be {@code null} when auto-create is enabled
-     * @param autoCreateTopicsEnabled     {@code false} to reject produces to unknown topics
-     * @param idempotentProducerRegistry  the registry used to detect and suppress duplicate batches
-     */
-    ProducerApiHandler(
-            final EventStore eventStore,
-            final TopicStore topicStore,
-            final boolean autoCreateTopicsEnabled,
-            final IdempotentProducerRegistry idempotentProducerRegistry) {
-        this.eventStore = eventStore;
-        this.topicStore = topicStore;
-        this.autoCreateTopicsEnabled = autoCreateTopicsEnabled;
-        this.idempotentProducerRegistry = idempotentProducerRegistry;
     }
 
     /**

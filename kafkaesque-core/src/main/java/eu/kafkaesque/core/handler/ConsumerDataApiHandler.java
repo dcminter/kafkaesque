@@ -7,6 +7,7 @@ import eu.kafkaesque.core.storage.CleanupPolicy;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.StoredRecord;
 import eu.kafkaesque.core.storage.TopicStore;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.header.Header;
@@ -53,32 +54,13 @@ import static org.apache.kafka.common.record.CompressionType.NONE;
  * @see GroupCoordinator
  */
 @Slf4j
+@RequiredArgsConstructor
 final class ConsumerDataApiHandler {
 
     private final EventStore eventStore;
     private final GroupCoordinator groupCoordinator;
     private final TopicStore topicStore;
     private final FetchSessionCoordinator fetchSessionCoordinator;
-
-    /**
-     * Creates a new handler backed by the given event store, group coordinator, topic store,
-     * and fetch session coordinator.
-     *
-     * @param eventStore              the store holding produced records
-     * @param groupCoordinator        the coordinator managing committed offsets
-     * @param topicStore              the store holding topic definitions (used to resolve per-topic compression)
-     * @param fetchSessionCoordinator the coordinator managing incremental fetch sessions
-     */
-    ConsumerDataApiHandler(
-            final EventStore eventStore,
-            final GroupCoordinator groupCoordinator,
-            final TopicStore topicStore,
-            final FetchSessionCoordinator fetchSessionCoordinator) {
-        this.eventStore = eventStore;
-        this.groupCoordinator = groupCoordinator;
-        this.topicStore = topicStore;
-        this.fetchSessionCoordinator = fetchSessionCoordinator;
-    }
 
     /**
      * Generates a LIST_OFFSETS response.

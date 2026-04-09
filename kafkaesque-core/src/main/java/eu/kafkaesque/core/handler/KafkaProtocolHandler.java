@@ -5,6 +5,8 @@ import eu.kafkaesque.core.connection.ClientConnection;
 import eu.kafkaesque.core.storage.AclStore;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.TopicStore;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -66,7 +68,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 @Slf4j
 public final class KafkaProtocolHandler {
 
+    @Getter
     private final EventStore eventStore;
+    @Getter
     private final TopicStore topicStore;
     private final ClusterApiHandler clusterApiHandler;
     private final ConsumerGroupApiHandler consumerGroupApiHandler;
@@ -87,6 +91,7 @@ public final class KafkaProtocolHandler {
      * The NIO selector for the server event loop; used to wake the selector when a deferred
      * response is enqueued so it is delivered promptly. Set via {@link #setSelector(Selector)}.
      */
+    @Setter
     private volatile Selector selector;
 
     /**
@@ -180,24 +185,6 @@ public final class KafkaProtocolHandler {
     }
 
     /**
-     * Gets the event store used by this protocol handler.
-     *
-     * @return the event store
-     */
-    public EventStore getEventStore() {
-        return eventStore;
-    }
-
-    /**
-     * Gets the topic store used by this protocol handler.
-     *
-     * @return the topic store
-     */
-    public TopicStore getTopicStore() {
-        return topicStore;
-    }
-
-    /**
      * Pre-registers a topic with the given configuration and compression.
      *
      * @param name              the topic name
@@ -209,18 +196,6 @@ public final class KafkaProtocolHandler {
             final String name, final int numPartitions,
             final short replicationFactor, final Compression compression) {
         topicStore.createTopic(name, numPartitions, replicationFactor, compression);
-    }
-
-    /**
-     * Sets the NIO selector for this handler.
-     *
-     * <p>Must be called after the selector is opened and before the event loop starts.
-     * The selector is used to wake the select loop when a deferred response is ready.</p>
-     *
-     * @param sel the server's NIO selector
-     */
-    public void setSelector(final Selector sel) {
-        this.selector = sel;
     }
 
     /**

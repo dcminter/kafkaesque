@@ -2,6 +2,7 @@ package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.ServerInfo;
 import eu.kafkaesque.core.storage.TopicStore;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ApiVersionsResponseData;
@@ -39,6 +40,7 @@ import static java.util.List.of;
  * @see KafkaProtocolHandler
  */
 @Slf4j
+@RequiredArgsConstructor
 final class ClusterApiHandler {
 
     private static final String CLUSTER_ID = "kafkaesque-cluster-001";
@@ -67,24 +69,6 @@ final class ClusterApiHandler {
      */
     ClusterApiHandler(final ServerInfo serverInfo, final TopicStore topicStore) {
         this(serverInfo, topicStore, true);
-    }
-
-    /**
-     * Creates a new handler backed by the given server info and topic store.
-     *
-     * @param serverInfo              the server info used to advertise host and port in cluster responses;
-     *                                may be {@code null} to use built-in defaults
-     * @param topicStore              the topic registry consulted when building metadata responses
-     * @param autoCreateTopicsEnabled {@code false} to return {@link Errors#UNKNOWN_TOPIC_OR_PARTITION}
-     *                                for unknown topics instead of falling back to 1 partition
-     */
-    ClusterApiHandler(
-            final ServerInfo serverInfo,
-            final TopicStore topicStore,
-            final boolean autoCreateTopicsEnabled) {
-        this.serverInfo = serverInfo;
-        this.topicStore = topicStore;
-        this.autoCreateTopicsEnabled = autoCreateTopicsEnabled;
     }
 
     /**

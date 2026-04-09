@@ -1,6 +1,7 @@
 package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.connection.ClientConnection;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.message.ConsumerGroupDescribeRequestData;
 import org.apache.kafka.common.message.ConsumerGroupDescribeResponseData;
@@ -52,6 +53,7 @@ import static java.util.List.of;
  * @see GroupCoordinator
  */
 @Slf4j
+@RequiredArgsConstructor
 final class ConsumerGroupApiHandler {
 
     /**
@@ -88,20 +90,6 @@ final class ConsumerGroupApiHandler {
     /** Single-thread scheduler for rebalance timers; uses a daemon thread so it does not block shutdown. */
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
         r -> Thread.ofPlatform().daemon(true).name("kafkaesque-rebalance").unstarted(r));
-
-    /**
-     * Creates a new handler backed by the given group coordinator.
-     *
-     * @param groupCoordinator   the coordinator managing group membership and assignments
-     * @param responseDispatcher callback used to enqueue deferred JoinGroup responses for
-     *                           delivery by the NIO event loop
-     */
-    ConsumerGroupApiHandler(
-            final GroupCoordinator groupCoordinator,
-            final Consumer<DeferredResponse> responseDispatcher) {
-        this.groupCoordinator = groupCoordinator;
-        this.responseDispatcher = responseDispatcher;
-    }
 
     /**
      * Processes a JOIN_GROUP request by registering the member and deferring the response

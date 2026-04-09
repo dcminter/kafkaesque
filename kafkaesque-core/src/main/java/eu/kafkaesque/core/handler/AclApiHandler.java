@@ -2,6 +2,7 @@ package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.storage.AclStore;
 import eu.kafkaesque.core.storage.AclStore.AclBinding;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.message.CreateAclsRequestData;
 import org.apache.kafka.common.message.CreateAclsResponseData;
@@ -32,19 +33,11 @@ import static java.util.stream.Collectors.groupingBy;
  * @see KafkaProtocolHandler
  */
 @Slf4j
+@RequiredArgsConstructor
 final class AclApiHandler {
 
     /** The backing ACL store. */
     private final AclStore aclStore;
-
-    /**
-     * Creates a new handler backed by the given ACL store.
-     *
-     * @param aclStore the store that receives and serves ACL bindings
-     */
-    AclApiHandler(final AclStore aclStore) {
-        this.aclStore = aclStore;
-    }
 
     /**
      * Generates a {@link ApiKeys#CREATE_ACLS} response after storing the requested bindings.

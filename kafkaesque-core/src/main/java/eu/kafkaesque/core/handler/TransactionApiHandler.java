@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.handler;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.message.AddOffsetsToTxnRequestData;
 import org.apache.kafka.common.message.AddOffsetsToTxnResponseData;
@@ -43,23 +44,11 @@ import java.util.List;
  * @see TransactionCoordinator
  */
 @Slf4j
+@RequiredArgsConstructor
 final class TransactionApiHandler {
 
     private final TransactionCoordinator transactionCoordinator;
     private final GroupCoordinator groupCoordinator;
-
-    /**
-     * Creates a new handler backed by the given coordinators.
-     *
-     * @param transactionCoordinator the coordinator managing producer IDs and transaction lifecycle
-     * @param groupCoordinator       the coordinator managing consumer group offsets
-     */
-    TransactionApiHandler(
-            final TransactionCoordinator transactionCoordinator,
-            final GroupCoordinator groupCoordinator) {
-        this.transactionCoordinator = transactionCoordinator;
-        this.groupCoordinator = groupCoordinator;
-    }
 
     /**
      * Generates an INIT_PRODUCER_ID response, assigning (or bumping) a producer ID and epoch.
