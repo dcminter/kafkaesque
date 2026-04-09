@@ -6,7 +6,7 @@ import eu.kafkaesque.core.storage.AclStore;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.TopicStore;
 import lombok.Getter;
-import lombok.Setter;
+
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -17,6 +17,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Handles the Kafka wire protocol for client connections.
@@ -91,8 +92,7 @@ public final class KafkaProtocolHandler {
      * The NIO selector for the server event loop; used to wake the selector when a deferred
      * response is enqueued so it is delivered promptly. Set via {@link #setSelector(Selector)}.
      */
-    @Setter
-    private volatile Selector selector;
+    private final AtomicReference<Selector> selector = new AtomicReference<>();
 
     /**
      * Creates a new protocol handler with the given server info and a fresh event store,
@@ -182,6 +182,16 @@ public final class KafkaProtocolHandler {
         this.adminApiHandler = new AdminApiHandler(this.topicStore, eventStore);
         this.transactionApiHandler = new TransactionApiHandler(transactionCoordinator, groupCoordinator);
         this.aclApiHandler = new AclApiHandler(new AclStore());
+    }
+
+    /**
+     * Sets the NIO selector for the server event loop, allowing deferred responses
+     * to wake the selector when they are enqueued.
+     *
+     * @param selector the NIO selector to use for wakeup notifications
+     */
+    public void setSelector(final Selector selector) {
+        this.selector.set(selector);
     }
 
     /**
@@ -461,7 +471,7 @@ public final class KafkaProtocolHandler {
      */
     private void enqueueResponse(final DeferredResponse deferred) {
         pendingResponses.offer(deferred);
-        final var sel = selector;
+        final var sel = selector.get();
         if (sel != null) {
             sel.wakeup();
         }
