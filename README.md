@@ -134,12 +134,26 @@ public class OrderNotificationServiceTest {
   * Topics can be configured via a builder pattern on the `KafkaesqueRule`
   * Factory methods (`createProducer()`, `createConsumer(...)`) are provided to make it simpler to create clients connected to the mock server
 
+### Standalone Docker Container
+
+Kafkaesque can also run as a standalone service via Docker, useful during local development or
+in CI pipelines:
+
+```bash
+docker build -t kafkaesque .
+docker run -p 9092:9092 kafkaesque
+```
+
+Your Kafka clients can then connect to `localhost:9092`. See [the standalone guide](docs/STANDALONE.md)
+for configuration options and Docker Compose examples.
+
 ## Further documentation
 
   * See [the JUnit 5 guide](docs/JUNIT5.md) for full details of the JUnit 5 (Jupiter) annotations and extension.
   * See [the JUnit 4 guide](docs/JUNIT4.md) for full details of the JUnit 4 rule, builder, and Vintage engine compatibility.
   * See [the listener documentation](docs/LISTENERS.md) for details of how to get various callbacks without using Kafka client libraries.
   * See [the event storage summary](docs/EVENT_STORAGE_SUMMARY.md) for details of the internal representation of events etc.
+  * See [the standalone guide](docs/STANDALONE.md) for running Kafkaesque as a Docker container or executable JAR.
   * See [the future directions documentation](docs/FUTURE.md) for a sketch of features I plan to add to Kafkaesque.
 
 ## License & Development

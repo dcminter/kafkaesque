@@ -3,7 +3,7 @@
 The following is a loose list of the things I'd like to add to Kafkaesque in roughly priority order
 
  * Proper example application that uses Kafka with a demo of the use of Kafkaesque
- * Web pages!
+ * Web pages! (perhaps added to the standalone Docker image)
  * A proper release pipeline
  * More helper methods for test suites (but which ones would be useful? Do we go full DSL?)
  * Various security stuff

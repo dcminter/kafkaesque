@@ -1,0 +1,10 @@
+**/target/
+**/.idea/
+**/*.iml
+.git/
+.github/
+docs/
+LICENSE.txt
+README.md
+CLAUDE.md
+.dockerignore

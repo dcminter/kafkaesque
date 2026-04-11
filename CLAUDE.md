@@ -16,6 +16,7 @@ Several directories exist. They are:
  * kafkaesque-it - This contains the integration tests (behavioural tests) for the library
  * kafkaesque-junit4 - This contains support (Rule/ClassRule) for using the library in JUnit 4 tests (also works with JUnit 5 Vintage)
  * kafkaesque-junit5 - This contains support (including annotations) for using the library in JUnit 5 (Jupiter) tests
+ * kafkaesque-standalone - This contains the standalone server entry point for running Kafkaesque as a Docker container or executable JAR
 
 The library implements the wire protocol directly - it does NOT run a real instance of Kafka at any point (outside of
 the library's own test scenarios); instead it creates its own sockets etc. but it DOES make use of the Kafka 

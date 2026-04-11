@@ -160,6 +160,7 @@
         <module>kafkaesque-core</module>
         <module>kafkaesque-junit4</module>
         <module>kafkaesque-junit5</module>
+        <module>kafkaesque-standalone</module>
         <module>kafkaesque-it</module>
     </modules>
 

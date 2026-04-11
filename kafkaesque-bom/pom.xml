@@ -154,6 +154,11 @@
                 <artifactId>kafkaesque-junit5</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency>
+                <groupId>eu.kafkaesque</groupId>
+                <artifactId>kafkaesque-standalone</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 </project>
