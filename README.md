@@ -1,23 +1,33 @@
 # Kafkaesque
 
-A library for mocking Kafka dependencies in a realistic way
+A library for mocking [Apache Kafka](https://kafka.apache.org/) dependencies in a realistic way.
+
+By re-using the Kafka client library datatypes, Kafkaesque is compatible with the Kafka TCP wire-protocol but without 
+the startup overhead required to launch the real Kafka brokers.
 
 ## Status
 
-Currently I'd call this a "potentially useful beta" - give it a whirl if you think it
-might be useful, but you'll need to build it yourself!
+Currently I'd call this a "potentially useful beta" - give it a whirl if you think it might be useful, but you'll 
+need to build it yourself!
 
-## Why not just use Kafka?
+Kafkaesque is currently compatible with the **3.9.0** Apache Client library.
 
-While running Kafka itself (perhaps within [TestContainers](https://testcontainers.com/modules/kafka/)) is a perfectly reasonable approach, it does have some drawbacks - depending on how you configure and launch it, it can be slow, perhaps taking multiple seconds to start up in a naiive configuration. If you're currently using Kafka in your integration tests and have no problems, then Kafkaesque is probably
-not the tool for you.
+## Why not just use real Kafka?
+
+While running Kafka itself (perhaps within [TestContainers](https://testcontainers.com/modules/kafka/)) is a perfectly reasonable approach, it does have 
+some drawbacks - depending on how you configure and launch it, it can be slow, perhaps taking multiple seconds to 
+start up in a naiive configuration. If you're currently using Kafka in your integration tests and have no problems, 
+then Kafkaesque is probably not the tool for you.
 
 If you're finding your Kafka tests are very slow (particularly if they launch large numbers of Kafka instances during 
 the test lifecycle), or you want more control over the exact behaviours you're testing for, then Kafkaesque might be 
 a good fit. It also might work for you if running Kafka inside testcontainers creates a dependency on Docker that 
 would otherwise be unnecessary.
 
-Note that if your tests are very slow because you're inserting `sleep` statements into otherwise fragile tests of asynchronous behaviour, then you might alternatively/additionally want to investigate the excellent [Awaitility library](http://www.awaitility.org/).
+Note that if your tests are very slow because you're inserting `sleep` statements into otherwise fragile tests of 
+asynchronous behaviour, then you might alternatively/additionally want to investigate the 
+excellent [Awaitility library](http://www.awaitility.org/). Also, if you need 100% guaranteed compatibility with real Kafka in your
+integration tests, you should do so - Kafkaesque cannot (and doesn't try to) be 100% compatible in every way.
 
 ## Building and testing
 
