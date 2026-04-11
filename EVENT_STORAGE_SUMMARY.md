@@ -2,26 +2,67 @@
 
 ## Overview
 
-Kafkaesque now stores all published events in memory and provides convenient methods to retrieve them directly from the `KafkaesqueServer` instance. This allows test code to verify that messages were published correctly without needing to set up a Kafka consumer.
+Kafkaesque stores all published events in memory and provides convenient methods to retrieve them directly from the `KafkaesqueServer` instance. This allows test code to verify that messages were published correctly without needing to set up a Kafka consumer.
 
-## New Classes
+The storage layer also supports Kafka's transactional semantics, including pending/committed/aborted record states and isolation-level-aware retrieval.
+
+## Storage Classes
 
 ### `StoredRecord`
-A record type that captures all metadata about a published event:
+An immutable record type that captures all metadata about a published event:
 - `topic` - the topic name
 - `partition` - the partition index
 - `offset` - the assigned offset within the partition
 - `timestamp` - the publication timestamp (epoch milliseconds)
+- `headers` - the record headers (never null; empty list if none were set)
 - `key` - the message key (nullable)
 - `value` - the message value (nullable)
-- `headers` - the record headers (never null; empty list if none were set)
+
+Provides `timestampAsInstant()` for time-based operations.
+
+### `RecordData`
+A context record used as input to `EventStore` storage methods, avoiding long parameter lists:
+- `topic`, `partition`, `timestamp`, `key`, `value`, `headers`
 
 ### `EventStore`
 Thread-safe in-memory storage for published events with the following features:
 - Automatic offset assignment per partition (starting from 0)
-- Organized by topic and partition
+- Organized by topic and partition via `TopicPartitionKey`
 - Multiple retrieval methods with filtering capabilities
 - Record counting and topic listing
+- Transaction support (pending, committed, aborted states)
+- Isolation-level-aware retrieval (READ_UNCOMMITTED / READ_COMMITTED)
+- Log start offset and last-stable-offset (LSO) tracking
+- Record deletion (advancing log start offset) and topic data purging
+
+Uses a nested `PartitionStore` inner class per topic-partition, each maintaining:
+- A synchronized list of `StoredRecord` objects
+- An atomic offset counter (`AtomicLong nextOffset`)
+- A log start offset (`AtomicLong logStartOffset`)
+- A transaction state map per offset
+
+### `TransactionState`
+An enum representing the commit state of a transactionally-produced record:
+- `PENDING` - written but transaction not yet finalized; visible only to READ_UNCOMMITTED consumers
+- `COMMITTED` - transaction committed; visible at all isolation levels
+- `ABORTED` - transaction aborted; never returned to consumers
+
+Non-transactional records carry no state and are always visible.
+
+### `TopicStore`
+Metadata registry for topic definitions. Manages:
+- `TopicCreationConfig` - configuration at creation time (partitions, replication factor, compression, cleanup policy, retention)
+- `TopicDefinition` - full topic metadata including a stable UUID
+- Topic creation, deletion, and partition count updates
+
+### `CleanupPolicy`
+An enum for log cleanup strategies:
+- `DELETE` - time/size-based retention (default)
+- `COMPACT` - log compaction (last record per key)
+- `COMPACT_DELETE` - both compaction and time/size retention
+
+### `AclStore`
+Store for Access Control List bindings, backed by a concurrent set of `AclBinding` records.
 
 ## Retrieval Methods on `KafkaesqueServer`
 
@@ -60,8 +101,11 @@ long getRecordCount(String topic)
 // Get record count for a specific topic and partition
 long getRecordCount(String topic, int partition)
 
-// Get all known topics
+// Get all topics that have received records
 List<String> getKnownTopics()
+
+// Get all topics registered via createTopic or admin API (even if no records published)
+List<String> getRegisteredTopics()
 ```
 
 ### Maintenance
@@ -69,6 +113,46 @@ List<String> getKnownTopics()
 ```java
 // Clear all stored records (useful for test cleanup)
 void clearRecords()
+```
+
+## EventStore Internal Methods
+
+These methods are used by the protocol handlers and are not exposed on `KafkaesqueServer`:
+
+### Isolation-Level-Aware Retrieval
+
+```java
+// Get records filtered by isolation level (0 = READ_UNCOMMITTED, 1 = READ_COMMITTED)
+List<StoredRecord> getRecords(String topic, int partition, byte isolationLevel)
+
+// Get last stable offset (first pending offset, or high watermark if no pending transactions)
+long getLastStableOffset(String topic, int partition)
+```
+
+### Transactional Storage
+
+```java
+// Store a record as part of a pending transaction
+long storePendingRecord(String transactionalId, RecordData data)
+
+// Commit all pending records for a transaction
+void commitTransaction(String transactionalId)
+
+// Abort all pending records for a transaction
+void abortTransaction(String transactionalId)
+
+// Query transaction state of a specific record
+TransactionState getTransactionState(String topic, int partition, long offset)
+```
+
+### Record Deletion
+
+```java
+// Advance the log start offset, effectively deleting earlier records
+long deleteRecordsBefore(String topic, int partition, long beforeOffset)
+
+// Purge all data for a topic
+void deleteTopicData(String topic)
 ```
 
 ## Usage Examples
@@ -143,30 +227,41 @@ void tearDown() {
 
 ### Offset Assignment
 - Each partition maintains its own offset counter starting from 0
-- Offsets are assigned sequentially and atomically
+- Offsets are assigned sequentially and atomically via `AtomicLong`
 - Different partitions have independent offset sequences
 
 ### Thread Safety
 - The `EventStore` is fully thread-safe
-- Uses `ConcurrentHashMap` for partition storage
+- Uses `ConcurrentHashMap` for partition storage with `computeIfAbsent` for lazy initialization
 - Synchronized access to record lists
 - Returns immutable copies from all retrieval methods
+
+### Transaction Support
+- Records produced within a transaction are initially stored as `PENDING`
+- The `TransactionCoordinator` calls `commitTransaction` or `abortTransaction` to finalize
+- `READ_COMMITTED` consumers only see records up to the last-stable-offset (LSO)
+- `READ_UNCOMMITTED` consumers see all records regardless of transaction state
+- Aborted records are filtered out at all isolation levels
 
 ### Record Storage
 - Records are stored in the order they are received
 - All metadata from the Kafka protocol is preserved
 - Keys and values are extracted from the Kafka record batches as strings
 
+### Record Deletion
+- `deleteRecordsBefore` advances the log start offset; records below it are excluded from retrieval
+- `deleteTopicData` purges all partition stores for a topic
+
 ## Testing
 
 ### Unit Tests
 - `EventStoreTest` - Comprehensive tests for the EventStore class
-  - 17 test cases covering all functionality
-  - Tests for offset assignment, filtering, counting, and edge cases
+  - 28 test cases covering all functionality
+  - Tests for offset assignment, filtering, counting, transactions, isolation levels, and edge cases
 
 ### Event Retrieval Tests
 - `KafkaesqueServerEventRetrievalTest` - Tests with real Kafka producer
-  - Located in `kafkaesque-core/src/test/` alongside the unit tests
+  - 11 test cases located in `kafkaesque-core/src/test/`
   - Tests publishing and retrieval workflows
   - Tests filtering and counting
   - Tests with multiple topics and partitions
