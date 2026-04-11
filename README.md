@@ -7,8 +7,8 @@ the startup overhead required to launch the real Kafka brokers.
 
 ## Status
 
-Currently I'd call this a "potentially useful beta" - give it a whirl if you think it might be useful, but you'll 
-need to build it yourself!
+I'd call this a "potentially useful beta" - give it a whirl if you think it might be handy, but you'll need to 
+build it yourself!
 
 Kafkaesque is currently compatible with the **3.9.0** Apache Client library.
 
@@ -38,6 +38,11 @@ so to build and run the test suite:
 $ ./mvnw clean verify
 ```
 
+## Further documentation
+
+  * See [the listener documentation](docs/LISTENERS.md) for details of how to get various callbacks without using Kafka client libraries.
+  * See [the event storage summary](docs/EVENT_STORAGE_SUMMARY.md) for details of the internal representation of events etc.
+
 ## License & Development
 
 The software [is licensed under the Apache License, Version 2.0](LICENSE.txt)
@@ -45,10 +50,6 @@ The software [is licensed under the Apache License, Version 2.0](LICENSE.txt)
 This software is designed to support projects making extensive use of Apache Kafka. It depends on
 Apache Kafka libraries for its wire-protocol types, and it therefore makes sense to release it under the
 same license.
-
-## Internals
-
-See [the event storage summary](EVENT_STORAGE_SUMMARY.md) for details of the internal representation of events etc.
 
 ## AI Declaration
 

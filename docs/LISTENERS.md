@@ -44,7 +44,9 @@ public interface TransactionCompletedListener {
 Listeners are registered on the `KafkaesqueServer` instance via `add*Listener()` methods.
 They can be registered at any point after server construction (before or after `start()`).
 
-### Example: Listening for Records Published to a Specific Topic
+### Example
+
+This example demostrates listening for Records published to a specific topic:
 
 ```java
 try (var server = new KafkaesqueServer("localhost", 0)) {
@@ -81,9 +83,9 @@ try (var server = new KafkaesqueServer("localhost", 0)) {
 ## Asynchronous Dispatch
 
 Listener callbacks are **not** invoked on the server's NIO event-loop thread. Instead, the
-event loop enqueues lightweight notification objects onto a `LinkedBlockingQueue` and returns
-immediately. A dedicated daemon thread (`kafkaesque-listener`) consumes from the queue and
-invokes the registered listeners. This means:
+event loop enqueues lightweight notification objects and returns immediately. A dedicated 
+daemon thread (`kafkaesque-listener`) consumes from the queue and invokes the registered 
+listeners. This means:
 
 - **The NIO event loop is never blocked by listener execution.** Slow or misbehaving
   listeners cannot stall protocol processing or cause client timeouts.
@@ -99,6 +101,6 @@ invokes the registered listeners. This means:
   thread. Use a thread-safe collection (e.g. `CopyOnWriteArrayList`) if the listener
   accumulates results that are read from the test thread.
 - If a listener throws an exception it is caught and logged; other registered listeners and
-  server operation are not affected.
+  server operations are not affected.
 - The consumer thread is shut down automatically when the server is closed. Any notifications
   already in the queue are delivered before the thread terminates.
