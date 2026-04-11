@@ -6,11 +6,10 @@
         </encoder>
     </appender>
 
-    <!-- Set default log level to INFO for tests -->
-    <root level="INFO">
+    <!-- Log level defaults to INFO; override with -Dlog.level=WARN in CI -->
+    <root level="${log.level:-INFO}">
         <appender-ref ref="STDOUT" />
     </root>
 
-    <!-- Set Kafkaesque components to INFO for better test visibility -->
-    <logger name="eu.kafkaesque" level="INFO" />
+    <logger name="eu.kafkaesque" level="${log.level:-INFO}" />
 </configuration>

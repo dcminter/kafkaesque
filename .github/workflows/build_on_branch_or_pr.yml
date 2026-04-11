@@ -1,0 +1,27 @@
+name: Build on Branch Push or PR creation
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SDKMAN and JDK 25
+        shell: bash
+        run: |
+          curl -s "https://get.sdkman.io?ci=true&rcupdate=false" | bash
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          sdk install java 25-tem
+          echo "JAVA_HOME=$(sdk home java 25-tem)" >> "$GITHUB_ENV"
+          echo "$(sdk home java 25-tem)/bin" >> "$GITHUB_PATH"
+
+      - name: Build and test
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress -Dlog.level=WARN clean verify

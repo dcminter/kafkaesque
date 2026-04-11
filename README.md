@@ -1,5 +1,7 @@
 # Kafkaesque
 
+![Build](https://github.com/dcminter/kafkaesque/actions/workflows/build_on_branch_or_pr.yml/badge.svg)
+
 A library for mocking [Apache Kafka](https://kafka.apache.org/) dependencies in a realistic way.
 
 By re-using the Kafka client library datatypes, Kafkaesque is compatible with the Kafka TCP wire-protocol but without 

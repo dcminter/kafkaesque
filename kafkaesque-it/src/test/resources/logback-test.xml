@@ -5,11 +5,12 @@
         </encoder>
     </appender>
 
-    <logger name="eu.kafkaesque" level="INFO"/>
-    <logger name="org.testcontainers" level="INFO"/>
+    <!-- Log level defaults to INFO; override with -Dlog.level=WARN in CI -->
+    <logger name="eu.kafkaesque" level="${log.level:-INFO}"/>
+    <logger name="org.testcontainers" level="${log.level:-INFO}"/>
     <logger name="org.apache.kafka" level="WARN"/>
 
-    <root level="INFO">
+    <root level="${log.level:-INFO}">
         <appender-ref ref="STDOUT"/>
     </root>
 </configuration>
