@@ -14,6 +14,7 @@ Several directories exist. They are:
  * kafkaesque-bom - This contains the "bill of materials" pom that defines all of the versions for dependencies of the project
  * kafkaesque-core - This will contain the core implementation classes of the library.
  * kafkaesque-it - This contains the integration tests (behavioural tests) for the library
+ * kafkaesque-junit4 - This contains support (Rule/ClassRule) for using the library in JUnit 4 tests (also works with JUnit 5 Vintage)
  * kafkaesque-junit5 - This contains support (including annotations) for using the library in JUnit 5 (Jupiter) tests
 
 The library implements the wire protocol directly - it does NOT run a real instance of Kafka at any point (outside of

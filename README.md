@@ -44,11 +44,14 @@ Or to install into your local artifact repository:
 $ ./mvnw clean install
 ```
 
-## Example
+## Examples
 
-This example assumes an existing application under test that consumes from an `orders` topic and
-publishes a confirmation to a `notifications` topic. Here's how you might write the test for JUnit 5
-using Kafkaesque:
+Kafkaesque provides direct support for JUnit 4 and JUnit 5. The following examples assume an existing application 
+under test that consumes from an `orders` topic and then publishes a confirmation to a `notifications` topic.
+
+### JUnit 5 (Jupiter)
+
+Here's how you might write the test for JUnit 5 using Kafkaesque:
 
 ```java
 @Kafkaesque(topics = {
@@ -90,8 +93,49 @@ class OrderNotificationServiceTest {
   * Kafkaesque exposes a `getRecordsByTopic(...)` method on the server that lets you inspect what was published without wiring up a consumer
   * The application under test uses standard Kafka clients and has no knowledge of Kafkaesque
 
+### JUnit 4
+
+The same scenario using JUnit 4's `@ClassRule`:
+
+```java
+public class OrderNotificationServiceTest {
+
+    @ClassRule
+    public static KafkaesqueRule kafkaesqueRule = KafkaesqueRule.builder()
+            .topics(
+                    new TopicDefinition("orders"),
+                    new TopicDefinition("notifications"))
+            .build();
+
+    @Test
+    public void shouldSendNotificationWhenOrderIsPlaced() throws Exception {
+        var application = new OrderNotificationService(kafkaesqueRule.getBootstrapServers());
+        application.start();
+
+        KafkaProducer<String, String> producer = kafkaesqueRule.createProducer();
+        producer.send(new ProducerRecord<>("orders", "order-123",
+                "{ \"customer\": \"Alice\", \"item\": \"Kafka In Action\", \"quantity\": 1}")).get();
+
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            var notifications = kafkaesqueRule.getServer().getRecordsByTopic("notifications");
+            assertThat(notifications).hasSize(1);
+            assertThat(notifications.getFirst().key()).isEqualTo("order-123");
+            assertThat(notifications.getFirst().value()).contains("Alice");
+        });
+
+        application.stop();
+    }
+}
+```
+
+  * `KafkaesqueRule` is a JUnit 4 `TestRule` and can be used as an `@Rule` (per-method) or `@ClassRule` (per-class)
+  * Topics can be configured via a builder pattern on the `KafkaesqueRule`
+  * Factory methods (`createProducer()`, `createConsumer(...)`) are provided to make it simpler to create clients connected to the mock server
+
 ## Further documentation
 
+  * See [the JUnit 5 guide](docs/JUNIT5.md) for full details of the JUnit 5 (Jupiter) annotations and extension.
+  * See [the JUnit 4 guide](docs/JUNIT4.md) for full details of the JUnit 4 rule, builder, and Vintage engine compatibility.
   * See [the listener documentation](docs/LISTENERS.md) for details of how to get various callbacks without using Kafka client libraries.
   * See [the event storage summary](docs/EVENT_STORAGE_SUMMARY.md) for details of the internal representation of events etc.
   * See [the future directions documentation](docs/FUTURE.md) for a sketch of features I plan to add to Kafkaesque.

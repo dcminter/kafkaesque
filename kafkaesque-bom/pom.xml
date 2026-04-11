@@ -21,6 +21,7 @@
         <kafka.version>3.9.0</kafka.version>
 
         <!-- Testing -->
+        <junit4.version>4.13.2</junit4.version>
         <junit.version>5.11.3</junit.version>
         <assertj.version>3.27.2</assertj.version>
         <awaitility.version>4.2.2</awaitility.version>
@@ -134,7 +135,20 @@
                 <version>${logback.version}</version>
             </dependency>
 
+            <!-- JUnit 4 -->
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>${junit4.version}</version>
+                <scope>test</scope>
+            </dependency>
+
             <!-- Kafkaesque modules -->
+            <dependency>
+                <groupId>eu.kafkaesque</groupId>
+                <artifactId>kafkaesque-junit4</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>eu.kafkaesque</groupId>
                 <artifactId>kafkaesque-junit5</artifactId>

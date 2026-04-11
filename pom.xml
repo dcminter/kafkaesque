@@ -22,6 +22,7 @@
         <kafka.version>3.9.2</kafka.version>
 
         <!-- Testing -->
+        <junit4.version>4.13.2</junit4.version>
         <junit.version>5.11.3</junit.version>
         <assertj.version>3.27.7</assertj.version>
         <awaitility.version>4.2.2</awaitility.version>
@@ -52,6 +53,14 @@
                 <artifactId>lombok</artifactId>
                 <version>${lombok.version}</version>
                 <scope>provided</scope>
+            </dependency>
+
+            <!-- JUnit 4 -->
+            <dependency>
+                <groupId>junit</groupId>
+                <artifactId>junit</artifactId>
+                <version>${junit4.version}</version>
+                <scope>test</scope>
             </dependency>
 
             <!-- JUnit 5 -->
@@ -148,6 +157,7 @@
     <modules>
         <module>kafkaesque-bom</module>
         <module>kafkaesque-core</module>
+        <module>kafkaesque-junit4</module>
         <module>kafkaesque-junit5</module>
         <module>kafkaesque-it</module>
     </modules>
