@@ -46,10 +46,10 @@ This software is designed to support projects making extensive use of Apache Kaf
 Apache Kafka libraries for its wire-protocol types, and it therefore makes sense to release it under the
 same license.
 
-## AI Declaration
-
-Large parts of this software were developed using [Claude Code](https://code.claude.com/)
-
 ## Internals
 
 See [the event storage summary](EVENT_STORAGE_SUMMARY.md) for details of the internal representation of events etc.
+
+## AI Declaration
+
+Large parts of this software were developed using [Claude Code](https://code.claude.com/)
