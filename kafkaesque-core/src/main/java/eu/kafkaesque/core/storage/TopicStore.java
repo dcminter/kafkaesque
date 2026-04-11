@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.storage;
 
+import eu.kafkaesque.core.listener.ListenerRegistry;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.compress.Compression;
 
@@ -87,6 +88,23 @@ public final class TopicStore {
             long retentionBytes) {}
 
     private final Map<String, TopicDefinition> topics = new ConcurrentHashMap<>();
+    private final ListenerRegistry listenerRegistry;
+
+    /**
+     * Creates a new topic store with a default (empty) listener registry.
+     */
+    public TopicStore() {
+        this(new ListenerRegistry());
+    }
+
+    /**
+     * Creates a new topic store that fires events through the given listener registry.
+     *
+     * @param listenerRegistry the registry whose listeners are notified when topics are created
+     */
+    public TopicStore(final ListenerRegistry listenerRegistry) {
+        this.listenerRegistry = listenerRegistry;
+    }
 
     /**
      * Registers a new topic with the given configuration, assigning it a stable random UUID.
@@ -98,9 +116,12 @@ public final class TopicStore {
      * @param config the creation configuration
      */
     public void createTopic(final String name, final TopicCreationConfig config) {
-        topics.putIfAbsent(name, new TopicDefinition(
+        final var previous = topics.putIfAbsent(name, new TopicDefinition(
             name, config.numPartitions(), config.replicationFactor(), Uuid.randomUuid(),
             config.compression(), config.cleanupPolicy(), config.retentionMs(), config.retentionBytes()));
+        if (previous == null) {
+            listenerRegistry.fireTopicCreated(name);
+        }
     }
 
     /**

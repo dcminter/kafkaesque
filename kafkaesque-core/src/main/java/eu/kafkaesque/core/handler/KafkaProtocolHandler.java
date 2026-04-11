@@ -2,6 +2,7 @@ package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.ServerInfo;
 import eu.kafkaesque.core.connection.ClientConnection;
+import eu.kafkaesque.core.listener.ListenerRegistry;
 import eu.kafkaesque.core.storage.AclStore;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.TopicStore;
@@ -70,6 +71,8 @@ import java.util.concurrent.atomic.AtomicReference;
 public final class KafkaProtocolHandler {
 
     @Getter
+    private final ListenerRegistry listenerRegistry;
+    @Getter
     private final EventStore eventStore;
     @Getter
     private final TopicStore topicStore;
@@ -95,6 +98,12 @@ public final class KafkaProtocolHandler {
     private final AtomicReference<Selector> selector = new AtomicReference<>();
 
     /**
+     * Bundles a {@link ListenerRegistry} with the {@link EventStore} it was given to,
+     * so that a single {@code this(...)} call can forward both from a static factory.
+     */
+    private record SharedStores(EventStore eventStore, ListenerRegistry listenerRegistry) {}
+
+    /**
      * Creates a new protocol handler with the given server info and a fresh event store,
      * with auto-topic-creation enabled.
      *
@@ -102,12 +111,15 @@ public final class KafkaProtocolHandler {
      *                   may be {@code null} to use built-in defaults
      */
     public KafkaProtocolHandler(final ServerInfo serverInfo) {
-        this(serverInfo, new EventStore(), true);
+        this(serverInfo, true);
     }
 
     /**
      * Creates a new protocol handler with the given server info, a fresh event store,
      * and configurable auto-topic-creation behaviour.
+     *
+     * <p>A single {@link ListenerRegistry} is created and shared between the new
+     * {@link EventStore} and {@link TopicStore}.</p>
      *
      * @param serverInfo              the server info used to advertise host and port in cluster responses;
      *                                may be {@code null} to use built-in defaults
@@ -115,7 +127,7 @@ public final class KafkaProtocolHandler {
      *                                for unknown topics instead of auto-creating them
      */
     public KafkaProtocolHandler(final ServerInfo serverInfo, final boolean autoCreateTopicsEnabled) {
-        this(serverInfo, new EventStore(), autoCreateTopicsEnabled);
+        this(serverInfo, createSharedStores(), autoCreateTopicsEnabled);
     }
 
     /**
@@ -127,7 +139,7 @@ public final class KafkaProtocolHandler {
      * {@link #KafkaProtocolHandler(ServerInfo, EventStore)} constructor.</p>
      */
     public KafkaProtocolHandler() {
-        this(null, new EventStore(), true);
+        this(null, true);
     }
 
     /**
@@ -140,7 +152,7 @@ public final class KafkaProtocolHandler {
      * @param eventStore the event store to use for storing published records
      */
     public KafkaProtocolHandler(final EventStore eventStore) {
-        this(null, eventStore, true);
+        this(null, eventStore, new ListenerRegistry(), true);
     }
 
     /**
@@ -152,12 +164,15 @@ public final class KafkaProtocolHandler {
      * @param eventStore the event store to use for storing published records
      */
     public KafkaProtocolHandler(final ServerInfo serverInfo, final EventStore eventStore) {
-        this(serverInfo, eventStore, true);
+        this(serverInfo, eventStore, new ListenerRegistry(), true);
     }
 
     /**
      * Creates a new protocol handler with the specified server info, event store,
      * and auto-topic-creation behaviour.
+     *
+     * <p>A new {@link ListenerRegistry} is created for the {@link TopicStore}.
+     * The provided event store retains its own registry.</p>
      *
      * @param serverInfo              the server info used to advertise host and port in cluster responses;
      *                                may be {@code null} to use built-in defaults
@@ -169,11 +184,45 @@ public final class KafkaProtocolHandler {
             final ServerInfo serverInfo,
             final EventStore eventStore,
             final boolean autoCreateTopicsEnabled) {
+        this(serverInfo, eventStore, new ListenerRegistry(), autoCreateTopicsEnabled);
+    }
+
+    /**
+     * Delegating constructor used by {@link #KafkaProtocolHandler(ServerInfo, boolean)} to
+     * forward the bundled stores created by {@link #createSharedStores()}.
+     *
+     * @param serverInfo              the server info for cluster responses
+     * @param stores                  the bundled event store and shared listener registry
+     * @param autoCreateTopicsEnabled whether to auto-create topics
+     */
+    private KafkaProtocolHandler(
+            final ServerInfo serverInfo,
+            final SharedStores stores,
+            final boolean autoCreateTopicsEnabled) {
+        this(serverInfo, stores.eventStore(), stores.listenerRegistry(), autoCreateTopicsEnabled);
+    }
+
+    /**
+     * Primary constructor that wires all components together with a shared listener registry.
+     *
+     * @param serverInfo              the server info used to advertise host and port in cluster responses;
+     *                                may be {@code null} to use built-in defaults
+     * @param eventStore              the event store to use for storing published records
+     * @param listenerRegistry        the listener registry shared across stores
+     * @param autoCreateTopicsEnabled {@code false} to return {@code UNKNOWN_TOPIC_OR_PARTITION}
+     *                                for unknown topics instead of auto-creating them
+     */
+    public KafkaProtocolHandler(
+            final ServerInfo serverInfo,
+            final EventStore eventStore,
+            final ListenerRegistry listenerRegistry,
+            final boolean autoCreateTopicsEnabled) {
+        this.listenerRegistry = listenerRegistry;
         this.eventStore = eventStore;
         final var groupCoordinator = new GroupCoordinator();
         final var transactionCoordinator = new TransactionCoordinator(eventStore);
         final var fetchSessionCoordinator = new FetchSessionCoordinator();
-        this.topicStore = new TopicStore();
+        this.topicStore = new TopicStore(listenerRegistry);
         this.clusterApiHandler = new ClusterApiHandler(serverInfo, this.topicStore, autoCreateTopicsEnabled);
         this.consumerGroupApiHandler = new ConsumerGroupApiHandler(groupCoordinator, this::enqueueResponse);
         this.consumerDataApiHandler = new ConsumerDataApiHandler(
@@ -182,6 +231,16 @@ public final class KafkaProtocolHandler {
         this.adminApiHandler = new AdminApiHandler(this.topicStore, eventStore);
         this.transactionApiHandler = new TransactionApiHandler(transactionCoordinator, groupCoordinator);
         this.aclApiHandler = new AclApiHandler(new AclStore());
+    }
+
+    /**
+     * Creates a shared {@link ListenerRegistry} and an {@link EventStore} wired to it.
+     *
+     * @return a bundle containing both the event store and the shared registry
+     */
+    private static SharedStores createSharedStores() {
+        final var registry = new ListenerRegistry();
+        return new SharedStores(new EventStore(registry), registry);
     }
 
     /**
@@ -277,10 +336,12 @@ public final class KafkaProtocolHandler {
     }
 
     /**
-     * Shuts down background resources owned by this handler (e.g. the rebalance scheduler).
+     * Shuts down background resources owned by this handler (e.g. the rebalance scheduler
+     * and the listener consumer thread).
      */
     public void close() {
         consumerGroupApiHandler.close();
+        listenerRegistry.close();
     }
 
     /**

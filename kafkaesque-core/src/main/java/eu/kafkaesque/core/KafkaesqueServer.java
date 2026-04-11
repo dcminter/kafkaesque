@@ -2,6 +2,9 @@ package eu.kafkaesque.core;
 
 import eu.kafkaesque.core.connection.ClientConnection;
 import eu.kafkaesque.core.handler.KafkaProtocolHandler;
+import eu.kafkaesque.core.listener.RecordPublishedListener;
+import eu.kafkaesque.core.listener.TopicCreatedListener;
+import eu.kafkaesque.core.listener.TransactionCompletedListener;
 import eu.kafkaesque.core.storage.StoredRecord;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.compress.Compression;
@@ -358,6 +361,41 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      */
     public void createTopic(final String name, final int numPartitions, final short replicationFactor) {
         createTopic(name, numPartitions, replicationFactor, Compression.NONE);
+    }
+
+    // Listener registration
+
+    /**
+     * Registers a listener that is called whenever a record is published to the server.
+     *
+     * <p>The listener is invoked for every record stored, including records that are part of
+     * a pending transaction. Listeners can be registered before or after {@link #start()}.</p>
+     *
+     * @param listener the listener to register
+     */
+    public void addRecordPublishedListener(final RecordPublishedListener listener) {
+        protocolHandler.getListenerRegistry().addRecordPublishedListener(listener);
+    }
+
+    /**
+     * Registers a listener that is called when a new topic is created on the server.
+     *
+     * <p>The listener fires only for genuinely new topics; duplicate creation of an
+     * already-existing topic does not trigger a callback.</p>
+     *
+     * @param listener the listener to register
+     */
+    public void addTopicCreatedListener(final TopicCreatedListener listener) {
+        protocolHandler.getListenerRegistry().addTopicCreatedListener(listener);
+    }
+
+    /**
+     * Registers a listener that is called when a transaction is committed or aborted.
+     *
+     * @param listener the listener to register
+     */
+    public void addTransactionCompletedListener(final TransactionCompletedListener listener) {
+        protocolHandler.getListenerRegistry().addTransactionCompletedListener(listener);
     }
 
     // Event retrieval methods

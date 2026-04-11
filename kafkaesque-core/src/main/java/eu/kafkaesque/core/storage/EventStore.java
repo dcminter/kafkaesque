@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.storage;
 
+import eu.kafkaesque.core.listener.ListenerRegistry;
 import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -160,6 +161,24 @@ public final class EventStore {
      */
     private final Map<String, List<PartitionOffset>> pendingByTransaction = new ConcurrentHashMap<>();
 
+    private final ListenerRegistry listenerRegistry;
+
+    /**
+     * Creates a new event store with a default (empty) listener registry.
+     */
+    public EventStore() {
+        this(new ListenerRegistry());
+    }
+
+    /**
+     * Creates a new event store that fires events through the given listener registry.
+     *
+     * @param listenerRegistry the registry whose listeners are notified on store operations
+     */
+    public EventStore(final ListenerRegistry listenerRegistry) {
+        this.listenerRegistry = listenerRegistry;
+    }
+
     /**
      * Stores a published record with no headers and assigns it an offset.
      *
@@ -198,6 +217,10 @@ public final class EventStore {
 
         log.debug("Stored record on topic={} partition={} at offset={}", data.topic(), data.partition(), offset);
 
+        listenerRegistry.fireRecordPublished(new StoredRecord(
+            data.topic(), data.partition(), offset, data.timestamp(),
+            data.headers(), data.key(), data.value()));
+
         return offset;
     }
 
@@ -226,6 +249,10 @@ public final class EventStore {
         log.debug("Stored pending record for transaction {} on topic={} partition={} at offset={}",
             transactionalId, data.topic(), data.partition(), offset);
 
+        listenerRegistry.fireRecordPublished(new StoredRecord(
+            data.topic(), data.partition(), offset, data.timestamp(),
+            data.headers(), data.key(), data.value()));
+
         return offset;
     }
 
@@ -250,6 +277,7 @@ public final class EventStore {
                 }
             }
             log.debug("Committed transaction {} ({} record(s))", transactionalId, pending.size());
+            listenerRegistry.fireTransactionCompleted(transactionalId, true);
         }
     }
 
@@ -274,6 +302,7 @@ public final class EventStore {
                 }
             }
             log.debug("Aborted transaction {} ({} record(s))", transactionalId, pending.size());
+            listenerRegistry.fireTransactionCompleted(transactionalId, false);
         }
     }
 

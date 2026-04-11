@@ -252,12 +252,48 @@ void tearDown() {
 - `deleteRecordsBefore` advances the log start offset; records below it are excluded from retrieval
 - `deleteTopicData` purges all partition stores for a topic
 
+## Listeners
+
+Kafkaesque supports registering listeners that receive callbacks when server events occur.
+Listeners are registered on `KafkaesqueServer` and dispatched asynchronously via a
+`LinkedBlockingQueue` consumed by a dedicated daemon thread, so listener execution never
+blocks the NIO event loop.
+
+### Listener Types
+
+| Interface | Fires when |
+|---|---|
+| `RecordPublishedListener` | A record is stored (transactional-pending or non-transactional) |
+| `TopicCreatedListener` | A new topic is registered (not on duplicate creation) |
+| `TransactionCompletedListener` | A transaction is committed or aborted |
+
+### Architecture
+
+- `ListenerNotification` is a sealed interface with record subtypes (`RecordPublished`,
+  `TopicCreated`, `TransactionCompleted`, `Shutdown`) representing queued notifications.
+- `ListenerRegistry` holds registered listeners in thread-safe lists and a
+  `LinkedBlockingQueue` of notifications. A daemon thread consumes the queue and dispatches
+  to listeners. `close()` sends a poison pill and waits for the thread to drain and stop.
+- `EventStore` enqueues `RecordPublished` notifications in `storeRecord()` and
+  `storePendingRecord()`, and `TransactionCompleted` notifications in `commitTransaction()`
+  and `abortTransaction()`.
+- `TopicStore` enqueues `TopicCreated` notifications in `createTopic()` when a topic is
+  genuinely new.
+- `KafkaProtocolHandler` creates a shared `ListenerRegistry` and passes it to both stores.
+  Its `close()` method shuts down the registry's consumer thread.
+- `KafkaesqueServer` exposes `addRecordPublishedListener()`, `addTopicCreatedListener()`, and
+  `addTransactionCompletedListener()` convenience methods.
+
+See `LISTENERS.md` for usage examples.
+
 ## Testing
 
 ### Unit Tests
 - `EventStoreTest` - Comprehensive tests for the EventStore class
-  - 28 test cases covering all functionality
-  - Tests for offset assignment, filtering, counting, transactions, isolation levels, and edge cases
+  - 32 test cases covering all functionality
+  - Tests for offset assignment, filtering, counting, transactions, isolation levels, listeners, and edge cases
+- `ListenerRegistryTest` - Tests for the listener registry
+  - 12 test cases covering registration, notification, multiple listeners, exception handling
 
 ### Event Retrieval Tests
 - `KafkaesqueServerEventRetrievalTest` - Tests with real Kafka producer

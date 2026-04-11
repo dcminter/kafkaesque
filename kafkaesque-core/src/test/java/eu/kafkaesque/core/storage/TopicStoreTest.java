@@ -1,8 +1,14 @@
 package eu.kafkaesque.core.storage;
 
+import eu.kafkaesque.core.listener.ListenerRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+
+import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -112,5 +118,47 @@ class TopicStoreTest {
         assertThat(topicStore.deleteTopic("my-topic")).isTrue();
         assertThat(topicStore.hasTopic("my-topic")).isFalse();
         assertThat(topicStore.deleteTopic("my-topic")).isFalse();
+    }
+
+    // --- Listener tests ---
+
+    @Test
+    void createTopic_shouldFireTopicCreatedListener() throws InterruptedException {
+        final var registry = new ListenerRegistry();
+        try {
+            final var latch = new CountDownLatch(1);
+            final List<String> received = new CopyOnWriteArrayList<>();
+            registry.addTopicCreatedListener(t -> { received.add(t); latch.countDown(); });
+
+            final var store = new TopicStore(registry);
+            store.createTopic("my-topic", 3, (short) 1);
+
+            assertThat(latch.await(5, SECONDS)).isTrue();
+            assertThat(received).containsExactly("my-topic");
+        } finally {
+            registry.close();
+        }
+    }
+
+    @Test
+    void createTopic_shouldNotFireListenerOnDuplicate() throws InterruptedException {
+        final var registry = new ListenerRegistry();
+        try {
+            final var latch = new CountDownLatch(1);
+            final List<String> received = new CopyOnWriteArrayList<>();
+            registry.addTopicCreatedListener(t -> { received.add(t); latch.countDown(); });
+
+            final var store = new TopicStore(registry);
+            store.createTopic("my-topic", 3, (short) 1);
+            store.createTopic("my-topic", 3, (short) 1);
+
+            // Wait for the first (and only) notification
+            assertThat(latch.await(5, SECONDS)).isTrue();
+            // Drain the queue -- any spurious second notification would be delivered here
+            registry.close();
+            assertThat(received).containsExactly("my-topic");
+        } finally {
+            registry.close();
+        }
     }
 }

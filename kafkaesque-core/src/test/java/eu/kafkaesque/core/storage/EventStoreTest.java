@@ -1,13 +1,19 @@
 package eu.kafkaesque.core.storage;
 
+import eu.kafkaesque.core.listener.ListenerRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 
 import static java.util.Collections.emptyList;
 import static java.util.List.of;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -442,5 +448,99 @@ class EventStoreTest {
         assertThrows(UnsupportedOperationException.class,
             () -> topics.add("new-topic"),
             "Returned list should be unmodifiable");
+    }
+
+    // --- Listener tests ---
+
+    @Test
+    void storeRecord_shouldFireRecordPublishedListener() throws InterruptedException {
+        final var registry = new ListenerRegistry();
+        try {
+            final var latch = new CountDownLatch(1);
+            final List<StoredRecord> received = new CopyOnWriteArrayList<>();
+            registry.addRecordPublishedListener(r -> { received.add(r); latch.countDown(); });
+
+            final var store = new EventStore(registry);
+            store.storeRecord("topic", 0, 1000L, "key", "value");
+
+            assertThat(latch.await(5, SECONDS)).isTrue();
+            assertThat(received).hasSize(1);
+            assertThat(received.getFirst().topic()).isEqualTo("topic");
+            assertThat(received.getFirst().key()).isEqualTo("key");
+            assertThat(received.getFirst().value()).isEqualTo("value");
+            assertThat(received.getFirst().offset()).isEqualTo(0L);
+        } finally {
+            registry.close();
+        }
+    }
+
+    @Test
+    void storePendingRecord_shouldFireRecordPublishedListener() throws InterruptedException {
+        final var registry = new ListenerRegistry();
+        try {
+            final var latch = new CountDownLatch(1);
+            final List<StoredRecord> received = new CopyOnWriteArrayList<>();
+            registry.addRecordPublishedListener(r -> { received.add(r); latch.countDown(); });
+
+            final var store = new EventStore(registry);
+            store.storePendingRecord("txn-1", new RecordData("topic", 0, 1000L, "key", "value", of()));
+
+            assertThat(latch.await(5, SECONDS)).isTrue();
+            assertThat(received).hasSize(1);
+            assertThat(received.getFirst().topic()).isEqualTo("topic");
+            assertThat(received.getFirst().key()).isEqualTo("key");
+        } finally {
+            registry.close();
+        }
+    }
+
+    @Test
+    void commitTransaction_shouldFireTransactionCompletedListener() throws InterruptedException {
+        final var registry = new ListenerRegistry();
+        try {
+            final var latch = new CountDownLatch(1);
+            final List<String> committedIds = new CopyOnWriteArrayList<>();
+            final List<Boolean> committedFlags = new CopyOnWriteArrayList<>();
+            registry.addTransactionCompletedListener((final String id, final boolean committed) -> {
+                committedIds.add(id);
+                committedFlags.add(committed);
+                latch.countDown();
+            });
+
+            final var store = new EventStore(registry);
+            store.storePendingRecord("txn-1", new RecordData("topic", 0, 1000L, "key", "value", of()));
+            store.commitTransaction("txn-1");
+
+            assertThat(latch.await(5, SECONDS)).isTrue();
+            assertThat(committedIds).containsExactly("txn-1");
+            assertThat(committedFlags).containsExactly(true);
+        } finally {
+            registry.close();
+        }
+    }
+
+    @Test
+    void abortTransaction_shouldFireTransactionCompletedListener() throws InterruptedException {
+        final var registry = new ListenerRegistry();
+        try {
+            final var latch = new CountDownLatch(1);
+            final List<String> committedIds = new CopyOnWriteArrayList<>();
+            final List<Boolean> committedFlags = new CopyOnWriteArrayList<>();
+            registry.addTransactionCompletedListener((final String id, final boolean committed) -> {
+                committedIds.add(id);
+                committedFlags.add(committed);
+                latch.countDown();
+            });
+
+            final var store = new EventStore(registry);
+            store.storePendingRecord("txn-1", new RecordData("topic", 0, 1000L, "key", "value", of()));
+            store.abortTransaction("txn-1");
+
+            assertThat(latch.await(5, SECONDS)).isTrue();
+            assertThat(committedIds).containsExactly("txn-1");
+            assertThat(committedFlags).containsExactly(false);
+        } finally {
+            registry.close();
+        }
     }
 }
