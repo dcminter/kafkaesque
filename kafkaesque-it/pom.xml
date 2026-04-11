@@ -15,6 +15,16 @@
     <name>Kafkaesque Integration Tests</name>
     <description>Integration tests for Kafkaesque mock Kafka service</description>
 
+    <properties>
+        <!-- Do not publish integration test module -->
+        <maven.deploy.skip>true</maven.deploy.skip>
+        <central.publishing.skip>true</central.publishing.skip>
+        <maven.install.skip>true</maven.install.skip>
+        <gpg.skip>true</gpg.skip>
+        <maven.source.skip>true</maven.source.skip>
+        <maven.javadoc.skip>true</maven.javadoc.skip>
+    </properties>
+
     <dependencies>
         <!-- Kafkaesque core for testing -->
         <dependency>

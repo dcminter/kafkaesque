@@ -1,0 +1,64 @@
+name: Release to Maven Central
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: Maven Publishing
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SDKMAN and JDK 25
+        shell: bash
+        run: |
+          curl -s "https://get.sdkman.io?ci=true&rcupdate=false" | bash
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          sdk install java 25-tem
+          echo "JAVA_HOME=$(sdk home java 25-tem)" >> "$GITHUB_ENV"
+          echo "$(sdk home java 25-tem)/bin" >> "$GITHUB_PATH"
+
+      - name: Import GPG key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+          echo "allow-loopback-pinentry" >> ~/.gnupg/gpg-agent.conf
+          gpgconf --kill gpg-agent
+
+      - name: Set release version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "RELEASE_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "Setting version to: ${VERSION}"
+
+      - name: Set version in POMs
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress \
+            versions:set -DnewVersion="${RELEASE_VERSION}" -DgenerateBackupPoms=false
+
+      - name: Build and publish to Maven Central
+        env:
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_TOKEN: ${{ secrets.CENTRAL_TOKEN }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress \
+            -Prelease \
+            -pl '!kafkaesque-it' \
+            -Dlog.level=WARN \
+            clean deploy
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          tag_name: ${{ github.ref_name }}

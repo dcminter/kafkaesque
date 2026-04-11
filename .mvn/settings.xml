@@ -12,4 +12,12 @@
       <blocked>true</blocked>
     </mirror>
   </mirrors>
+
+  <servers>
+    <server>
+      <id>central</id>
+      <username>${env.CENTRAL_USERNAME}</username>
+      <password>${env.CENTRAL_TOKEN}</password>
+    </server>
+  </servers>
 </settings>

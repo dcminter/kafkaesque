@@ -9,8 +9,7 @@ the startup overhead required to launch the real Kafka brokers.
 
 ## Status
 
-I'd call this a "potentially useful beta" - give it a whirl if you think it might be handy, but you'll need to 
-build it yourself!
+I'd call this a "potentially useful beta" - give it a whirl if you think it might be handy!
 
 Kafkaesque is currently compatible with the **3.9.0** Apache Client library.
 
@@ -30,6 +29,48 @@ Note that if your tests are very slow because you're inserting `sleep` statement
 asynchronous behaviour, then you might alternatively/additionally want to investigate the 
 excellent [Awaitility library](http://www.awaitility.org/). Also, if you need 100% guaranteed compatibility with real Kafka in your
 integration tests, you should do so - Kafkaesque cannot (and doesn't try to) be 100% compatible in every way.
+
+## Installation
+
+Kafkaesque is published to Maven Central. Add the dependency for your test framework:
+
+**JUnit 5 (Jupiter):**
+
+```xml
+<dependency>
+    <groupId>eu.kafkaesque</groupId>
+    <artifactId>kafkaesque-junit5</artifactId>
+    <version>0.1.0</version>
+    <scope>test</scope>
+</dependency>
+```
+
+**JUnit 4:**
+
+```xml
+<dependency>
+    <groupId>eu.kafkaesque</groupId>
+    <artifactId>kafkaesque-junit4</artifactId>
+    <version>0.1.0</version>
+    <scope>test</scope>
+</dependency>
+```
+
+**Or use the BOM for dependency management:**
+
+```xml
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>eu.kafkaesque</groupId>
+            <artifactId>kafkaesque-bom</artifactId>
+            <version>0.1.0</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
 
 ## Building and testing
 
