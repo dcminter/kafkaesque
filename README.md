@@ -40,7 +40,49 @@ $ ./mvnw clean verify
 
 ## Example
 
-TODO
+Imagine an `OrderNotificationService` — your application under test — that consumes from an `orders` topic and
+publishes a confirmation to a `notifications` topic. Here's how you'd test it with Kafkaesque:
+
+```java
+@Kafkaesque(topics = {
+    @KafkaesqueTopic(name = "orders"),
+    @KafkaesqueTopic(name = "notifications")
+})
+class OrderNotificationServiceTest {
+
+    @Test
+    void shouldSendNotificationWhenOrderIsPlaced(
+            final KafkaesqueServer server,
+            @KafkaesqueProducer final KafkaProducer<String, String> producer) throws Exception {
+
+        // Start the application under test, pointed at our mock Kafka
+        var service = new OrderNotificationService(server.getBootstrapServers());
+        service.start();
+
+        // Simulate an incoming order
+        producer.send(new ProducerRecord<>("orders", "order-123",
+                """
+                {"customer": "Alice", "item": "Kafka In Action", "quantity": 1}""")).get();
+
+        // Verify that the service produced a notification in response
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            var notifications = server.getRecordsByTopic("notifications");
+            assertThat(notifications).hasSize(1);
+            assertThat(notifications.getFirst().key()).isEqualTo("order-123");
+            assertThat(notifications.getFirst().value()).contains("Alice");
+        });
+
+        service.stop();
+    }
+}
+```
+
+A few things to note:
+
+  * **No Docker, no broker** — the `@Kafkaesque` annotation spins up an in-process mock that speaks the real Kafka wire protocol
+  * **Annotation-driven setup** — `@KafkaesqueTopic` pre-creates topics; `@KafkaesqueProducer` injects a ready-to-use producer
+  * **Server-side verification** — `server.getRecordsByTopic(...)` lets you inspect what was published without wiring up a consumer
+  * **Your app uses standard Kafka clients** — `OrderNotificationService` has no idea it's talking to a mock
 
 ## Further documentation
 
