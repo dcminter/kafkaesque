@@ -38,10 +38,15 @@ so to build and run the test suite:
 $ ./mvnw clean verify
 ```
 
+## Example
+
+TODO
+
 ## Further documentation
 
   * See [the listener documentation](docs/LISTENERS.md) for details of how to get various callbacks without using Kafka client libraries.
   * See [the event storage summary](docs/EVENT_STORAGE_SUMMARY.md) for details of the internal representation of events etc.
+  * See [the future directions documentation](docs/FUTURE.md) for a sketch of features I plan to add to Kafkaesque.
 
 ## License & Development
 

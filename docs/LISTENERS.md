@@ -5,7 +5,7 @@ This allows test code to react to events as they happen rather than polling retr
 
 ## Available Listener Types
 
-We're open to adding more listeners if there's demand for them; for now we have the following ones:
+I'm open to adding more listeners if there's demand for them; for now there are the following:
 
 ### RecordPublishedListener
 
