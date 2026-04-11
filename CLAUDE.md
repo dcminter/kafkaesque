@@ -31,6 +31,7 @@ all reported violations before considering the task complete. This will enforce 
   * Integration test cases must always be run against both Kafkaesque and the real Kafka brokers to verify that we're correctly implementing the Kafka line protocol
   * Immutability is encouraged wherever reasonably possible; all parameters, fields, and variables should therefore be declared `final` unless their mutability is essential.
   * Modern Java features are encouraged - for example prefer `record` types to classes for simple DTOs 
+  * After making changes make sure to bring the `EVENT_STORAGE_SUMMARY.md` document in the project root up to date.
   * Lean towards declaring collection fields and parameters as interface types (Map, Set, etc) rather than concrete types (HashMap, HashSet, etc.)
     * i.e. prefer `private final Map<String,String> foo = ConcreteHashMap<>()` to `private final ConcreteHashMap<String,String> foo = ConcreteHashMap<>()`
     * But for local variables prefer `var`, i.e. `let var foo = ConcreteHashMap<String,String>()` form
