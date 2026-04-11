@@ -2,7 +2,6 @@
 
 The following is a loose list of the things I'd like to add to Kafkaesque in roughly priority order
 
- * A good example test in the README
  * JUnit 4 / JUnit 5 Vintage support (Rule, ClassRule)
  * Proper example application that uses Kafka with a demo of the use of Kafkaesque
  * Web pages!
