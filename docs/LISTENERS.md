@@ -5,6 +5,8 @@ This allows test code to react to events as they happen rather than polling retr
 
 ## Available Listener Types
 
+We're open to adding more listeners if there's demand for them; for now we have the following ones:
+
 ### RecordPublishedListener
 
 Called whenever a record is stored on the server, whether as part of a transaction or not.
@@ -46,16 +48,18 @@ They can be registered at any point after server construction (before or after `
 
 ### Example
 
-This example demostrates listening for Records published to a specific topic:
+This example demonstrates listening for Records published to a specific topic:
 
 ```java
 try (var server = new KafkaesqueServer("localhost", 0)) {
     var orderEvents = new CopyOnWriteArrayList<StoredRecord>();
+    var latch = new CountDownLatch(2); // expect 2 "orders" records
 
     // Register a listener that captures records for the "orders" topic
     server.addRecordPublishedListener(record -> {
         if ("orders".equals(record.topic())) {
             orderEvents.add(record);
+            latch.countDown();
         }
     });
 
@@ -72,6 +76,9 @@ try (var server = new KafkaesqueServer("localhost", 0)) {
         producer.send(new ProducerRecord<>("other-topic", "key", "value")).get();
         producer.send(new ProducerRecord<>("orders", "order-2", "shipped")).get();
     }
+
+    // Wait for the async listener callbacks before asserting
+    assertTrue(latch.await(5, TimeUnit.SECONDS), "Timed out waiting for listener callbacks");
 
     // The listener captured only the "orders" records
     assertEquals(2, orderEvents.size());
