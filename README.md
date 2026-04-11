@@ -2,6 +2,11 @@
 
 A library for mocking Kafka dependencies in a realistic way
 
+## Status
+
+Currently I'd call this a "potentially useful beta" - give it a whirl if you think it
+might be useful, but you'll need to build it yourself!
+
 ## Why not just use Kafka?
 
 While running Kafka itself (perhaps within [TestContainers](https://testcontainers.com/modules/kafka/)) is a perfectly reasonable approach, it does have some drawbacks - depending on how you configure and launch it, it can be slow, perhaps taking multiple seconds to start up in a naiive configuration. If you're currently using Kafka in your integration tests and have no problems, then Kafkaesque is probably
