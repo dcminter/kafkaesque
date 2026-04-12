@@ -30,6 +30,107 @@ asynchronous behaviour, then you might alternatively/additionally want to invest
 excellent [Awaitility library](http://www.awaitility.org/). Also, if you need 100% guaranteed compatibility with real Kafka in your
 integration tests, you should do so - Kafkaesque cannot (and doesn't try to) be 100% compatible in every way.
 
+## Examples
+
+Kafkaesque provides direct support for JUnit 4 and JUnit 5. The following examples assume an existing application
+under test that consumes from an `orders` topic and then publishes a confirmation to a `notifications` topic.
+
+### JUnit 5 (Jupiter)
+
+Here's how you might write the test for JUnit 5 using Kafkaesque:
+
+```java
+@Kafkaesque(topics = {
+    @KafkaesqueTopic(name = "orders"),
+    @KafkaesqueTopic(name = "notifications")
+})
+class OrderNotificationServiceTest {
+
+    @Test
+    void shouldSendNotificationWhenOrderIsPlaced(
+            final KafkaesqueServer kafkaesque,
+            @KafkaesqueProducer final KafkaProducer<String, String> producer) throws Exception {
+
+        // Start the application under test, pointed at our mock Kafka
+        var application = new OrderNotificationService(kafkaesque.getBootstrapServers());
+        application.start();
+
+        // Simulate an incoming order
+        producer.send(new ProducerRecord<>("orders", "order-123",
+                """
+                { "customer": "Alice", "item": "Kafka In Action", "quantity": 1}
+                """)).get();
+
+        // Verify that the service produced a notification in response
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            var notifications = kafkaesque.getRecordsByTopic("notifications");
+            assertThat(notifications).hasSize(1);
+            assertThat(notifications.getFirst().key()).isEqualTo("order-123");
+            assertThat(notifications.getFirst().value()).contains("Alice");
+        });
+
+        application.stop();
+    }
+}
+```
+
+* The `@Kafkaesque` annotation spins up an in-process mock that speaks the real Kafka wire protocol
+* The topics and producer are created via Kafkaesque's annotations
+* Kafkaesque exposes a `getRecordsByTopic(...)` method on the server that lets you inspect what was published without wiring up a consumer
+* The application under test uses standard Kafka clients and has no knowledge of Kafkaesque
+
+### JUnit 4
+
+The same scenario using JUnit 4's `@ClassRule`:
+
+```java
+public class OrderNotificationServiceTest {
+
+    @ClassRule
+    public static KafkaesqueRule kafkaesqueRule = KafkaesqueRule.builder()
+            .topics(
+                    new TopicDefinition("orders"),
+                    new TopicDefinition("notifications"))
+            .build();
+
+    @Test
+    public void shouldSendNotificationWhenOrderIsPlaced() throws Exception {
+        var application = new OrderNotificationService(kafkaesqueRule.getBootstrapServers());
+        application.start();
+
+        KafkaProducer<String, String> producer = kafkaesqueRule.createProducer();
+        producer.send(new ProducerRecord<>("orders", "order-123",
+                "{ \"customer\": \"Alice\", \"item\": \"Kafka In Action\", \"quantity\": 1}")).get();
+
+        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+            var notifications = kafkaesqueRule.getServer().getRecordsByTopic("notifications");
+            assertThat(notifications).hasSize(1);
+            assertThat(notifications.getFirst().key()).isEqualTo("order-123");
+            assertThat(notifications.getFirst().value()).contains("Alice");
+        });
+
+        application.stop();
+    }
+}
+```
+
+* `KafkaesqueRule` is a JUnit 4 `TestRule` and can be used as an `@Rule` (per-method) or `@ClassRule` (per-class)
+* Topics can be configured via a builder pattern on the `KafkaesqueRule`
+* Factory methods (`createProducer()`, `createConsumer(...)`) are provided to make it simpler to create clients connected to the mock server
+
+### Standalone Docker Container
+
+Kafkaesque can also run as a standalone service via Docker, useful during local development or
+in CI pipelines. A pre-built image is published to GitHub Container Registry on each release:
+
+```bash
+docker pull ghcr.io/dcminter/kafkaesque:latest
+docker run -p 9092:9092 ghcr.io/dcminter/kafkaesque:latest
+```
+
+Your Kafka clients can then connect to `localhost:9092`. See [the standalone guide](docs/STANDALONE.md)
+for configuration options and Docker Compose examples.
+
 ## Installation
 
 Kafkaesque is published to Maven Central. Add the dependency for your test framework:
@@ -87,113 +188,12 @@ Or to install into your local artifact repository:
 $ ./mvnw clean install
 ```
 
-## Examples
-
-Kafkaesque provides direct support for JUnit 4 and JUnit 5. The following examples assume an existing application 
-under test that consumes from an `orders` topic and then publishes a confirmation to a `notifications` topic.
-
-### JUnit 5 (Jupiter)
-
-Here's how you might write the test for JUnit 5 using Kafkaesque:
-
-```java
-@Kafkaesque(topics = {
-    @KafkaesqueTopic(name = "orders"),
-    @KafkaesqueTopic(name = "notifications")
-})
-class OrderNotificationServiceTest {
-
-    @Test
-    void shouldSendNotificationWhenOrderIsPlaced(
-            final KafkaesqueServer kafkaesque,
-            @KafkaesqueProducer final KafkaProducer<String, String> producer) throws Exception {
-
-        // Start the application under test, pointed at our mock Kafka
-        var application = new OrderNotificationService(kafkaesque.getBootstrapServers());
-        application.start();
-
-        // Simulate an incoming order
-        producer.send(new ProducerRecord<>("orders", "order-123",
-                """
-                { "customer": "Alice", "item": "Kafka In Action", "quantity": 1}
-                """)).get();
-
-        // Verify that the service produced a notification in response
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            var notifications = kafkaesque.getRecordsByTopic("notifications");
-            assertThat(notifications).hasSize(1);
-            assertThat(notifications.getFirst().key()).isEqualTo("order-123");
-            assertThat(notifications.getFirst().value()).contains("Alice");
-        });
-
-        application.stop();
-    }
-}
-```
-
-  * The `@Kafkaesque` annotation spins up an in-process mock that speaks the real Kafka wire protocol
-  * The topics and producer are created via Kafkaesque's annotations
-  * Kafkaesque exposes a `getRecordsByTopic(...)` method on the server that lets you inspect what was published without wiring up a consumer
-  * The application under test uses standard Kafka clients and has no knowledge of Kafkaesque
-
-### JUnit 4
-
-The same scenario using JUnit 4's `@ClassRule`:
-
-```java
-public class OrderNotificationServiceTest {
-
-    @ClassRule
-    public static KafkaesqueRule kafkaesqueRule = KafkaesqueRule.builder()
-            .topics(
-                    new TopicDefinition("orders"),
-                    new TopicDefinition("notifications"))
-            .build();
-
-    @Test
-    public void shouldSendNotificationWhenOrderIsPlaced() throws Exception {
-        var application = new OrderNotificationService(kafkaesqueRule.getBootstrapServers());
-        application.start();
-
-        KafkaProducer<String, String> producer = kafkaesqueRule.createProducer();
-        producer.send(new ProducerRecord<>("orders", "order-123",
-                "{ \"customer\": \"Alice\", \"item\": \"Kafka In Action\", \"quantity\": 1}")).get();
-
-        await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
-            var notifications = kafkaesqueRule.getServer().getRecordsByTopic("notifications");
-            assertThat(notifications).hasSize(1);
-            assertThat(notifications.getFirst().key()).isEqualTo("order-123");
-            assertThat(notifications.getFirst().value()).contains("Alice");
-        });
-
-        application.stop();
-    }
-}
-```
-
-  * `KafkaesqueRule` is a JUnit 4 `TestRule` and can be used as an `@Rule` (per-method) or `@ClassRule` (per-class)
-  * Topics can be configured via a builder pattern on the `KafkaesqueRule`
-  * Factory methods (`createProducer()`, `createConsumer(...)`) are provided to make it simpler to create clients connected to the mock server
-
-### Standalone Docker Container
-
-Kafkaesque can also run as a standalone service via Docker, useful during local development or
-in CI pipelines. A pre-built image is published to GitHub Container Registry on each release:
-
-```bash
-docker pull ghcr.io/dcminter/kafkaesque:latest
-docker run -p 9092:9092 ghcr.io/dcminter/kafkaesque:latest
-```
-
-Or build locally from source:
+To build the Docker container and run it locally from source:
 
 ```bash
 docker build -t kafkaesque .
 docker run -p 9092:9092 kafkaesque
 ```
-
-Your Kafka clients can then connect to `localhost:9092`. See [the standalone guide](docs/STANDALONE.md)
-for configuration options and Docker Compose examples.
 
 ## Further documentation
 
