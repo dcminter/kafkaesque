@@ -11,7 +11,7 @@ the startup overhead required to launch the real Kafka brokers.
 
 I'd call this a "potentially useful beta" - give it a whirl if you think it might be handy!
 
-Kafkaesque is currently compatible with the **3.9.0** Apache Client library.
+Kafkaesque is currently compatible with the **3.9.1** Apache Client library.
 
 ## Why not just use real Kafka?
 

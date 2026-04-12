@@ -2,6 +2,8 @@ name: Build on Branch Push or PR creation
 
 on:
   push:
+    branches:
+      - main
     tags-ignore:
       - 'v*'
   pull_request:
