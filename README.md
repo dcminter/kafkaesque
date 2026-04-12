@@ -165,7 +165,7 @@ Kafkaesque is published to Maven Central. Add the dependency for your test frame
 <dependency>
     <groupId>eu.kafkaesque</groupId>
     <artifactId>kafkaesque-junit5</artifactId>
-    <version>0.1.0</version>
+    <version>1.0.0</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -176,7 +176,7 @@ Kafkaesque is published to Maven Central. Add the dependency for your test frame
 <dependency>
     <groupId>eu.kafkaesque</groupId>
     <artifactId>kafkaesque-junit4</artifactId>
-    <version>0.1.0</version>
+    <version>1.0.0</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -189,7 +189,7 @@ Kafkaesque is published to Maven Central. Add the dependency for your test frame
         <dependency>
             <groupId>eu.kafkaesque</groupId>
             <artifactId>kafkaesque-bom</artifactId>
-            <version>0.1.0</version>
+            <version>1.0.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
