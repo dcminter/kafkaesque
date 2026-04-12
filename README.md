@@ -132,6 +132,25 @@ docker run -p 9092:9092 ghcr.io/dcminter/kafkaesque:latest
 Your Kafka clients can then connect to `localhost:9092`. See [the standalone guide](docs/STANDALONE.md)
 for configuration options and Docker Compose examples.
 
+# Features
+
+  * Produce and fetch using standard Kafka clients
+  * Multi-partition topics with configurable partition counts
+  * Transactions (including `READ_COMMITTED` / `READ_UNCOMMITTED`)
+  * Consumer groups with partition rebalancing
+  * JUnit 5 (`@Kafkaesque` server instantiation per-class or per-method, `@KafkaesqueTopic` topic creation, `@KafkaesqueProducer`, `@KafkaesqueConsumer` injection)
+  * JUnit 4 (`KafkaesqueRule` usable as `@Rule` or `@ClassRule`, builder for topic configuration, factory method for producer/consumer creation)
+  * Direct record inspection (no consumer required)
+  * Admin client operations
+  * Log compaction / retention
+  * Auto-topic-creation (optional)
+  * Event listeners (record published, topic created, transaction completed)
+  * Record headers
+  * Server-side compression (gzip, snappy, lz4, zstd) configurable per topic
+  * Server-side idempotency for producers (dedupe on retry, per-partition sequence tracking)
+  * Offset commit and reset (`earliest`, `latest`)
+  * Standalone executable Jar or Docker container
+
 ## Installation
 
 Kafkaesque is published to Maven Central. Add the dependency for your test framework:
