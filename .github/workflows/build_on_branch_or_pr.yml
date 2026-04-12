@@ -21,7 +21,7 @@ jobs:
         run: |
           curl -s "https://get.sdkman.io?ci=true&rcupdate=false" | bash
           source "$HOME/.sdkman/bin/sdkman-init.sh"
-          sdk install java 25-tem
+          sdk install java 11-tem
           echo "JAVA_HOME=$(sdk home java 11-tem)" >> "$GITHUB_ENV"
           echo "$(sdk home java 11-tem)/bin" >> "$GITHUB_PATH"
 
@@ -29,3 +29,29 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           ./mvnw --batch-mode --no-transfer-progress -Dlog.level=WARN clean verify
+
+  multi-version-test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kafka-version: ['1.0.2', '1.1.1', '2.0.1', '2.8.2', '3.0.2', '3.5.2', '4.0.1', '4.2.0']
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SDKMAN and JDK 11
+        shell: bash
+        run: |
+          curl -s "https://get.sdkman.io?ci=true&rcupdate=false" | bash
+          source "$HOME/.sdkman/bin/sdkman-init.sh"
+          sdk install java 25-tem
+          echo "JAVA_HOME=$(sdk home java 11-tem)" >> "$GITHUB_ENV"
+          echo "$(sdk home java 11-tem)/bin" >> "$GITHUB_PATH"
+
+      - name: Build and test with kafka-clients ${{ matrix.kafka-version }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          ./mvnw --batch-mode --no-transfer-progress -Dlog.level=WARN -Dkafka.clients.test.version=${{ matrix.kafka-version }} clean verify

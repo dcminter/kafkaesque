@@ -7,7 +7,6 @@ import eu.kafkaesque.core.listener.TopicCreatedListener;
 import eu.kafkaesque.core.listener.TransactionCompletedListener;
 import eu.kafkaesque.core.storage.StoredRecord;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.common.compress.Compression;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -349,21 +348,21 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      */
     public void createTopic(
             final String name, final int numPartitions,
-            final short replicationFactor, final Compression compression) {
-        protocolHandler.createTopic(name, numPartitions, replicationFactor, compression);
+            final short replicationFactor, final CompressionCodec compression) {
+        protocolHandler.createTopic(name, numPartitions, replicationFactor, compression.toKafkaCompression());
     }
 
     /**
      * Pre-registers a topic with the given configuration.
      *
-     * <p>FetchResponses for this topic will use {@link Compression#NONE}.</p>
+     * <p>FetchResponses for this topic will use {@link CompressionCodec#NONE}.</p>
      *
      * @param name              the topic name
      * @param numPartitions     the number of partitions
      * @param replicationFactor the replication factor
      */
     public void createTopic(final String name, final int numPartitions, final short replicationFactor) {
-        createTopic(name, numPartitions, replicationFactor, Compression.NONE);
+        createTopic(name, numPartitions, replicationFactor, CompressionCodec.NONE);
     }
 
     // Listener registration

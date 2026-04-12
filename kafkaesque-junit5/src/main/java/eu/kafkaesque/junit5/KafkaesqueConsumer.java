@@ -1,6 +1,5 @@
 package eu.kafkaesque.junit5;
 
-import org.apache.kafka.common.IsolationLevel;
 import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.StringDeserializer;
 

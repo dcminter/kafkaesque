@@ -216,35 +216,6 @@ abstract class AbstractAdminBehaviorIT {
     }
 
     /**
-     * Verifies that topic configuration can be altered via the deprecated
-     * {@link AdminClient#alterConfigs} API without error.
-     *
-     * @throws Exception if the admin client or bootstrap address lookup fails
-     */
-    @Test
-    @SuppressWarnings("deprecation")
-    void shouldAlterTopicConfigViaAdminClient() throws Exception {
-        // Given
-        final String topicName = "alter-config-topic-" + UUID.randomUUID();
-        final var props = new Properties();
-        props.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
-        props.put(AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
-
-        try (final AdminClient adminClient = AdminClient.create(props)) {
-            adminClient.createTopics(of(new NewTopic(topicName, 1, (short) 1))).all().get();
-
-            // When
-            final var resource = new ConfigResource(ConfigResource.Type.TOPIC, topicName);
-            final var config = new org.apache.kafka.clients.admin.Config(of(
-                new ConfigEntry("retention.ms", "60000")));
-            adminClient.alterConfigs(Map.of(resource, config)).all().get();
-
-            // Then — no exception means success
-            log.info("Altered config for topic {}", topicName);
-        }
-    }
-
-    /**
      * Verifies that additional partitions can be created for an existing topic via
      * {@link AdminClient#createPartitions}.
      *

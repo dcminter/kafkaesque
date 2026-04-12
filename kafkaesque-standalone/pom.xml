@@ -23,10 +23,11 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Kafka client types (transitive from core, but explicit for clarity) -->
+        <!-- Kafka client types — needed for integration tests only (core shades its own copy) -->
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
+            <scope>test</scope>
         </dependency>
 
         <!-- Lombok -->

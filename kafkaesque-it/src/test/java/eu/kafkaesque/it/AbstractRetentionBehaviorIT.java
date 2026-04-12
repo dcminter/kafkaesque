@@ -3,14 +3,11 @@ package eu.kafkaesque.it;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
-import org.apache.kafka.clients.admin.AlterConfigOp;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.clients.admin.ConfigEntry;
-import org.apache.kafka.common.config.ConfigResource;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -31,9 +28,9 @@ import static org.awaitility.Awaitility.await;
  *
  * <p>A short sleep followed by a current-timestamp "trigger" record is used to close the
  * segment containing the expired records, making them eligible for deletion on a real
- * broker. The broker-level retention check interval is also shortened dynamically via
- * {@link AdminClient#incrementalAlterConfigs} so that deletion occurs promptly. The
- * assertion then checks that the expired keys are absent from the log.</p>
+ * broker. The broker-level retention check interval must be pre-configured on the real
+ * broker (see {@code RealKafkaIT}) so that deletion occurs promptly. The assertion then
+ * checks that the expired keys are absent from the log.</p>
  *
  * <p>Kafkaesque filters expired records immediately at fetch time, so the condition is
  * satisfied on the first poll without any background deletion.</p>
@@ -87,7 +84,6 @@ abstract class AbstractRetentionBehaviorIT {
         final String topicName = "retention-ms-test-" + UUID.randomUUID();
 
         createRetentionTestTopic(bootstrapServers, topicName);
-        configureShortRetentionCheckInterval(bootstrapServers);
 
         // Produce records with timestamps already outside the retention window
         final long expiredTimestamp = System.currentTimeMillis() - EXPIRED_OFFSET_MS;
@@ -160,7 +156,6 @@ abstract class AbstractRetentionBehaviorIT {
         final String topicName = "retention-bytes-test-" + UUID.randomUUID();
 
         createRetentionBytesTestTopic(bootstrapServers, topicName);
-        configureShortRetentionCheckInterval(bootstrapServers);
 
         // Each record is well above RETENTION_BYTES / 10, so after 10 records the
         // combined log size is many times the budget and the oldest records must be purged.
@@ -251,33 +246,4 @@ abstract class AbstractRetentionBehaviorIT {
         }
     }
 
-    /**
-     * Attempts to shorten {@code log.retention.check.interval.ms} to 1 second via a
-     * dynamic broker config update so that expired segments are deleted promptly.
-     *
-     * <p>If the backend does not support dynamic updates for this property (e.g. real Kafka
-     * prior to making it dynamically updatable), the failure is silently ignored.
-     * In that case the broker must be pre-configured — see {@code RealKafkaIT}.</p>
-     *
-     * <p>Kafkaesque handles this request as a no-op because it applies retention at
-     * fetch time rather than through background deletion.</p>
-     *
-     * @param bootstrapServers the broker address
-     */
-    private void configureShortRetentionCheckInterval(final String bootstrapServers) {
-        try (final AdminClient admin = AdminClient.create(Map.of(
-                AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
-                AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000))) {
-            admin.incrementalAlterConfigs(Map.of(
-                new ConfigResource(ConfigResource.Type.BROKER, ""),
-                List.of(new AlterConfigOp(
-                    new ConfigEntry("log.retention.check.interval.ms", "1000"),
-                    AlterConfigOp.OpType.SET
-                ))
-            )).all().get(5, SECONDS);
-        } catch (final Exception e) {
-            log.debug("Could not set log.retention.check.interval.ms dynamically ({}); "
-                + "backend must be pre-configured.", e.getMessage());
-        }
-    }
 }

@@ -54,9 +54,16 @@
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+            Kafka clients — needed for producer/consumer factory methods and annotations.
+            Provided scope: users supply their own kafka-clients version.
+            kafkaesque-core shades its own copy internally.
+        -->
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
+            <version>${kafka.clients.test.version}</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.assertj</groupId>

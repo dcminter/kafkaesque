@@ -3,7 +3,7 @@ package eu.kafkaesque.junit5;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.IsolationLevel;
+
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;

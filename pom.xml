@@ -43,6 +43,8 @@
 
         <!-- Kafka -->
         <kafka.version>3.9.2</kafka.version>
+        <kafka.clients.test.version>${kafka.version}</kafka.clients.test.version>
+        <kafka.api.level>3</kafka.api.level>
 
         <!-- Testing -->
         <junit4.version>4.13.2</junit4.version>
@@ -267,6 +269,11 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-jar-plugin</artifactId>
                     <version>3.4.2</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>build-helper-maven-plugin</artifactId>
+                    <version>3.6.0</version>
                 </plugin>
             </plugins>
         </pluginManagement>

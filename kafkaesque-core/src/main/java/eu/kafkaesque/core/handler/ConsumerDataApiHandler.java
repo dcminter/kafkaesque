@@ -5,6 +5,7 @@ import eu.kafkaesque.core.handler.FetchSessionCoordinator.PartitionFetchState;
 import eu.kafkaesque.core.handler.FetchSessionCoordinator.TopicPartitionKey;
 import eu.kafkaesque.core.storage.CleanupPolicy;
 import eu.kafkaesque.core.storage.EventStore;
+import eu.kafkaesque.core.storage.RecordHeader;
 import eu.kafkaesque.core.storage.StoredRecord;
 import eu.kafkaesque.core.storage.TopicStore;
 import lombok.RequiredArgsConstructor;
@@ -760,8 +761,21 @@ final class ConsumerDataApiHandler {
                 r.timestamp(),
                 r.key() != null ? r.key().getBytes(UTF_8) : null,
                 r.value() != null ? r.value().getBytes(UTF_8) : null,
-                r.headers().toArray(Header[]::new)));
+                toKafkaHeaders(r.headers())));
         return builder.build();
+    }
+
+    /**
+     * Converts a list of Kafkaesque {@link RecordHeader} instances to a Kafka {@link Header} array
+     * for use in the wire protocol serialisation.
+     *
+     * @param headers the Kafkaesque headers to convert
+     * @return an array of Kafka headers
+     */
+    private static Header[] toKafkaHeaders(final List<RecordHeader> headers) {
+        return headers.stream()
+            .map(h -> (Header) new org.apache.kafka.common.header.internals.RecordHeader(h.key(), h.value()))
+            .toArray(Header[]::new);
     }
 
     /**

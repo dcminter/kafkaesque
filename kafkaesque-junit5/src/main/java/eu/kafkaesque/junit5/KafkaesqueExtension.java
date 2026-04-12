@@ -393,7 +393,7 @@ public final class KafkaesqueExtension
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, annotation.valueDeserializer().getName());
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, annotation.autoOffsetReset());
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "true");
-        props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, annotation.isolationLevel().toString().toLowerCase());
+        props.put(ConsumerConfig.ISOLATION_LEVEL_CONFIG, annotation.isolationLevel().name().toLowerCase());
         return props;
     }
 

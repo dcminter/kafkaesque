@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Nested;
  * {@code @BeforeAll}/{@code @AfterAll} methods so the backend is ready before the
  * behavior classes' {@code @BeforeEach} methods call {@link #getBootstrapServers()}.</p>
  *
- * @see AbstractAdminBehaviorIT
  * @see AbstractProducerBehaviorIT
  * @see AbstractConsumerBehaviorIT
  * @see AbstractCompressionBehaviorIT
@@ -24,8 +23,6 @@ import org.junit.jupiter.api.Nested;
  * @see AbstractRetentionBehaviorIT
  * @see AbstractCompactDeleteBehaviorIT
  * @see AbstractTransactionBehaviorIT
- * @see AbstractConsumerGroupAdminBehaviorIT
- * @see AbstractAclBehaviorIT
  */
 abstract class AbstractKafkaBehaviorIT {
 
@@ -36,17 +33,6 @@ abstract class AbstractKafkaBehaviorIT {
      * @throws Exception if the address cannot be determined
      */
     protected abstract String getBootstrapServers() throws Exception;
-
-    /**
-     * Runs the admin-client behavior tests against this backend.
-     */
-    @Nested
-    class AdminBehavior extends AbstractAdminBehaviorIT {
-        @Override
-        protected String getBootstrapServers() throws Exception {
-            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
-        }
-    }
 
     /**
      * Runs the producer behavior tests against this backend.
@@ -136,36 +122,4 @@ abstract class AbstractKafkaBehaviorIT {
         }
     }
 
-    /**
-     * Runs the consumer group admin behavior tests against this backend.
-     */
-    @Nested
-    class ConsumerGroupAdminBehavior extends AbstractConsumerGroupAdminBehaviorIT {
-        @Override
-        protected String getBootstrapServers() throws Exception {
-            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
-        }
-    }
-
-    /**
-     * Runs the ACL behavior tests against this backend.
-     */
-    @Nested
-    class AclBehavior extends AbstractAclBehaviorIT {
-        @Override
-        protected String getBootstrapServers() throws Exception {
-            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
-        }
-    }
-
-    /**
-     * Runs the transaction admin behavior tests against this backend.
-     */
-    @Nested
-    class TransactionAdminBehavior extends AbstractTransactionAdminBehaviorIT {
-        @Override
-        protected String getBootstrapServers() throws Exception {
-            return AbstractKafkaBehaviorIT.this.getBootstrapServers();
-        }
-    }
 }

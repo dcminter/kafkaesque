@@ -23,6 +23,10 @@
         <gpg.skip>true</gpg.skip>
         <maven.source.skip>true</maven.source.skip>
         <maven.javadoc.skip>true</maven.javadoc.skip>
+
+        <!-- Phases for conditional test source directories (set to "none" to skip) -->
+        <admin.test.phase>generate-test-sources</admin.test.phase>
+        <deprecated.admin.test.phase>generate-test-sources</deprecated.admin.test.phase>
     </properties>
 
     <dependencies>
@@ -33,10 +37,11 @@
             <version>${project.version}</version>
         </dependency>
 
-        <!-- Kafka client for testing -->
+        <!-- Kafka client for testing — version overridable via -Dkafka.clients.test.version -->
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
+            <version>${kafka.clients.test.version}</version>
         </dependency>
 
 
@@ -105,6 +110,36 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>add-admin-test-source</id>
+                        <phase>${admin.test.phase}</phase>
+                        <goals>
+                            <goal>add-test-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>src/test/java-admin</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>add-deprecated-admin-test-source</id>
+                        <phase>${deprecated.admin.test.phase}</phase>
+                        <goals>
+                            <goal>add-test-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>src/test/java-deprecated-admin</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
@@ -132,4 +167,50 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!--
+            API level profiles control which test source directories are compiled.
+            Default (kafka.api.level=3): all directories are compiled.
+            See docs/MULTIVERSION.md for recommended version/level combinations.
+        -->
+        <profile>
+            <id>api-level-1</id>
+            <activation>
+                <property>
+                    <name>kafka.api.level</name>
+                    <value>1</value>
+                </property>
+            </activation>
+            <properties>
+                <admin.test.phase>none</admin.test.phase>
+                <deprecated.admin.test.phase>none</deprecated.admin.test.phase>
+            </properties>
+        </profile>
+        <profile>
+            <id>api-level-2</id>
+            <activation>
+                <property>
+                    <name>kafka.api.level</name>
+                    <value>2</value>
+                </property>
+            </activation>
+            <properties>
+                <admin.test.phase>none</admin.test.phase>
+                <deprecated.admin.test.phase>none</deprecated.admin.test.phase>
+            </properties>
+        </profile>
+        <profile>
+            <id>api-level-4</id>
+            <activation>
+                <property>
+                    <name>kafka.api.level</name>
+                    <value>4</value>
+                </property>
+            </activation>
+            <properties>
+                <deprecated.admin.test.phase>none</deprecated.admin.test.phase>
+            </properties>
+        </profile>
+    </profiles>
 </project>

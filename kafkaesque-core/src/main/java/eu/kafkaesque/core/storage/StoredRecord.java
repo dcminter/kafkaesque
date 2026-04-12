@@ -1,7 +1,6 @@
 package eu.kafkaesque.core.storage;
 
 import lombok.EqualsAndHashCode;
-import org.apache.kafka.common.header.Header;
 
 import java.time.Instant;
 import java.util.List;
@@ -31,7 +30,7 @@ public final class StoredRecord {
     private final long timestamp;
 
     /** The record headers (never null; empty if none were set). */
-    private final List<Header> headers;
+    private final List<RecordHeader> headers;
 
     /** The record key as a string (nullable). */
     private final String key;
@@ -55,7 +54,7 @@ public final class StoredRecord {
             final int partition,
             final long offset,
             final long timestamp,
-            final List<Header> headers,
+            final List<RecordHeader> headers,
             final String key,
             final String value) {
         this.topic = topic;
@@ -108,7 +107,7 @@ public final class StoredRecord {
      *
      * @return the record headers
      */
-    public List<Header> headers() {
+    public List<RecordHeader> headers() {
         return headers;
     }
 

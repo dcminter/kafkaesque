@@ -2,7 +2,6 @@ package eu.kafkaesque.core.storage;
 
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
-import org.apache.kafka.common.header.Header;
 
 import java.util.List;
 
@@ -33,7 +32,7 @@ public final class RecordData {
     private final String value;
 
     /** The record headers (may be empty, never null). */
-    private final List<Header> headers;
+    private final List<RecordHeader> headers;
 
     /**
      * Creates a new record data instance.
@@ -51,7 +50,7 @@ public final class RecordData {
             final long timestamp,
             final String key,
             final String value,
-            final List<Header> headers) {
+            final List<RecordHeader> headers) {
         this.topic = topic;
         this.partition = partition;
         this.timestamp = timestamp;
@@ -110,7 +109,7 @@ public final class RecordData {
      *
      * @return the record headers
      */
-    public List<Header> headers() {
+    public List<RecordHeader> headers() {
         return headers;
     }
 }

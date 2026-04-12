@@ -4,14 +4,15 @@
 
 A library for mocking [Apache Kafka](https://kafka.apache.org/) dependencies in a realistic way.
 
-By re-using the Kafka client library datatypes, Kafkaesque is compatible with the Kafka TCP wire-protocol but without 
-the startup overhead required to launch the real Kafka brokers.
+Kafkaesque is compatible with the Kafka TCP wire-protocol but without the startup overhead required
+to launch the real Kafka brokers. It shades its own copy of the Kafka protocol classes internally, so
+it will not conflict with whatever version of `kafka-clients` your application uses.
 
 ## Status
 
 I'd call this a "potentially useful beta" - give it a whirl if you think it might be handy!
 
-Kafkaesque is currently compatible with the **3.9.1** Apache Client library and requires **Java 11** or later.
+Kafkaesque works with **kafka-clients 1.x through 4.x** and requires **Java 11** or later.
 
 > **Note:** From version 1.0.0 onwards, Kafkaesque targets Java 11 as the minimum supported version
 > (previous versions required Java 25). The library is tested and works with Java 11 and Java 25, so
@@ -157,7 +158,8 @@ for configuration options and Docker Compose examples.
 
 ## Installation
 
-Kafkaesque is published to Maven Central. Add the dependency for your test framework:
+Kafkaesque is published to Maven Central. Add the dependency for your test framework along with
+your own version of `kafka-clients` (Kafkaesque does not bring one transitively):
 
 **JUnit 5 (Jupiter):**
 
@@ -166,6 +168,13 @@ Kafkaesque is published to Maven Central. Add the dependency for your test frame
     <groupId>eu.kafkaesque</groupId>
     <artifactId>kafkaesque-junit5</artifactId>
     <version>1.0.0</version>
+    <scope>test</scope>
+</dependency>
+<!-- Bring your own Kafka client (1.x through 4.x) -->
+<dependency>
+    <groupId>org.apache.kafka</groupId>
+    <artifactId>kafka-clients</artifactId>
+    <version>${your.kafka.version}</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -177,6 +186,13 @@ Kafkaesque is published to Maven Central. Add the dependency for your test frame
     <groupId>eu.kafkaesque</groupId>
     <artifactId>kafkaesque-junit4</artifactId>
     <version>1.0.0</version>
+    <scope>test</scope>
+</dependency>
+<!-- Bring your own Kafka client (1.x through 4.x) -->
+<dependency>
+    <groupId>org.apache.kafka</groupId>
+    <artifactId>kafka-clients</artifactId>
+    <version>${your.kafka.version}</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -206,6 +222,12 @@ so to build and run the test suite:
 $ ./mvnw clean verify
 ```
 
+To test against a different `kafka-clients` version (see [the multi-version guide](docs/MULTIVERSION.md)):
+
+```bash
+$ ./mvnw clean verify -Dkafka.clients.test.version=2.8.2 -Dkafka.api.level=1
+```
+
 Or to install into your local artifact repository:
 
 ```bash
@@ -227,14 +249,15 @@ docker run -p 9092:9092 kafkaesque
   * See [the listener documentation](docs/LISTENERS.md) for details of how to get various callbacks without using Kafka client libraries.
   * See [the event storage summary](docs/EVENT_STORAGE_SUMMARY.md) for details of the internal representation of events etc.
   * See [the future directions documentation](docs/FUTURE.md) for a sketch of features I plan to add to Kafkaesque.
+  * See [the multi-version guide](docs/MULTIVERSION.md) for information on testing against different `kafka-clients` versions (1.x through 4.x).
 
 ## License & Development
 
 The software [is licensed under the Apache License, Version 2.0](LICENSE.txt)
 
-This software is designed to support projects making extensive use of Apache Kafka. It depends on
-Apache Kafka libraries for its wire-protocol types, and it therefore makes sense to release it under the
-same license.
+This software is designed to support projects making extensive use of Apache Kafka. It embeds
+(shaded) Apache Kafka libraries internally for its wire-protocol types, and it therefore makes
+sense to release it under the same license.
 
 ## AI Declaration
 

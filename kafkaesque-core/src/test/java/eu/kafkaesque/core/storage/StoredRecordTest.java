@@ -1,6 +1,5 @@
 package eu.kafkaesque.core.storage;
 
-import org.apache.kafka.common.header.Header;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -52,7 +51,7 @@ class StoredRecordTest {
 
     @Test
     void shouldReturnUnmodifiableHeaders() {
-        final var mutableHeaders = new ArrayList<Header>();
+        final var mutableHeaders = new ArrayList<RecordHeader>();
         final var record = new StoredRecord("topic", 0, 0L, 0L, mutableHeaders, "key", "value");
 
         assertThat(record.headers()).isUnmodifiable();

@@ -2,6 +2,8 @@ package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.RecordData;
+import eu.kafkaesque.core.storage.RecordHeader;
+import eu.kafkaesque.core.storage.RecordHeaderAdapter;
 import eu.kafkaesque.core.storage.TopicStore;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -330,10 +332,14 @@ final class ProducerApiHandler {
      * @param headerArray the header array from a decoded record (may be null)
      * @return an immutable list of headers; empty if {@code headerArray} is null or empty
      */
-    private static List<Header> readHeaders(final Header[] headerArray) {
+    private static List<RecordHeader> readHeaders(final Header[] headerArray) {
         if (headerArray == null || headerArray.length == 0) {
             return of();
         }
-        return of(headerArray);
+        final var result = new java.util.ArrayList<RecordHeader>(headerArray.length);
+        for (final var header : headerArray) {
+            result.add(new RecordHeaderAdapter(header.key(), header.value()));
+        }
+        return java.util.Collections.unmodifiableList(result);
     }
 }
