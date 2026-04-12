@@ -23,9 +23,9 @@ jobs:
         run: |
           curl -s "https://get.sdkman.io?ci=true&rcupdate=false" | bash
           source "$HOME/.sdkman/bin/sdkman-init.sh"
-          sdk install java 25-tem
-          echo "JAVA_HOME=$(sdk home java 11-tem)" >> "$GITHUB_ENV"
-          echo "$(sdk home java 11-tem)/bin" >> "$GITHUB_PATH"
+          sdk install java 11.0.30-tem
+          echo "JAVA_HOME=$(sdk home java 11.0.30-tem)" >> "$GITHUB_ENV"
+          echo "$(sdk home java 11.0.30-tem)/bin" >> "$GITHUB_PATH"
 
       - name: Import GPG key
         env:
