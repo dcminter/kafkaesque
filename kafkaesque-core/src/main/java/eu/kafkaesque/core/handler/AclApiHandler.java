@@ -56,7 +56,7 @@ final class AclApiHandler {
 
             final var results = request.creations().stream()
                 .map(this::createAndBuildResult)
-                .toList();
+                .collect(Collectors.toList());
 
             final var response = new CreateAclsResponseData()
                 .setThrottleTimeMs(0)
@@ -122,7 +122,7 @@ final class AclApiHandler {
 
             final var filterResults = request.filters().stream()
                 .map(this::deleteAndBuildFilterResult)
-                .toList();
+                .collect(Collectors.toList());
 
             final var response = new DeleteAclsResponseData()
                 .setThrottleTimeMs(0)
@@ -170,7 +170,7 @@ final class AclApiHandler {
 
         return grouped.values().stream()
             .map(AclApiHandler::buildResourceEntry)
-            .toList();
+            .collect(Collectors.toList());
     }
 
     /**
@@ -181,7 +181,7 @@ final class AclApiHandler {
      * @return the resource entry
      */
     private static DescribeAclsResponseData.DescribeAclsResource buildResourceEntry(final List<AclBinding> group) {
-        final var first = group.getFirst();
+        final var first = group.get(0);
         final var acls = group.stream()
             .map(b -> new DescribeAclsResponseData.AclDescription()
                 .setPrincipal(b.principal())
@@ -212,7 +212,7 @@ final class AclApiHandler {
 
         final var matchingAcls = deleted.stream()
             .map(AclApiHandler::buildMatchingAcl)
-            .toList();
+            .collect(Collectors.toList());
 
         return new DeleteAclsResponseData.DeleteAclsFilterResult()
             .setErrorCode((short) 0)

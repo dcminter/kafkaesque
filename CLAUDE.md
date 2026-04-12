@@ -6,8 +6,8 @@ applications that make use of web servers and other http based services.
 
 ## Project overview
 
-The is built with Maven via Maven Wrapper and uses Java 25 (we may in future backport to a more typical earlier 
-version of Java).
+The is built with Maven via Maven Wrapper and targets Java 11 as the minimum supported version, ensuring
+compatibility with Java 11 through Java 25+.
 
 Several directories exist. They are:
 
@@ -32,7 +32,8 @@ all reported violations before considering the task complete. This will enforce 
 
   * Integration test cases must always be run against both Kafkaesque and the real Kafka brokers to verify that we're correctly implementing the Kafka line protocol
   * Immutability is encouraged wherever reasonably possible; all parameters, fields, and variables should therefore be declared `final` unless their mutability is essential.
-  * Modern Java features are encouraged - for example prefer `record` types to classes for simple DTOs 
+  * The project targets Java 11 as a baseline - do not use language features or APIs introduced after Java 11 (no records, sealed classes, pattern matching, switch expressions, text blocks, `.toList()`, `.getFirst()`, `Thread.ofPlatform()`, etc.)
+  * Use Lombok `@EqualsAndHashCode` and `@ToString` annotations for DTOs in place of records
   * After making changes make sure to bring the `README.md` in the project root and any documentation under `docs` up to date.
   * Lean towards declaring collection fields and parameters as interface types (Map, Set, etc) rather than concrete types (HashMap, HashSet, etc.)
     * i.e. prefer `private final Map<String,String> foo = ConcreteHashMap<>()` to `private final ConcreteHashMap<String,String> foo = ConcreteHashMap<>()`
@@ -50,3 +51,4 @@ all reported violations before considering the task complete. This will enforce 
   * Don't commit changes to git unless this is explicitly requested
   * Don't disable any test cases (including new ones) unless you get explicit approval
   * There are currently no warnings in the build output - if changes cause new warnings, the warnings should be addressed
+  * SDKMAN is installed and can be used to change the version(s) of Java available

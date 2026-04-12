@@ -7,7 +7,7 @@
     <parent>
         <groupId>eu.kafkaesque</groupId>
         <artifactId>kafkaesque-parent</artifactId>
-        <version>0.1.2-SNAPSHOT</version>
+        <version>1.0.0-SNAPSHOT</version>
     </parent>
 
     <artifactId>kafkaesque-bom</artifactId>

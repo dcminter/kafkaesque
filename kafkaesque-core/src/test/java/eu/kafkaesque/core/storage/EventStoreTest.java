@@ -465,10 +465,10 @@ class EventStoreTest {
 
             assertThat(latch.await(5, SECONDS)).isTrue();
             assertThat(received).hasSize(1);
-            assertThat(received.getFirst().topic()).isEqualTo("topic");
-            assertThat(received.getFirst().key()).isEqualTo("key");
-            assertThat(received.getFirst().value()).isEqualTo("value");
-            assertThat(received.getFirst().offset()).isEqualTo(0L);
+            assertThat(received.get(0).topic()).isEqualTo("topic");
+            assertThat(received.get(0).key()).isEqualTo("key");
+            assertThat(received.get(0).value()).isEqualTo("value");
+            assertThat(received.get(0).offset()).isEqualTo(0L);
         } finally {
             registry.close();
         }
@@ -487,8 +487,8 @@ class EventStoreTest {
 
             assertThat(latch.await(5, SECONDS)).isTrue();
             assertThat(received).hasSize(1);
-            assertThat(received.getFirst().topic()).isEqualTo("topic");
-            assertThat(received.getFirst().key()).isEqualTo("key");
+            assertThat(received.get(0).topic()).isEqualTo("topic");
+            assertThat(received.get(0).key()).isEqualTo("key");
         } finally {
             registry.close();
         }

@@ -91,8 +91,8 @@ final class ConsumerDataApiHandler {
                                 .setOffset(offset)
                                 .setLeaderEpoch(0);
                         })
-                        .toList()))
-                .toList();
+                        .collect(Collectors.toList())))
+                .collect(Collectors.toList());
 
             return ResponseSerializer.serialize(requestHeader,
                 new ListOffsetsResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
@@ -124,7 +124,7 @@ final class ConsumerDataApiHandler {
             if (requestHeader.apiVersion() >= 8) {
                 final var groupResponses = request.groups().stream()
                     .map(group -> buildOffsetFetchGroupResponse(group.groupId(), group.topics()))
-                    .toList();
+                    .collect(Collectors.toList());
                 data.setGroups(groupResponses);
             } else {
                 data.setTopics(buildOffsetFetchTopicResponses(request.groupId(), request.topics()));
@@ -162,8 +162,8 @@ final class ConsumerDataApiHandler {
                                 .setPartitionIndex(partition.partitionIndex())
                                 .setErrorCode((short) 0);
                         })
-                        .toList()))
-                .toList();
+                        .collect(Collectors.toList())))
+                .collect(Collectors.toList());
 
             return ResponseSerializer.serialize(requestHeader,
                 new OffsetCommitResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
@@ -246,7 +246,7 @@ final class ConsumerDataApiHandler {
         final var isolationLevel = request.isolationLevel();
         final var topicResponses = request.topics().stream()
             .map(topic -> buildFetchableTopicResponse(topic, isolationLevel))
-            .toList();
+            .collect(Collectors.toList());
 
         final int responseSessionId;
         if (createSession) {
@@ -360,7 +360,7 @@ final class ConsumerDataApiHandler {
             .setPartitions(topic.partitions().stream()
                 .map(partition -> buildPartitionData(
                     topic.topic(), partition.partition(), partition.fetchOffset(), isolationLevel))
-                .toList());
+                .collect(Collectors.toList()));
     }
 
     /**
@@ -388,8 +388,8 @@ final class ConsumerDataApiHandler {
                     .map(entry -> buildPartitionData(
                         entry.getKey().topic(), entry.getKey().partition(),
                         entry.getValue().fetchOffset(), isolationLevel))
-                    .toList()))
-            .toList();
+                    .collect(Collectors.toList())))
+            .collect(Collectors.toList());
     }
 
     /**
@@ -515,8 +515,8 @@ final class ConsumerDataApiHandler {
                             .setMetadata("")
                             .setErrorCode((short) 0);
                     })
-                    .toList()))
-            .toList();
+                    .collect(Collectors.toList())))
+            .collect(Collectors.toList());
     }
 
     /**
@@ -539,8 +539,8 @@ final class ConsumerDataApiHandler {
                         .setCommittedLeaderEpoch(-1)
                         .setMetadata("")
                         .setErrorCode((short) 0))
-                    .toList()))
-            .toList();
+                    .collect(Collectors.toList())))
+            .collect(Collectors.toList());
     }
 
     /**
@@ -568,8 +568,8 @@ final class ConsumerDataApiHandler {
                             .setMetadata("")
                             .setErrorCode((short) 0);
                     })
-                    .toList()))
-            .toList();
+                    .collect(Collectors.toList())))
+            .collect(Collectors.toList());
     }
 
     /**
@@ -604,7 +604,7 @@ final class ConsumerDataApiHandler {
         final var stored = effective.stream()
             .filter(r -> r.offset() >= fetchOffset)
             .filter(r -> isolationLevel != 1 || r.offset() < lso)
-            .toList();
+            .collect(Collectors.toList());
 
         if (stored.isEmpty()) {
             return MemoryRecords.EMPTY;
@@ -653,7 +653,7 @@ final class ConsumerDataApiHandler {
         final var retainedOffsets = buildRetainedOffsetsAfterCompaction(records);
         return records.stream()
             .filter(r -> r.key() == null || retainedOffsets.contains(r.offset()))
-            .toList();
+            .collect(Collectors.toList());
     }
 
     /**
@@ -690,7 +690,7 @@ final class ConsumerDataApiHandler {
         final long cutoffMs = System.currentTimeMillis() - retentionMs;
         return records.stream()
             .filter(r -> r.timestamp() > cutoffMs)
-            .toList();
+            .collect(Collectors.toList());
     }
 
     /**
@@ -710,14 +710,16 @@ final class ConsumerDataApiHandler {
      */
     private List<StoredRecord> applyRetentionBytes(
             final List<StoredRecord> records, final long retentionBytes) {
+        final var reversed = new java.util.ArrayList<>(records);
+        java.util.Collections.reverse(reversed);
         final long[] accumulated = {0L};
-        return records.reversed().stream()
+        return reversed.stream()
             .takeWhile(r -> {
                 accumulated[0] += recordByteSize(r);
                 return accumulated[0] <= retentionBytes;
             })
             .sorted(Comparator.comparingLong(StoredRecord::offset))
-            .toList();
+            .collect(Collectors.toList());
     }
 
     /**

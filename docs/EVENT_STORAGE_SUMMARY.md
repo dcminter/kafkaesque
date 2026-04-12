@@ -9,7 +9,7 @@ The storage layer also supports Kafka's transactional semantics, including pendi
 ## Storage Classes
 
 ### `StoredRecord`
-An immutable record type that captures all metadata about a published event:
+An immutable value class that captures all metadata about a published event:
 - `topic` - the topic name
 - `partition` - the partition index
 - `offset` - the assigned offset within the partition
@@ -21,7 +21,7 @@ An immutable record type that captures all metadata about a published event:
 Provides `timestampAsInstant()` for time-based operations.
 
 ### `RecordData`
-A context record used as input to `EventStore` storage methods, avoiding long parameter lists:
+A context class used as input to `EventStore` storage methods, avoiding long parameter lists:
 - `topic`, `partition`, `timestamp`, `key`, `value`, `headers`
 
 ### `EventStore`
@@ -62,7 +62,7 @@ An enum for log cleanup strategies:
 - `COMPACT_DELETE` - both compaction and time/size retention
 
 ### `AclStore`
-Store for Access Control List bindings, backed by a concurrent set of `AclBinding` records.
+Store for Access Control List bindings, backed by a concurrent set of `AclBinding` objects.
 
 ## Retrieval Methods on `KafkaesqueServer`
 
@@ -269,7 +269,7 @@ blocks the NIO event loop.
 
 ### Architecture
 
-- `ListenerNotification` is a sealed interface with record subtypes (`RecordPublished`,
+- `ListenerNotification` is an interface with immutable class subtypes (`RecordPublished`,
   `TopicCreated`, `TransactionCompleted`, `Shutdown`) representing queued notifications.
 - `ListenerRegistry` holds registered listeners in thread-safe lists and a
   `LinkedBlockingQueue` of notifications. A daemon thread consumes the queue and dispatches

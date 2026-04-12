@@ -16,14 +16,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install SDKMAN and JDK 25
+      - name: Install SDKMAN and JDK 11
         shell: bash
         run: |
           curl -s "https://get.sdkman.io?ci=true&rcupdate=false" | bash
           source "$HOME/.sdkman/bin/sdkman-init.sh"
           sdk install java 25-tem
-          echo "JAVA_HOME=$(sdk home java 25-tem)" >> "$GITHUB_ENV"
-          echo "$(sdk home java 25-tem)/bin" >> "$GITHUB_PATH"
+          echo "JAVA_HOME=$(sdk home java 11-tem)" >> "$GITHUB_ENV"
+          echo "$(sdk home java 11-tem)/bin" >> "$GITHUB_PATH"
 
       - name: Build and test
         working-directory: ${{ github.workspace }}

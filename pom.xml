@@ -6,7 +6,7 @@
 
     <groupId>eu.kafkaesque</groupId>
     <artifactId>kafkaesque-parent</artifactId>
-    <version>0.1.2-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>Kafkaesque</name>
@@ -37,9 +37,9 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <maven.compiler.release>25</maven.compiler.release>
-        <maven.compiler.source>25</maven.compiler.source>
-        <maven.compiler.target>25</maven.compiler.target>
+        <maven.compiler.release>11</maven.compiler.release>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
 
         <!-- Kafka -->
         <kafka.version>3.9.2</kafka.version>
@@ -52,6 +52,9 @@
         <mockito.version>5.14.2</mockito.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <commons-compress.version>1.28.0</commons-compress.version>
+
+        <!-- Native access arg (empty by default, set by profile on Java 16+) -->
+        <nativeAccessArg/>
 
         <!-- Code generation -->
         <lombok.version>1.18.42</lombok.version>
@@ -364,6 +367,15 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+        <profile>
+            <id>native-access</id>
+            <activation>
+                <jdk>[16,)</jdk>
+            </activation>
+            <properties>
+                <nativeAccessArg>--enable-native-access=ALL-UNNAMED</nativeAccessArg>
+            </properties>
         </profile>
     </profiles>
 </project>

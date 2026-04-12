@@ -57,7 +57,7 @@ class KafkaesqueDockerIT {
                 new ImageFromDockerfile()
                         .withFileFromPath("kafkaesque.jar", jarPath)
                         .withDockerfileFromBuilder(builder -> builder
-                                .from("eclipse-temurin:25-jre-noble")
+                                .from("eclipse-temurin:11-jre-noble")
                                 .copy("kafkaesque.jar", "/app/kafkaesque.jar")
                                 .workDir("/app")
                                 .entryPoint("java", "-jar", "kafkaesque.jar")

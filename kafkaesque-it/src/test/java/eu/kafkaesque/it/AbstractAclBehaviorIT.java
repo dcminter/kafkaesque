@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import java.util.Collection;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,10 +66,10 @@ abstract class AbstractAclBehaviorIT {
             final Collection<AclBinding> acls = adminClient.describeAcls(AclBindingFilter.ANY).values().get();
             final var matchingAcls = acls.stream()
                 .filter(a -> a.pattern().name().equals(topicName))
-                .toList();
+                .collect(Collectors.toList());
 
             assertThat(matchingAcls).hasSize(1);
-            final var found = matchingAcls.getFirst();
+            final var found = matchingAcls.get(0);
             assertThat(found.pattern().resourceType()).isEqualTo(ResourceType.TOPIC);
             assertThat(found.pattern().patternType()).isEqualTo(PatternType.LITERAL);
             assertThat(found.entry().principal()).isEqualTo("User:test");
@@ -111,7 +112,7 @@ abstract class AbstractAclBehaviorIT {
             final Collection<AclBinding> acls = adminClient.describeAcls(AclBindingFilter.ANY).values().get();
             final var matchingAcls = acls.stream()
                 .filter(a -> a.pattern().name().equals(topicName))
-                .toList();
+                .collect(Collectors.toList());
 
             assertThat(matchingAcls).isEmpty();
 

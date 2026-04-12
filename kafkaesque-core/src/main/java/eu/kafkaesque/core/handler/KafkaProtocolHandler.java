@@ -101,7 +101,43 @@ public final class KafkaProtocolHandler {
      * Bundles a {@link ListenerRegistry} with the {@link EventStore} it was given to,
      * so that a single {@code this(...)} call can forward both from a static factory.
      */
-    private record SharedStores(EventStore eventStore, ListenerRegistry listenerRegistry) {}
+    private static final class SharedStores {
+
+        /** The event store. */
+        private final EventStore eventStore;
+
+        /** The shared listener registry. */
+        private final ListenerRegistry listenerRegistry;
+
+        /**
+         * Creates a new {@code SharedStores} bundle.
+         *
+         * @param eventStore       the event store
+         * @param listenerRegistry the shared listener registry
+         */
+        SharedStores(final EventStore eventStore, final ListenerRegistry listenerRegistry) {
+            this.eventStore = eventStore;
+            this.listenerRegistry = listenerRegistry;
+        }
+
+        /**
+         * Returns the event store.
+         *
+         * @return the event store
+         */
+        EventStore eventStore() {
+            return eventStore;
+        }
+
+        /**
+         * Returns the shared listener registry.
+         *
+         * @return the shared listener registry
+         */
+        ListenerRegistry listenerRegistry() {
+            return listenerRegistry;
+        }
+    }
 
     /**
      * Creates a new protocol handler with the given server info and a fresh event store,
@@ -408,50 +444,82 @@ public final class KafkaProtocolHandler {
             log.debug("Processing request: apiKey={}, apiVersion={}, correlationId={}, size={}",
                 apiKey, apiVersion, correlationId, requestSize);
             final var header = RequestHeader.parse(buffer);
-            final var response = switch (apiKey) {
-                case API_VERSIONS     -> clusterApiHandler.generateApiVersionsResponse(header);
-                case METADATA         -> clusterApiHandler.generateMetadataResponse(header, buffer);
-                case DESCRIBE_CLUSTER -> clusterApiHandler.generateDescribeClusterResponse(header);
-                case FIND_COORDINATOR -> clusterApiHandler.generateFindCoordinatorResponse(header, buffer);
-                case PRODUCE          -> producerApiHandler.generateProduceResponse(header, buffer);
-                case JOIN_GROUP       ->
-                    consumerGroupApiHandler.generateJoinGroupResponse(header, buffer, connection, key);
-                case SYNC_GROUP       -> consumerGroupApiHandler.generateSyncGroupResponse(header, buffer);
-                case HEARTBEAT        -> consumerGroupApiHandler.generateHeartbeatResponse(header, buffer);
-                case LEAVE_GROUP      -> consumerGroupApiHandler.generateLeaveGroupResponse(header, buffer);
-                case LIST_GROUPS      -> consumerGroupApiHandler.generateListGroupsResponse(header, buffer);
-                case CONSUMER_GROUP_DESCRIBE ->
-                    consumerGroupApiHandler.generateConsumerGroupDescribeResponse(header, buffer);
-                case DELETE_GROUPS    -> consumerGroupApiHandler.generateDeleteGroupsResponse(header, buffer);
-                case OFFSET_FETCH     -> consumerDataApiHandler.generateOffsetFetchResponse(header, buffer);
-                case OFFSET_COMMIT    -> consumerDataApiHandler.generateOffsetCommitResponse(header, buffer);
-                case LIST_OFFSETS     -> consumerDataApiHandler.generateListOffsetsResponse(header, buffer);
-                case FETCH                    -> consumerDataApiHandler.generateFetchResponse(header, buffer);
-                case CREATE_TOPICS, DELETE_TOPICS, DESCRIBE_CONFIGS, ALTER_CONFIGS,
-                    CREATE_PARTITIONS, DELETE_RECORDS, INCREMENTAL_ALTER_CONFIGS,
-                    ELECT_LEADERS, DESCRIBE_LOG_DIRS, ALTER_REPLICA_LOG_DIRS ->
-                    dispatchAdminRequest(apiKey, header, buffer);
-                case DESCRIBE_TOPIC_PARTITIONS ->
-                    clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
-                case CREATE_ACLS, DESCRIBE_ACLS, DELETE_ACLS ->
-                    dispatchAclRequest(apiKey, header, buffer);
-                case INIT_PRODUCER_ID, ADD_PARTITIONS_TO_TXN, ADD_OFFSETS_TO_TXN,
-                    END_TXN, WRITE_TXN_MARKERS, TXN_OFFSET_COMMIT,
-                    LIST_TRANSACTIONS, DESCRIBE_TRANSACTIONS ->
-                    dispatchTransactionRequest(apiKey, header, buffer);
-                case GET_TELEMETRY_SUBSCRIPTIONS, PUSH_TELEMETRY -> {
-                    log.debug("Telemetry API not supported: {}", apiKey);
-                    yield clusterApiHandler.generateUnsupportedResponse(header, apiKey);
-                }
-                default -> {
-                    log.warn("Unhandled API key: {} (id={})", apiKey, apiKey.id);
-                    yield null;
-                }
-            };
+            final var response = dispatchRequest(apiKey, header, buffer, connection, key);
             buffer.position(startPosition + requestSize);
             writeResponse(connection, response);
         } catch (final Exception e) {
             log.error("Error processing request", e);
+        }
+    }
+
+    /**
+     * Routes a parsed request to the appropriate handler based on its API key.
+     *
+     * @param apiKey     the API key identifying the request type
+     * @param header     the parsed request header
+     * @param buffer     the request body buffer
+     * @param connection the client connection
+     * @param key        the selection key for this connection
+     * @return the serialised response buffer, or {@code null} if unhandled
+     */
+    private ByteBuffer dispatchRequest(
+            final ApiKeys apiKey,
+            final RequestHeader header,
+            final ByteBuffer buffer,
+            final ClientConnection connection,
+            final SelectionKey key) {
+        switch (apiKey) {
+            case API_VERSIONS:     return clusterApiHandler.generateApiVersionsResponse(header);
+            case METADATA:         return clusterApiHandler.generateMetadataResponse(header, buffer);
+            case DESCRIBE_CLUSTER: return clusterApiHandler.generateDescribeClusterResponse(header);
+            case FIND_COORDINATOR: return clusterApiHandler.generateFindCoordinatorResponse(header, buffer);
+            case PRODUCE:          return producerApiHandler.generateProduceResponse(header, buffer);
+            case JOIN_GROUP:
+                return consumerGroupApiHandler.generateJoinGroupResponse(header, buffer, connection, key);
+            case SYNC_GROUP:       return consumerGroupApiHandler.generateSyncGroupResponse(header, buffer);
+            case HEARTBEAT:        return consumerGroupApiHandler.generateHeartbeatResponse(header, buffer);
+            case LEAVE_GROUP:      return consumerGroupApiHandler.generateLeaveGroupResponse(header, buffer);
+            case LIST_GROUPS:      return consumerGroupApiHandler.generateListGroupsResponse(header, buffer);
+            case CONSUMER_GROUP_DESCRIBE:
+                return consumerGroupApiHandler.generateConsumerGroupDescribeResponse(header, buffer);
+            case DELETE_GROUPS:    return consumerGroupApiHandler.generateDeleteGroupsResponse(header, buffer);
+            case OFFSET_FETCH:     return consumerDataApiHandler.generateOffsetFetchResponse(header, buffer);
+            case OFFSET_COMMIT:    return consumerDataApiHandler.generateOffsetCommitResponse(header, buffer);
+            case LIST_OFFSETS:     return consumerDataApiHandler.generateListOffsetsResponse(header, buffer);
+            case FETCH:            return consumerDataApiHandler.generateFetchResponse(header, buffer);
+            case CREATE_TOPICS:
+            case DELETE_TOPICS:
+            case DESCRIBE_CONFIGS:
+            case ALTER_CONFIGS:
+            case CREATE_PARTITIONS:
+            case DELETE_RECORDS:
+            case INCREMENTAL_ALTER_CONFIGS:
+            case ELECT_LEADERS:
+            case DESCRIBE_LOG_DIRS:
+            case ALTER_REPLICA_LOG_DIRS:
+                return dispatchAdminRequest(apiKey, header, buffer);
+            case DESCRIBE_TOPIC_PARTITIONS:
+                return clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
+            case CREATE_ACLS:
+            case DESCRIBE_ACLS:
+            case DELETE_ACLS:
+                return dispatchAclRequest(apiKey, header, buffer);
+            case INIT_PRODUCER_ID:
+            case ADD_PARTITIONS_TO_TXN:
+            case ADD_OFFSETS_TO_TXN:
+            case END_TXN:
+            case WRITE_TXN_MARKERS:
+            case TXN_OFFSET_COMMIT:
+            case LIST_TRANSACTIONS:
+            case DESCRIBE_TRANSACTIONS:
+                return dispatchTransactionRequest(apiKey, header, buffer);
+            case GET_TELEMETRY_SUBSCRIPTIONS:
+            case PUSH_TELEMETRY:
+                log.debug("Telemetry API not supported: {}", apiKey);
+                return clusterApiHandler.generateUnsupportedResponse(header, apiKey);
+            default:
+                log.warn("Unhandled API key: {} (id={})", apiKey, apiKey.id);
+                return null;
         }
     }
 
@@ -465,21 +533,21 @@ public final class KafkaProtocolHandler {
      */
     private ByteBuffer dispatchAdminRequest(
             final ApiKeys apiKey, final RequestHeader header, final ByteBuffer buffer) {
-        return switch (apiKey) {
-            case CREATE_TOPICS            -> adminApiHandler.generateCreateTopicsResponse(header, buffer);
-            case DELETE_TOPICS            -> adminApiHandler.generateDeleteTopicsResponse(header, buffer);
-            case DESCRIBE_CONFIGS         -> adminApiHandler.generateDescribeConfigsResponse(header, buffer);
-            case ALTER_CONFIGS            -> adminApiHandler.generateAlterConfigsResponse(header, buffer);
-            case CREATE_PARTITIONS        -> adminApiHandler.generateCreatePartitionsResponse(header, buffer);
-            case DELETE_RECORDS           -> adminApiHandler.generateDeleteRecordsResponse(header, buffer);
-            case INCREMENTAL_ALTER_CONFIGS ->
-                adminApiHandler.generateIncrementalAlterConfigsResponse(header, buffer);
-            case ELECT_LEADERS            -> adminApiHandler.generateElectLeadersResponse(header, buffer);
-            case DESCRIBE_LOG_DIRS        -> adminApiHandler.generateDescribeLogDirsResponse(header, buffer);
-            case ALTER_REPLICA_LOG_DIRS   ->
-                adminApiHandler.generateAlterReplicaLogDirsResponse(header, buffer);
-            default -> null;
-        };
+        switch (apiKey) {
+            case CREATE_TOPICS:            return adminApiHandler.generateCreateTopicsResponse(header, buffer);
+            case DELETE_TOPICS:            return adminApiHandler.generateDeleteTopicsResponse(header, buffer);
+            case DESCRIBE_CONFIGS:         return adminApiHandler.generateDescribeConfigsResponse(header, buffer);
+            case ALTER_CONFIGS:            return adminApiHandler.generateAlterConfigsResponse(header, buffer);
+            case CREATE_PARTITIONS:        return adminApiHandler.generateCreatePartitionsResponse(header, buffer);
+            case DELETE_RECORDS:           return adminApiHandler.generateDeleteRecordsResponse(header, buffer);
+            case INCREMENTAL_ALTER_CONFIGS:
+                return adminApiHandler.generateIncrementalAlterConfigsResponse(header, buffer);
+            case ELECT_LEADERS:            return adminApiHandler.generateElectLeadersResponse(header, buffer);
+            case DESCRIBE_LOG_DIRS:        return adminApiHandler.generateDescribeLogDirsResponse(header, buffer);
+            case ALTER_REPLICA_LOG_DIRS:
+                return adminApiHandler.generateAlterReplicaLogDirsResponse(header, buffer);
+            default:                       return null;
+        }
     }
 
     /**
@@ -492,18 +560,18 @@ public final class KafkaProtocolHandler {
      */
     private ByteBuffer dispatchTransactionRequest(
             final ApiKeys apiKey, final RequestHeader header, final ByteBuffer buffer) {
-        return switch (apiKey) {
-            case INIT_PRODUCER_ID      -> transactionApiHandler.generateInitProducerIdResponse(header, buffer);
-            case ADD_PARTITIONS_TO_TXN -> transactionApiHandler.generateAddPartitionsToTxnResponse(header, buffer);
-            case ADD_OFFSETS_TO_TXN    -> transactionApiHandler.generateAddOffsetsToTxnResponse(header, buffer);
-            case END_TXN               -> transactionApiHandler.generateEndTxnResponse(header, buffer);
-            case WRITE_TXN_MARKERS     -> transactionApiHandler.generateWriteTxnMarkersResponse(header, buffer);
-            case TXN_OFFSET_COMMIT     -> transactionApiHandler.generateTxnOffsetCommitResponse(header, buffer);
-            case LIST_TRANSACTIONS     -> transactionApiHandler.generateListTransactionsResponse(header, buffer);
-            case DESCRIBE_TRANSACTIONS ->
-                transactionApiHandler.generateDescribeTransactionsResponse(header, buffer);
-            default -> null;
-        };
+        switch (apiKey) {
+            case INIT_PRODUCER_ID:      return transactionApiHandler.generateInitProducerIdResponse(header, buffer);
+            case ADD_PARTITIONS_TO_TXN: return transactionApiHandler.generateAddPartitionsToTxnResponse(header, buffer);
+            case ADD_OFFSETS_TO_TXN:    return transactionApiHandler.generateAddOffsetsToTxnResponse(header, buffer);
+            case END_TXN:               return transactionApiHandler.generateEndTxnResponse(header, buffer);
+            case WRITE_TXN_MARKERS:     return transactionApiHandler.generateWriteTxnMarkersResponse(header, buffer);
+            case TXN_OFFSET_COMMIT:     return transactionApiHandler.generateTxnOffsetCommitResponse(header, buffer);
+            case LIST_TRANSACTIONS:     return transactionApiHandler.generateListTransactionsResponse(header, buffer);
+            case DESCRIBE_TRANSACTIONS:
+                return transactionApiHandler.generateDescribeTransactionsResponse(header, buffer);
+            default:                    return null;
+        }
     }
 
     /**
@@ -516,12 +584,12 @@ public final class KafkaProtocolHandler {
      */
     private ByteBuffer dispatchAclRequest(
             final ApiKeys apiKey, final RequestHeader header, final ByteBuffer buffer) {
-        return switch (apiKey) {
-            case CREATE_ACLS   -> aclApiHandler.generateCreateAclsResponse(header, buffer);
-            case DESCRIBE_ACLS -> aclApiHandler.generateDescribeAclsResponse(header, buffer);
-            case DELETE_ACLS   -> aclApiHandler.generateDeleteAclsResponse(header, buffer);
-            default -> null;
-        };
+        switch (apiKey) {
+            case CREATE_ACLS:   return aclApiHandler.generateCreateAclsResponse(header, buffer);
+            case DESCRIBE_ACLS: return aclApiHandler.generateDescribeAclsResponse(header, buffer);
+            case DELETE_ACLS:   return aclApiHandler.generateDeleteAclsResponse(header, buffer);
+            default:            return null;
+        }
     }
 
     /**

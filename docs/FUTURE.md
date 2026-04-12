@@ -2,6 +2,7 @@
 
 The following is a loose list of the things I'd like to add to Kafkaesque in roughly priority order
 
+ * Support older versions of Apache Client (including some pretty old ones)
  * Proper example application that uses Kafka with a demo of the use of Kafkaesque
  * Nice landing page on the `kafkaesque.eu` domain
  * More helper methods for test suites (but which ones would be useful? Do we go full DSL?)
@@ -14,8 +15,6 @@ The following is a loose list of the things I'd like to add to Kafkaesque in rou
    * SASL/OAUTHBEARER
    * ACLs or other authorisation
    * Anything else people are actually using!
- * Support older versions of Apache Client (including some pretty old ones)
- * Support older versions of Java
  * Error/Fault Injection DSL (... whatever that means; I need to think about it!)
  * DSL for wiring expectations on what gets published in tests
  * Some example tests combining Kafkaesque with Schema Registry (or maybe even a mock Schema Registry as part of Kafkaesque!)

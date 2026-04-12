@@ -34,6 +34,7 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT;
@@ -137,12 +138,12 @@ final class AdminApiHandler {
      * @return the corresponding {@link CleanupPolicy}
      */
     private static CleanupPolicy resolveCleanupPolicyValue(final String value) {
-        return switch (value) {
-            case "compact"        -> COMPACT;
-            case "compact,delete",
-                 "delete,compact" -> COMPACT_DELETE;
-            default               -> DELETE;
-        };
+        switch (value) {
+            case "compact":        return COMPACT;
+            case "compact,delete":
+            case "delete,compact": return COMPACT_DELETE;
+            default:               return DELETE;
+        }
     }
 
     /**
@@ -205,13 +206,13 @@ final class AdminApiHandler {
      * @return the corresponding {@link Compression}
      */
     private static Compression compressionForName(final String name) {
-        return switch (name) {
-            case "gzip"   -> Compression.gzip().build();
-            case "snappy" -> Compression.snappy().build();
-            case "lz4"    -> Compression.lz4().build();
-            case "zstd"   -> Compression.zstd().build();
-            default       -> Compression.NONE; // "uncompressed", "producer", unknown
-        };
+        switch (name) {
+            case "gzip":   return Compression.gzip().build();
+            case "snappy": return Compression.snappy().build();
+            case "lz4":    return Compression.lz4().build();
+            case "zstd":   return Compression.zstd().build();
+            default:       return Compression.NONE; // "uncompressed", "producer", unknown
+        }
     }
 
     /**
@@ -275,7 +276,7 @@ final class AdminApiHandler {
 
             final var results = request.resources().stream()
                 .map(this::describeResource)
-                .toList();
+                .collect(Collectors.toList());
 
             final var response = new DescribeConfigsResponseData()
                 .setThrottleTimeMs(0)
@@ -381,7 +382,7 @@ final class AdminApiHandler {
                     .setResourceName(resource.resourceName())
                     .setErrorCode((short) 0)
                     .setErrorMessage(null))
-                .toList();
+                .collect(Collectors.toList());
             final var response = new AlterConfigsResponseData()
                 .setThrottleTimeMs(0)
                 .setResponses(responses);
@@ -413,7 +414,7 @@ final class AdminApiHandler {
                         .setErrorCode((short) 0)
                         .setErrorMessage(null);
                 })
-                .toList();
+                .collect(Collectors.toList());
 
             final var response = new CreatePartitionsResponseData()
                 .setThrottleTimeMs(0)
@@ -490,7 +491,7 @@ final class AdminApiHandler {
                     .setResourceName(resource.resourceName())
                     .setErrorCode((short) 0)
                     .setErrorMessage(null))
-                .toList();
+                .collect(Collectors.toList());
             final var response = new IncrementalAlterConfigsResponseData()
                 .setThrottleTimeMs(0)
                 .setResponses(responses);
@@ -560,8 +561,8 @@ final class AdminApiHandler {
                                 .setPartitionId(p)
                                 .setErrorCode(Errors.ELECTION_NOT_NEEDED.code())
                                 .setErrorMessage(Errors.ELECTION_NOT_NEEDED.message()))
-                            .toList()))
-                    .toList();
+                            .collect(Collectors.toList())))
+                    .collect(Collectors.toList());
 
             final var response = new ElectLeadersResponseData()
                 .setThrottleTimeMs(0)
@@ -598,12 +599,12 @@ final class AdminApiHandler {
                             .setPartitionSize(0L)
                             .setOffsetLag(0L)
                             .setIsFutureKey(false))
-                        .toList();
+                        .collect(Collectors.toList());
                     return new DescribeLogDirsResponseData.DescribeLogDirsTopic()
                         .setName(def.name())
                         .setPartitions(partitions);
                 })
-                .toList();
+                .collect(Collectors.toList());
 
             final var logDir = new DescribeLogDirsResponseData.DescribeLogDirsResult()
                 .setErrorCode((short) 0)
@@ -647,8 +648,8 @@ final class AdminApiHandler {
                                 .AlterReplicaLogDirPartitionResult()
                                 .setPartitionIndex(p)
                                 .setErrorCode((short) 0))
-                            .toList())))
-                .toList();
+                            .collect(Collectors.toList()))))
+                .collect(Collectors.toList());
 
             final var response = new AlterReplicaLogDirsResponseData()
                 .setThrottleTimeMs(0)

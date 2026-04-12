@@ -24,6 +24,7 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Handles Kafka transaction coordinator API responses.
@@ -204,7 +205,7 @@ final class TransactionApiHandler {
 
             final var markerResults = request.markers().stream()
                 .map(marker -> buildWriteTxnMarkerResult(marker))
-                .toList();
+                .collect(Collectors.toList());
 
             return ResponseSerializer.serialize(requestHeader,
                 new WriteTxnMarkersResponseData().setMarkers(markerResults),
@@ -245,8 +246,8 @@ final class TransactionApiHandler {
                                 .setPartitionIndex(partition.partitionIndex())
                                 .setErrorCode((short) 0);
                         })
-                        .toList()))
-                .toList();
+                        .collect(Collectors.toList())))
+                .collect(Collectors.toList());
 
             return ResponseSerializer.serialize(requestHeader,
                 new TxnOffsetCommitResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
@@ -326,8 +327,8 @@ final class TransactionApiHandler {
                     .map(p -> new WriteTxnMarkersResponseData.WritableTxnMarkerPartitionResult()
                         .setPartitionIndex(p)
                         .setErrorCode((short) 0))
-                    .toList()))
-            .toList();
+                    .collect(Collectors.toList())))
+            .collect(Collectors.toList());
         return new WriteTxnMarkersResponseData.WritableTxnMarkerResult()
             .setProducerId(marker.producerId())
             .setTopics(topicResults);
@@ -350,7 +351,7 @@ final class TransactionApiHandler {
                     .setTransactionalId(txnId)
                     .setProducerId(transactionCoordinator.getProducerIdAndEpoch(txnId).producerId())
                     .setTransactionState("Ongoing"))
-                .toList();
+                .collect(Collectors.toList());
 
             final var response = new ListTransactionsResponseData()
                 .setErrorCode((short) 0)
@@ -401,7 +402,7 @@ final class TransactionApiHandler {
                         .setTransactionStartTimeMs(System.currentTimeMillis())
                         .setTopics(new DescribeTransactionsResponseData.TopicDataCollection());
                 })
-                .toList();
+                .collect(Collectors.toList());
 
             final var response = new DescribeTransactionsResponseData()
                 .setTransactionStates(states);

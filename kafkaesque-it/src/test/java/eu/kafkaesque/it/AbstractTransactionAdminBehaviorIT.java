@@ -13,6 +13,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Properties;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -61,7 +62,7 @@ abstract class AbstractTransactionAdminBehaviorIT {
                 final var txns = adminClient.listTransactions().all().get();
                 final var txnIds = txns.stream()
                     .map(TransactionListing::transactionalId)
-                    .toList();
+                    .collect(Collectors.toList());
 
                 // Then
                 assertThat(txnIds).contains(txnId);

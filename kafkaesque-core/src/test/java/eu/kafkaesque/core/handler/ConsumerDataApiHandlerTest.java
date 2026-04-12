@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -407,7 +408,7 @@ class ConsumerDataApiHandlerTest {
             .findFirst().orElseThrow()
             .partitions().stream()
             .map(FetchResponseData.PartitionData::partitionIndex)
-            .toList();
+            .collect(Collectors.toList());
         assertThat(partitionIndices).contains(1);
         assertThat(partitionIndices)
             .as("forgotten partition 0 must not appear in the incremental response")

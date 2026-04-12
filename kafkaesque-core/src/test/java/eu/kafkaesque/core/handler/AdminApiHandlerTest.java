@@ -33,6 +33,7 @@ import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -128,7 +129,7 @@ class AdminApiHandlerTest {
 
         final var configNames = result.configs().stream()
             .map(DescribeConfigsResponseData.DescribeConfigsResourceResult::name)
-            .toList();
+            .collect(Collectors.toList());
         assertThat(configNames).contains("cleanup.policy", "retention.ms", "retention.bytes", "compression.type");
     }
 
@@ -456,7 +457,7 @@ class AdminApiHandlerTest {
 
         final var topicNames = logDir.topics().stream()
             .map(DescribeLogDirsResponseData.DescribeLogDirsTopic::name)
-            .toList();
+            .collect(Collectors.toList());
         assertThat(topicNames).containsExactlyInAnyOrder("log-dir-topic-a", "log-dir-topic-b");
     }
 

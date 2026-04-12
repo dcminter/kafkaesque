@@ -11,7 +11,11 @@ the startup overhead required to launch the real Kafka brokers.
 
 I'd call this a "potentially useful beta" - give it a whirl if you think it might be handy!
 
-Kafkaesque is currently compatible with the **3.9.1** Apache Client library.
+Kafkaesque is currently compatible with the **3.9.1** Apache Client library and requires **Java 11** or later.
+
+> **Note:** From version 1.0.0 onwards, Kafkaesque targets Java 11 as the minimum supported version
+> (previous versions required Java 25). The library is tested and works with Java 11 and Java 25, so
+> we expect intermediate versions to be fine as well.
 
 ## Why not just use real Kafka?
 
@@ -66,8 +70,8 @@ class OrderNotificationServiceTest {
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
             var notifications = kafkaesque.getRecordsByTopic("notifications");
             assertThat(notifications).hasSize(1);
-            assertThat(notifications.getFirst().key()).isEqualTo("order-123");
-            assertThat(notifications.getFirst().value()).contains("Alice");
+            assertThat(notifications.get(0).key()).isEqualTo("order-123");
+            assertThat(notifications.get(0).value()).contains("Alice");
         });
 
         application.stop();
@@ -106,8 +110,8 @@ public class OrderNotificationServiceTest {
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
             var notifications = kafkaesqueRule.getServer().getRecordsByTopic("notifications");
             assertThat(notifications).hasSize(1);
-            assertThat(notifications.getFirst().key()).isEqualTo("order-123");
-            assertThat(notifications.getFirst().value()).contains("Alice");
+            assertThat(notifications.get(0).key()).isEqualTo("order-123");
+            assertThat(notifications.get(0).value()).contains("Alice");
         });
 
         application.stop();

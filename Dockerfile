@@ -1,5 +1,5 @@
 # Stage 1: Build the standalone fat JAR
-FROM eclipse-temurin:25-jdk-noble AS build
+FROM eclipse-temurin:11-jdk-noble AS build
 
 WORKDIR /build
 
@@ -23,7 +23,7 @@ RUN --mount=type=cache,target=/root/.m2/repository \
     package
 
 # Stage 2: Minimal runtime image
-FROM eclipse-temurin:25-jre-noble
+FROM eclipse-temurin:11-jre-noble
 
 LABEL org.opencontainers.image.title="Kafkaesque" \
       org.opencontainers.image.description="A mock Kafka service for testing" \

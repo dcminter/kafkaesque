@@ -111,10 +111,10 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
 
         running.set(true);
 
-        serverThread.set(Thread.ofPlatform()
-            .name("kafkaesque-server")
-            .daemon(false)
-            .start(this::runEventLoop));
+        final var thread = new Thread(this::runEventLoop, "kafkaesque-server");
+        thread.setDaemon(false);
+        thread.start();
+        serverThread.set(thread);
 
         log.info("Kafkaesque server started on {}:{}", host, port);
     }
@@ -134,10 +134,11 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
         if (serverChannel.get() == null) {
             throw new IllegalStateException("Server not started");
         }
-        return switch (serverChannel.get().getLocalAddress()) {
-            case InetSocketAddress addr -> addr.getPort();
-            case null, default -> throw new IOException("Cannot determine port");
-        };
+        final var address = serverChannel.get().getLocalAddress();
+        if (address instanceof InetSocketAddress) {
+            return ((InetSocketAddress) address).getPort();
+        }
+        throw new IOException("Cannot determine port");
     }
 
     /**
@@ -160,7 +161,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @throws IOException if the port cannot be determined
      */
     public String getBootstrapServers() throws IOException {
-        return "%s:%d".formatted(host, getPort());
+        return String.format("%s:%d", host, getPort());
     }
 
     /**
@@ -245,7 +246,8 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param key the selection key representing the readable client socket
      */
     private void handleRead(final SelectionKey key) {
-        if (key.attachment() instanceof final ClientConnection connection) {
+        if (key.attachment() instanceof ClientConnection) {
+            final var connection = (ClientConnection) key.attachment();
             try {
                 protocolHandler.handleRead(connection, key);
             } catch (final IOException e) {
@@ -261,7 +263,8 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param key the selection key representing the writable client socket
      */
     private void handleWrite(final SelectionKey key) {
-        if (key.attachment() instanceof final ClientConnection connection) {
+        if (key.attachment() instanceof ClientConnection) {
+            final var connection = (ClientConnection) key.attachment();
             try {
                 protocolHandler.handleWrite(connection, key);
             } catch (final IOException e) {
@@ -504,7 +507,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
         return protocolHandler.getTopicStore().getTopics()
             .stream()
             .map(eu.kafkaesque.core.storage.TopicStore.TopicDefinition::name)
-            .toList();
+            .collect(java.util.stream.Collectors.toList());
     }
 
     /**

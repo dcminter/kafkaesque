@@ -1,6 +1,8 @@
 package eu.kafkaesque.core.storage;
 
 import eu.kafkaesque.core.listener.ListenerRegistry;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,12 +36,102 @@ public final class EventStore {
     /**
      * Identifies a topic partition as a store key.
      */
-    private record TopicPartitionKey(String topic, int partition) {}
+    @EqualsAndHashCode
+    @ToString
+    private static final class TopicPartitionKey {
+
+        /** The topic name. */
+        private final String topic;
+
+        /** The partition index. */
+        private final int partition;
+
+        /**
+         * Creates a new topic partition key.
+         *
+         * @param topic     the topic name
+         * @param partition the partition index
+         */
+        TopicPartitionKey(final String topic, final int partition) {
+            this.topic = topic;
+            this.partition = partition;
+        }
+
+        /**
+         * Returns the topic name.
+         *
+         * @return the topic name
+         */
+        String topic() {
+            return topic;
+        }
+
+        /**
+         * Returns the partition index.
+         *
+         * @return the partition index
+         */
+        int partition() {
+            return partition;
+        }
+    }
 
     /**
      * Records a single pending record's location for later commit/abort.
      */
-    private record PartitionOffset(String topic, int partition, long offset) {}
+    @EqualsAndHashCode
+    @ToString
+    private static final class PartitionOffset {
+
+        /** The topic name. */
+        private final String topic;
+
+        /** The partition index. */
+        private final int partition;
+
+        /** The record offset. */
+        private final long offset;
+
+        /**
+         * Creates a new partition offset.
+         *
+         * @param topic     the topic name
+         * @param partition the partition index
+         * @param offset    the record offset
+         */
+        PartitionOffset(final String topic, final int partition, final long offset) {
+            this.topic = topic;
+            this.partition = partition;
+            this.offset = offset;
+        }
+
+        /**
+         * Returns the topic name.
+         *
+         * @return the topic name
+         */
+        String topic() {
+            return topic;
+        }
+
+        /**
+         * Returns the partition index.
+         *
+         * @return the partition index
+         */
+        int partition() {
+            return partition;
+        }
+
+        /**
+         * Returns the record offset.
+         *
+         * @return the offset
+         */
+        long offset() {
+            return offset;
+        }
+    }
 
     /**
      * Represents a partition's storage with its records and offset counter.
@@ -139,7 +231,7 @@ public final class EventStore {
             synchronized (records) {
                 return records.stream()
                     .filter(r -> r.offset() >= startOffset)
-                    .toList();
+                    .collect(Collectors.toUnmodifiableList());
             }
         }
 
@@ -373,7 +465,7 @@ public final class EventStore {
         }
         return ps.getRecords().stream()
             .filter(r -> passesIsolationFilter(ps, r.offset(), isolationLevel))
-            .toList();
+            .collect(Collectors.toUnmodifiableList());
     }
 
     /**
@@ -412,7 +504,7 @@ public final class EventStore {
      */
     public List<StoredRecord> getRecordsByTopic(final String topic) {
         return partitions.entrySet().stream()
-            .filter(entry -> entry.getKey().topic.equals(topic))
+            .filter(entry -> entry.getKey().topic().equals(topic))
             .flatMap(entry -> entry.getValue().getRecords().stream())
             .collect(Collectors.toUnmodifiableList());
     }
@@ -477,7 +569,7 @@ public final class EventStore {
      */
     public long getRecordCount(final String topic) {
         return partitions.entrySet().stream()
-            .filter(entry -> entry.getKey().topic.equals(topic))
+            .filter(entry -> entry.getKey().topic().equals(topic))
             .mapToLong(entry -> entry.getValue().getRecords().size())
             .sum();
     }

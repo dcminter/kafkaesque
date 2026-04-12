@@ -25,6 +25,7 @@ import org.apache.kafka.common.requests.RequestHeader;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static java.util.Arrays.stream;
@@ -203,7 +204,7 @@ final class ClusterApiHandler {
                         .setHost(getServerHost())
                         .setPort(getServerPort())
                         .setErrorCode((short) 0))
-                    .toList();
+                    .collect(Collectors.toList());
                 data.setCoordinators(coordinators);
             } else {
                 data.setErrorCode((short) 0)
@@ -269,16 +270,21 @@ final class ClusterApiHandler {
     ByteBuffer generateUnsupportedResponse(final RequestHeader requestHeader, final ApiKeys apiKey) {
         try {
             final var errorCode = Errors.UNSUPPORTED_VERSION.code();
-            final Message data = switch (apiKey) {
-                case GET_TELEMETRY_SUBSCRIPTIONS -> new GetTelemetrySubscriptionsResponseData()
-                    .setErrorCode(errorCode);
-                case PUSH_TELEMETRY -> new PushTelemetryResponseData()
-                    .setErrorCode(errorCode);
-                default -> {
+            final Message data;
+            switch (apiKey) {
+                case GET_TELEMETRY_SUBSCRIPTIONS:
+                    data = new GetTelemetrySubscriptionsResponseData()
+                        .setErrorCode(errorCode);
+                    break;
+                case PUSH_TELEMETRY:
+                    data = new PushTelemetryResponseData()
+                        .setErrorCode(errorCode);
+                    break;
+                default:
                     log.warn("generateUnsupportedResponse called for unexpected API: {}", apiKey);
-                    yield null;
-                }
-            };
+                    data = null;
+                    break;
+            }
             if (data == null) {
                 return null;
             }
@@ -347,7 +353,7 @@ final class ClusterApiHandler {
                 .setEligibleLeaderReplicas(of())
                 .setLastKnownElr(of())
                 .setOfflineReplicas(of()))
-            .toList();
+            .collect(Collectors.toList());
 
         return new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopic()
             .setName(topicName)
@@ -392,7 +398,7 @@ final class ClusterApiHandler {
                 .setReplicaNodes(of(1))
                 .setIsrNodes(of(1))
                 .setErrorCode((short) 0))
-            .toList();
+            .collect(Collectors.toList());
 
         return new MetadataResponseData.MetadataResponseTopic()
             .setName(topicName)

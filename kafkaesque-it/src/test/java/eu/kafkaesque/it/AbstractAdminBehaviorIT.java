@@ -580,7 +580,7 @@ abstract class AbstractAdminBehaviorIT {
                 .keySet().iterator().next();
 
             // When — reassign partition 0 to the discovered log directory
-            final var tpr = new org.apache.kafka.common.TopicPartitionReplica(topicName, 0, brokerIds.getFirst());
+            final var tpr = new org.apache.kafka.common.TopicPartitionReplica(topicName, 0, brokerIds.get(0));
             adminClient.alterReplicaLogDirs(Map.of(tpr, logDir)).all().get();
 
             // Then — no exception means success

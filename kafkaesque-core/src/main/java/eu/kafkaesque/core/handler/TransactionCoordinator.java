@@ -1,7 +1,9 @@
 package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.storage.EventStore;
+import lombok.EqualsAndHashCode;
 import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -36,27 +38,162 @@ public final class TransactionCoordinator {
 
     /**
      * Immutable producer identity (ID + epoch) assigned to a transactional ID.
-     *
-     * @param producerId the stable producer ID
-     * @param epoch      the producer epoch; incremented on each {@code INIT_PRODUCER_ID}
      */
-    public record ProducerIdAndEpoch(long producerId, short epoch) {}
+    @EqualsAndHashCode
+    @ToString
+    public static final class ProducerIdAndEpoch {
+
+        /** The stable producer ID. */
+        private final long producerId;
+
+        /** The producer epoch; incremented on each {@code INIT_PRODUCER_ID}. */
+        private final short epoch;
+
+        /**
+         * Creates a new producer identity.
+         *
+         * @param producerId the stable producer ID
+         * @param epoch      the producer epoch
+         */
+        public ProducerIdAndEpoch(final long producerId, final short epoch) {
+            this.producerId = producerId;
+            this.epoch = epoch;
+        }
+
+        /**
+         * Returns the stable producer ID.
+         *
+         * @return the producer ID
+         */
+        public long producerId() {
+            return producerId;
+        }
+
+        /**
+         * Returns the producer epoch.
+         *
+         * @return the epoch
+         */
+        public short epoch() {
+            return epoch;
+        }
+    }
 
     /**
      * A single offset-commit entry buffered by a {@code TXN_OFFSET_COMMIT} request.
      *
      * <p>The commit is held pending until the owning transaction ends: on commit the
      * offset becomes visible to consumers; on abort it is discarded.</p>
-     *
-     * @param groupId        the consumer group ID
-     * @param topic          the topic name
-     * @param partitionIndex the partition index
-     * @param offset         the committed offset value
      */
-    public record PendingOffsetCommit(String groupId, String topic, int partitionIndex, long offset) {}
+    @EqualsAndHashCode
+    @ToString
+    public static final class PendingOffsetCommit {
+
+        /** The consumer group ID. */
+        private final String groupId;
+
+        /** The topic name. */
+        private final String topic;
+
+        /** The partition index. */
+        private final int partitionIndex;
+
+        /** The committed offset value. */
+        private final long offset;
+
+        /**
+         * Creates a new pending offset commit entry.
+         *
+         * @param groupId        the consumer group ID
+         * @param topic          the topic name
+         * @param partitionIndex the partition index
+         * @param offset         the committed offset value
+         */
+        public PendingOffsetCommit(final String groupId, final String topic,
+                                   final int partitionIndex, final long offset) {
+            this.groupId = groupId;
+            this.topic = topic;
+            this.partitionIndex = partitionIndex;
+            this.offset = offset;
+        }
+
+        /**
+         * Returns the consumer group ID.
+         *
+         * @return the group ID
+         */
+        public String groupId() {
+            return groupId;
+        }
+
+        /**
+         * Returns the topic name.
+         *
+         * @return the topic name
+         */
+        public String topic() {
+            return topic;
+        }
+
+        /**
+         * Returns the partition index.
+         *
+         * @return the partition index
+         */
+        public int partitionIndex() {
+            return partitionIndex;
+        }
+
+        /**
+         * Returns the committed offset value.
+         *
+         * @return the offset
+         */
+        public long offset() {
+            return offset;
+        }
+    }
 
     /** Internal state kept per transactional ID. */
-    private record ProducerState(long producerId, short epoch) {}
+    @EqualsAndHashCode
+    @ToString
+    private static final class ProducerState {
+
+        /** The stable producer ID. */
+        private final long producerId;
+
+        /** The producer epoch. */
+        private final short epoch;
+
+        /**
+         * Creates a new producer state.
+         *
+         * @param producerId the stable producer ID
+         * @param epoch      the producer epoch
+         */
+        ProducerState(final long producerId, final short epoch) {
+            this.producerId = producerId;
+            this.epoch = epoch;
+        }
+
+        /**
+         * Returns the stable producer ID.
+         *
+         * @return the producer ID
+         */
+        long producerId() {
+            return producerId;
+        }
+
+        /**
+         * Returns the producer epoch.
+         *
+         * @return the epoch
+         */
+        short epoch() {
+            return epoch;
+        }
+    }
 
     private final AtomicLong nextProducerId = new AtomicLong(1L);
     private final Map<String, ProducerState> producers = new ConcurrentHashMap<>();

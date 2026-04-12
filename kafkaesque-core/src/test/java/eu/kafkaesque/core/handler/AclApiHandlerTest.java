@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
+import java.util.stream.Collectors;
 
 import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,8 +103,8 @@ class AclApiHandlerTest {
         final var responseData = parseDescribeAclsResponse(response);
         assertThat(responseData.errorCode()).isEqualTo((short) 0);
         assertThat(responseData.resources()).hasSize(1);
-        assertThat(responseData.resources().getFirst().resourceName()).isEqualTo("my-topic");
-        assertThat(responseData.resources().getFirst().acls()).hasSize(1);
+        assertThat(responseData.resources().get(0).resourceName()).isEqualTo("my-topic");
+        assertThat(responseData.resources().get(0).acls()).hasSize(1);
     }
 
     @Test
@@ -121,13 +122,13 @@ class AclApiHandlerTest {
         // Then — one resource with 2 ACL descriptions
         final var responseData = parseDescribeAclsResponse(response);
         assertThat(responseData.resources()).hasSize(1);
-        final var resource = responseData.resources().getFirst();
+        final var resource = responseData.resources().get(0);
         assertThat(resource.resourceName()).isEqualTo("my-topic");
         assertThat(resource.acls()).hasSize(2);
 
         final var principals = resource.acls().stream()
             .map(DescribeAclsResponseData.AclDescription::principal)
-            .toList();
+            .collect(Collectors.toList());
         assertThat(principals).containsExactlyInAnyOrder("User:alice", "User:bob");
     }
 
@@ -158,10 +159,10 @@ class AclApiHandlerTest {
         // And — response lists the deleted binding
         final var responseData = parseDeleteAclsResponse(response);
         assertThat(responseData.filterResults()).hasSize(1);
-        final var filterResult = responseData.filterResults().getFirst();
+        final var filterResult = responseData.filterResults().get(0);
         assertThat(filterResult.errorCode()).isEqualTo((short) 0);
         assertThat(filterResult.matchingAcls()).hasSize(1);
-        assertThat(filterResult.matchingAcls().getFirst().resourceName()).isEqualTo("my-topic");
+        assertThat(filterResult.matchingAcls().get(0).resourceName()).isEqualTo("my-topic");
     }
 
     @Test
@@ -173,7 +174,7 @@ class AclApiHandlerTest {
         // Then
         final var responseData = parseDeleteAclsResponse(response);
         assertThat(responseData.filterResults()).hasSize(1);
-        assertThat(responseData.filterResults().getFirst().matchingAcls()).isEmpty();
+        assertThat(responseData.filterResults().get(0).matchingAcls()).isEmpty();
     }
 
     // --- helpers ---

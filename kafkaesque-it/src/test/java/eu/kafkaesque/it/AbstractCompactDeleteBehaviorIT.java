@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -100,7 +101,7 @@ abstract class AbstractCompactDeleteBehaviorIT {
                 }
                 final var k1Records = records.stream()
                     .filter(r -> "k1".equals(r.key()))
-                    .toList();
+                    .collect(Collectors.toList());
                 return k1Records.size() == 1 && "value-3".equals(k1Records.get(0).value());
             });
 
@@ -162,7 +163,7 @@ abstract class AbstractCompactDeleteBehaviorIT {
                     }
                 }
                 final boolean k1Absent = records.stream().noneMatch(r -> "k1".equals(r.key()));
-                final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).toList();
+                final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).collect(Collectors.toList());
                 return k1Absent && k2Records.size() == 1 && "live-value".equals(k2Records.get(0).value());
             });
 

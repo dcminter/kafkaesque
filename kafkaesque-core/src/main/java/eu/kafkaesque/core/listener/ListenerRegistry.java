@@ -47,10 +47,10 @@ public final class ListenerRegistry {
      * Creates a new listener registry and starts its consumer daemon thread.
      */
     public ListenerRegistry() {
-        consumerThread = Thread.ofPlatform()
-            .daemon(true)
-            .name("kafkaesque-listener")
-            .start(this::consumeNotifications);
+        final var thread = new Thread(this::consumeNotifications, "kafkaesque-listener");
+        thread.setDaemon(true);
+        thread.start();
+        consumerThread = thread;
     }
 
     /**
@@ -161,13 +161,17 @@ public final class ListenerRegistry {
      * @param notification the notification to dispatch
      */
     private void dispatch(final ListenerNotification notification) {
-        switch (notification) {
-            case ListenerNotification.RecordPublished rp -> notifyRecordListeners(rp.record());
-            case ListenerNotification.TopicCreated tc -> notifyTopicListeners(tc.topicName());
-            case ListenerNotification.TransactionCompleted txn ->
-                notifyTransactionListeners(txn.transactionalId(), txn.committed());
-            case ListenerNotification.Shutdown ignored -> { /* handled in consumeNotifications */ }
+        if (notification instanceof ListenerNotification.RecordPublished) {
+            final var rp = (ListenerNotification.RecordPublished) notification;
+            notifyRecordListeners(rp.record());
+        } else if (notification instanceof ListenerNotification.TopicCreated) {
+            final var tc = (ListenerNotification.TopicCreated) notification;
+            notifyTopicListeners(tc.topicName());
+        } else if (notification instanceof ListenerNotification.TransactionCompleted) {
+            final var txn = (ListenerNotification.TransactionCompleted) notification;
+            notifyTransactionListeners(txn.transactionalId(), txn.committed());
         }
+        // ListenerNotification.Shutdown is handled in consumeNotifications
     }
 
     /**

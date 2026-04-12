@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -152,7 +153,7 @@ class TransactionApiHandlerTest {
         assertThat(responseData.errorCode()).isZero();
         final var txnIds = responseData.transactionStates().stream()
             .map(ListTransactionsResponseData.TransactionState::transactionalId)
-            .toList();
+            .collect(Collectors.toList());
         assertThat(txnIds).contains("txn-A");
     }
 

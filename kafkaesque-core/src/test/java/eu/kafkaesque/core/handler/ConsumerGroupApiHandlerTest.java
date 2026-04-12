@@ -30,6 +30,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static java.lang.System.currentTimeMillis;
 import static java.util.List.of;
@@ -110,7 +111,7 @@ class ConsumerGroupApiHandlerTest {
 
         final var responses = dispatched.stream()
             .map(d -> parseJoinGroupResponse(d.response(), apiVersion))
-            .toList();
+            .collect(Collectors.toList());
 
         // Both should share the same leader and generation
         assertThat(responses.get(0).leader()).isEqualTo(responses.get(1).leader());
@@ -203,7 +204,7 @@ class ConsumerGroupApiHandlerTest {
         assertThat(responseData.errorCode()).isZero();
         final var groupIds = responseData.groups().stream()
             .map(ListGroupsResponseData.ListedGroup::groupId)
-            .toList();
+            .collect(Collectors.toList());
         assertThat(groupIds).containsExactlyInAnyOrder("group-a", "group-b");
     }
 

@@ -243,7 +243,7 @@ public final class KafkaesqueExtension
             .map(Kafkaesque::topics)
             .map(Arrays::asList)
             .orElse(of());
-        return concat(classTopics.stream(), methodTopics.stream()).toList();
+        return concat(classTopics.stream(), methodTopics.stream()).collect(java.util.stream.Collectors.toList());
     }
 
     /**

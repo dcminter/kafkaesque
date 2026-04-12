@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.awaitility.Awaitility.await;
@@ -100,7 +101,7 @@ abstract class AbstractCompactionBehaviorIT {
                 }
                 final var k1Records = records.stream()
                     .filter(r -> "k1".equals(r.key()))
-                    .toList();
+                    .collect(Collectors.toList());
                 return k1Records.size() == 1 && "value-3".equals(k1Records.get(0).value());
             });
 

@@ -1,10 +1,13 @@
 package eu.kafkaesque.core.storage;
 
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 /**
  * Thread-safe CRUD store for ACL bindings.
@@ -22,23 +25,123 @@ public final class AclStore {
 
     /**
      * An ACL binding combining a resource pattern with an access control entry.
-     *
-     * @param resourceType        the Kafka resource type code (e.g. TOPIC = 2)
-     * @param resourceName        the name of the resource
-     * @param resourcePatternType the pattern type code (e.g. LITERAL = 3)
-     * @param principal           the principal (e.g. {@code "User:test"})
-     * @param host                the host filter (e.g. {@code "*"})
-     * @param operation           the ACL operation code (e.g. READ = 3)
-     * @param permissionType      the permission type code (e.g. ALLOW = 3)
      */
-    public record AclBinding(
-            byte resourceType,
-            String resourceName,
-            byte resourcePatternType,
-            String principal,
-            String host,
-            byte operation,
-            byte permissionType) {}
+    @EqualsAndHashCode
+    @ToString
+    public static final class AclBinding {
+
+        /** The Kafka resource type code (e.g. TOPIC = 2). */
+        private final byte resourceType;
+
+        /** The name of the resource. */
+        private final String resourceName;
+
+        /** The pattern type code (e.g. LITERAL = 3). */
+        private final byte resourcePatternType;
+
+        /** The principal (e.g. {@code "User:test"}). */
+        private final String principal;
+
+        /** The host filter (e.g. {@code "*"}). */
+        private final String host;
+
+        /** The ACL operation code (e.g. READ = 3). */
+        private final byte operation;
+
+        /** The permission type code (e.g. ALLOW = 3). */
+        private final byte permissionType;
+
+        /**
+         * Creates a new ACL binding.
+         *
+         * @param resourceType        the Kafka resource type code (e.g. TOPIC = 2)
+         * @param resourceName        the name of the resource
+         * @param resourcePatternType the pattern type code (e.g. LITERAL = 3)
+         * @param principal           the principal (e.g. {@code "User:test"})
+         * @param host                the host filter (e.g. {@code "*"})
+         * @param operation           the ACL operation code (e.g. READ = 3)
+         * @param permissionType      the permission type code (e.g. ALLOW = 3)
+         */
+        public AclBinding(
+                final byte resourceType,
+                final String resourceName,
+                final byte resourcePatternType,
+                final String principal,
+                final String host,
+                final byte operation,
+                final byte permissionType) {
+            this.resourceType = resourceType;
+            this.resourceName = resourceName;
+            this.resourcePatternType = resourcePatternType;
+            this.principal = principal;
+            this.host = host;
+            this.operation = operation;
+            this.permissionType = permissionType;
+        }
+
+        /**
+         * Returns the Kafka resource type code.
+         *
+         * @return the resource type code
+         */
+        public byte resourceType() {
+            return resourceType;
+        }
+
+        /**
+         * Returns the name of the resource.
+         *
+         * @return the resource name
+         */
+        public String resourceName() {
+            return resourceName;
+        }
+
+        /**
+         * Returns the pattern type code.
+         *
+         * @return the resource pattern type code
+         */
+        public byte resourcePatternType() {
+            return resourcePatternType;
+        }
+
+        /**
+         * Returns the principal.
+         *
+         * @return the principal
+         */
+        public String principal() {
+            return principal;
+        }
+
+        /**
+         * Returns the host filter.
+         *
+         * @return the host
+         */
+        public String host() {
+            return host;
+        }
+
+        /**
+         * Returns the ACL operation code.
+         *
+         * @return the operation code
+         */
+        public byte operation() {
+            return operation;
+        }
+
+        /**
+         * Returns the permission type code.
+         *
+         * @return the permission type code
+         */
+        public byte permissionType() {
+            return permissionType;
+        }
+    }
 
     /** The set of stored ACL bindings. */
     private final Set<AclBinding> bindings = ConcurrentHashMap.newKeySet();
@@ -121,7 +224,7 @@ public final class AclStore {
         return bindings.stream()
             .filter(b -> matches(b, resourceType, resourceName,
                 resourcePatternType, principal, host, operation, permissionType))
-            .toList();
+            .collect(Collectors.toList());
     }
 
     /**

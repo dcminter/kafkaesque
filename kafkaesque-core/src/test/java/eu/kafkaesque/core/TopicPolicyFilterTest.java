@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static java.util.List.copyOf;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -91,8 +92,8 @@ class TopicPolicyFilterTest {
 
         final var records = drainRecords(topic);
 
-        final var k1Records = records.stream().filter(r -> "k1".equals(r.key())).toList();
-        final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).toList();
+        final var k1Records = records.stream().filter(r -> "k1".equals(r.key())).collect(Collectors.toList());
+        final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).collect(Collectors.toList());
         assertThat(k1Records).hasSize(1);
         assertThat(k1Records.get(0).value()).isEqualTo("v3");
         assertThat(k2Records).hasSize(1);
@@ -111,7 +112,7 @@ class TopicPolicyFilterTest {
         final var records = drainRecords(topic);
 
         // Kafkaesque eagerly removes tombstoned keys at fetch time
-        assertThat(records.stream().filter(r -> "k1".equals(r.key())).toList()).isEmpty();
+        assertThat(records.stream().filter(r -> "k1".equals(r.key())).collect(Collectors.toList())).isEmpty();
     }
 
     @Test
@@ -128,8 +129,8 @@ class TopicPolicyFilterTest {
         final var records = drainRecords(topic);
 
         // Null-key records are always retained; only the latest k1 survives
-        assertThat(records.stream().filter(r -> r.key() == null).toList()).hasSize(2);
-        final var k1Records = records.stream().filter(r -> "k1".equals(r.key())).toList();
+        assertThat(records.stream().filter(r -> r.key() == null).collect(Collectors.toList())).hasSize(2);
+        final var k1Records = records.stream().filter(r -> "k1".equals(r.key())).collect(Collectors.toList());
         assertThat(k1Records).hasSize(1);
         assertThat(k1Records.get(0).value()).isEqualTo("v2");
     }
@@ -151,9 +152,9 @@ class TopicPolicyFilterTest {
 
         final var records = drainRecords(topic);
 
-        assertThat(records.stream().filter(r -> "k1".equals(r.key())).toList()).isEmpty();
-        assertThat(records.stream().filter(r -> "k2".equals(r.key())).toList()).isEmpty();
-        assertThat(records.stream().filter(r -> "live-key".equals(r.key())).toList()).hasSize(1);
+        assertThat(records.stream().filter(r -> "k1".equals(r.key())).collect(Collectors.toList())).isEmpty();
+        assertThat(records.stream().filter(r -> "k2".equals(r.key())).collect(Collectors.toList())).isEmpty();
+        assertThat(records.stream().filter(r -> "live-key".equals(r.key())).collect(Collectors.toList())).hasSize(1);
     }
 
     // -------------------------------------------------------------------------
@@ -174,9 +175,9 @@ class TopicPolicyFilterTest {
 
         final var records = drainRecords(topic);
 
-        assertThat(records.stream().filter(r -> "k1".equals(r.key())).toList()).isEmpty();
-        assertThat(records.stream().filter(r -> "k2".equals(r.key())).toList()).hasSize(1);
-        assertThat(records.stream().filter(r -> "k3".equals(r.key())).toList()).hasSize(1);
+        assertThat(records.stream().filter(r -> "k1".equals(r.key())).collect(Collectors.toList())).isEmpty();
+        assertThat(records.stream().filter(r -> "k2".equals(r.key())).collect(Collectors.toList())).hasSize(1);
+        assertThat(records.stream().filter(r -> "k3".equals(r.key())).collect(Collectors.toList())).hasSize(1);
     }
 
     @Test
@@ -263,8 +264,8 @@ class TopicPolicyFilterTest {
 
         final var records = drainRecords(topic);
 
-        assertThat(records.stream().filter(r -> "k1".equals(r.key())).toList()).isEmpty();
-        final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).toList();
+        assertThat(records.stream().filter(r -> "k1".equals(r.key())).collect(Collectors.toList())).isEmpty();
+        final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).collect(Collectors.toList());
         assertThat(k2Records).hasSize(1);
         assertThat(k2Records.get(0).value()).isEqualTo("live-value");
     }
@@ -285,10 +286,10 @@ class TopicPolicyFilterTest {
 
         final var records = drainRecords(topic);
 
-        final var k1Records = records.stream().filter(r -> "k1".equals(r.key())).toList();
+        final var k1Records = records.stream().filter(r -> "k1".equals(r.key())).collect(Collectors.toList());
         assertThat(k1Records).hasSize(1);
         assertThat(k1Records.get(0).value()).isEqualTo("v2");
-        assertThat(records.stream().filter(r -> "k2".equals(r.key())).toList()).hasSize(1);
+        assertThat(records.stream().filter(r -> "k2".equals(r.key())).collect(Collectors.toList())).hasSize(1);
     }
 
     @Test
@@ -303,8 +304,8 @@ class TopicPolicyFilterTest {
 
         final var records = drainRecords(topic);
 
-        assertThat(records.stream().filter(r -> "k1".equals(r.key())).toList()).isEmpty();
-        final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).toList();
+        assertThat(records.stream().filter(r -> "k1".equals(r.key())).collect(Collectors.toList())).isEmpty();
+        final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).collect(Collectors.toList());
         assertThat(k2Records).hasSize(1);
         assertThat(k2Records.get(0).value()).isEqualTo("live-value");
     }
@@ -324,8 +325,8 @@ class TopicPolicyFilterTest {
         final var records = drainRecords(topic);
 
         // k1 compacted to latest old-v2, then removed by retention.ms
-        assertThat(records.stream().filter(r -> "k1".equals(r.key())).toList()).isEmpty();
-        final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).toList();
+        assertThat(records.stream().filter(r -> "k1".equals(r.key())).collect(Collectors.toList())).isEmpty();
+        final var k2Records = records.stream().filter(r -> "k2".equals(r.key())).collect(Collectors.toList());
         assertThat(k2Records).hasSize(1);
         assertThat(k2Records.get(0).value()).isEqualTo("live-value");
     }

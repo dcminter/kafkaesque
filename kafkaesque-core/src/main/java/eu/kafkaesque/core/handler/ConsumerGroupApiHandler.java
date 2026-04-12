@@ -1,7 +1,9 @@
 package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.connection.ClientConnection;
+import lombok.EqualsAndHashCode;
 import lombok.RequiredArgsConstructor;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.message.ConsumerGroupDescribeRequestData;
 import org.apache.kafka.common.message.ConsumerGroupDescribeResponseData;
@@ -67,14 +69,103 @@ final class ConsumerGroupApiHandler {
     static final long REBALANCE_WINDOW_MS = 200L;
 
     /** Pending JoinGroup entry for a single member awaiting rebalance completion. */
-    private record PendingJoin(
-        String memberId,
-        byte[] subscriptionMetadata,
-        String protocolName,
-        RequestHeader requestHeader,
-        ClientConnection connection,
-        SelectionKey selectionKey
-    ) {}
+    @EqualsAndHashCode
+    @ToString
+    private static final class PendingJoin {
+
+        /** The member ID assigned by the group coordinator. */
+        private final String memberId;
+
+        /** The subscription metadata from the join protocol. */
+        private final byte[] subscriptionMetadata;
+
+        /** The protocol name from the join protocol. */
+        private final String protocolName;
+
+        /** The request header for sending the deferred response. */
+        private final RequestHeader requestHeader;
+
+        /** The client connection for this member. */
+        private final ClientConnection connection;
+
+        /** The NIO selection key for this connection. */
+        private final SelectionKey selectionKey;
+
+        /**
+         * Creates a new pending join entry.
+         *
+         * @param memberId               the member ID
+         * @param subscriptionMetadata   the subscription metadata
+         * @param protocolName           the protocol name
+         * @param requestHeader          the request header
+         * @param connection             the client connection
+         * @param selectionKey           the NIO selection key
+         */
+        PendingJoin(final String memberId, final byte[] subscriptionMetadata,
+                    final String protocolName, final RequestHeader requestHeader,
+                    final ClientConnection connection, final SelectionKey selectionKey) {
+            this.memberId = memberId;
+            this.subscriptionMetadata = subscriptionMetadata;
+            this.protocolName = protocolName;
+            this.requestHeader = requestHeader;
+            this.connection = connection;
+            this.selectionKey = selectionKey;
+        }
+
+        /**
+         * Returns the member ID.
+         *
+         * @return the member ID
+         */
+        String memberId() {
+            return memberId;
+        }
+
+        /**
+         * Returns the subscription metadata.
+         *
+         * @return the subscription metadata
+         */
+        byte[] subscriptionMetadata() {
+            return subscriptionMetadata;
+        }
+
+        /**
+         * Returns the protocol name.
+         *
+         * @return the protocol name
+         */
+        String protocolName() {
+            return protocolName;
+        }
+
+        /**
+         * Returns the request header.
+         *
+         * @return the request header
+         */
+        RequestHeader requestHeader() {
+            return requestHeader;
+        }
+
+        /**
+         * Returns the client connection.
+         *
+         * @return the client connection
+         */
+        ClientConnection connection() {
+            return connection;
+        }
+
+        /**
+         * Returns the NIO selection key.
+         *
+         * @return the selection key
+         */
+        SelectionKey selectionKey() {
+            return selectionKey;
+        }
+    }
 
     private final GroupCoordinator groupCoordinator;
 
@@ -89,7 +180,11 @@ final class ConsumerGroupApiHandler {
 
     /** Single-thread scheduler for rebalance timers; uses a daemon thread so it does not block shutdown. */
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
-        r -> Thread.ofPlatform().daemon(true).name("kafkaesque-rebalance").unstarted(r));
+        r -> {
+            final var t = new Thread(r, "kafkaesque-rebalance");
+            t.setDaemon(true);
+            return t;
+        });
 
     /**
      * Processes a JOIN_GROUP request by registering the member and deferring the response
@@ -165,7 +260,7 @@ final class ConsumerGroupApiHandler {
                 .map(j -> new JoinGroupResponseData.JoinGroupResponseMember()
                     .setMemberId(j.memberId())
                     .setMetadata(j.subscriptionMetadata()))
-                .toList();
+                .collect(Collectors.toList());
 
             log.debug("Completing rebalance: group={}, generation={}, leader={}, members={}",
                 groupId, generationId, leader, joins.size());
@@ -310,7 +405,7 @@ final class ConsumerGroupApiHandler {
                     .setProtocolType("consumer")
                     .setGroupState("Stable")
                     .setGroupType("consumer"))
-                .toList();
+                .collect(Collectors.toList());
 
             final var response = new ListGroupsResponseData()
                 .setThrottleTimeMs(0)
@@ -345,7 +440,7 @@ final class ConsumerGroupApiHandler {
                             .setMemberId(entry.getKey())
                             .setClientId("")
                             .setClientHost(""))
-                        .toList();
+                        .collect(Collectors.toList());
                     return new ConsumerGroupDescribeResponseData.DescribedGroup()
                         .setGroupId(gid)
                         .setErrorCode((short) 0)
@@ -356,7 +451,7 @@ final class ConsumerGroupApiHandler {
                         .setMembers(members)
                         .setAuthorizedOperations(-2147483648);
                 })
-                .toList();
+                .collect(Collectors.toList());
 
             final var response = new ConsumerGroupDescribeResponseData()
                 .setThrottleTimeMs(0)

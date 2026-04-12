@@ -130,7 +130,7 @@ final class ProducerApiHandler {
             .setPartitionResponses(topicData.partitionData().stream()
                 .map(partitionData -> buildPartitionResponse(
                     topicData.name(), partitionData, transactionalId, isTransactional))
-                .toList());
+                .collect(java.util.stream.Collectors.toList()));
     }
 
     /**
@@ -159,9 +159,10 @@ final class ProducerApiHandler {
             return errorPartitionResponse(partitionData.index(), Errors.UNKNOWN_TOPIC_OR_PARTITION);
         }
 
-        if (!(partitionData.records() instanceof MemoryRecords memoryRecords)) {
+        if (!(partitionData.records() instanceof MemoryRecords)) {
             return successPartitionResponse(partitionData.index(), 0L);
         }
+        final var memoryRecords = (MemoryRecords) partitionData.records();
 
         long baseOffset = -1L;
         for (final var batch : memoryRecords.batches()) {
@@ -169,17 +170,20 @@ final class ProducerApiHandler {
                 batch.producerId(), batch.producerEpoch(), batch.baseSequence(), batch.hasProducerId());
             final var batchResult = processBatch(
                 batch, topicName, partitionData.index(), transactionalId, isTransactional);
-            if (batchResult instanceof IdempotentProducerRegistry.CheckResult.Error error) {
+            if (batchResult instanceof IdempotentProducerRegistry.CheckResult.Error) {
+                final var error = (IdempotentProducerRegistry.CheckResult.Error) batchResult;
                 log.warn("    Idempotency check failed for partition {}: {}",
                     partitionData.index(), error.errorCode());
                 return errorPartitionResponse(partitionData.index(), error.errorCode());
-            } else if (batchResult instanceof IdempotentProducerRegistry.CheckResult.Duplicate dup) {
+            } else if (batchResult instanceof IdempotentProducerRegistry.CheckResult.Duplicate) {
+                final var dup = (IdempotentProducerRegistry.CheckResult.Duplicate) batchResult;
                 log.debug("    Duplicate batch suppressed for partition {}, offset={}",
                     partitionData.index(), dup.cachedBaseOffset());
                 if (baseOffset < 0) {
                     baseOffset = dup.cachedBaseOffset();
                 }
-            } else if (batchResult instanceof IdempotentProducerRegistry.CheckResult.Store store) {
+            } else if (batchResult instanceof IdempotentProducerRegistry.CheckResult.Store) {
+                final var store = (IdempotentProducerRegistry.CheckResult.Store) batchResult;
                 if (baseOffset < 0) {
                     baseOffset = store.baseOffset();
                 }

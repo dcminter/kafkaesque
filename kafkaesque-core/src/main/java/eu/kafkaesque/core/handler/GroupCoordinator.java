@@ -1,11 +1,14 @@
 package eu.kafkaesque.core.handler;
 
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 import static java.util.Map.copyOf;
 import static java.util.Map.of;
@@ -23,28 +26,128 @@ import static java.util.Map.of;
 @Slf4j
 public final class GroupCoordinator {
 
-    /** Identifies a single partition within a topic. */
-    private record TopicPartitionKey(String topic, int partition) {}
+    /**
+     * Identifies a single partition within a topic.
+     */
+    @EqualsAndHashCode
+    @ToString
+    private static final class TopicPartitionKey {
+
+        /** The topic name. */
+        private final String topic;
+
+        /** The partition index. */
+        private final int partition;
+
+        /**
+         * Creates a new {@code TopicPartitionKey}.
+         *
+         * @param topic     the topic name
+         * @param partition the partition index
+         */
+        TopicPartitionKey(final String topic, final int partition) {
+            this.topic = topic;
+            this.partition = partition;
+        }
+
+        /**
+         * Returns the topic name.
+         *
+         * @return the topic name
+         */
+        String topic() {
+            return topic;
+        }
+
+        /**
+         * Returns the partition index.
+         *
+         * @return the partition index
+         */
+        int partition() {
+            return partition;
+        }
+    }
 
     /**
      * Immutable snapshot of a consumer group's current state.
-     *
-     * @param memberSubscriptions map from member ID to serialised subscription metadata
-     * @param generationId        current rebalance generation
-     * @param leaderId            the member elected as group leader
-     * @param assignments         map from member ID to serialised partition assignment bytes
      */
-    private record GroupState(
-        Map<String, byte[]> memberSubscriptions,
-        int generationId,
-        String leaderId,
-        Map<String, byte[]> assignments
-    ) {}
+    @EqualsAndHashCode
+    @ToString
+    private static final class GroupState {
+
+        /** Map from member ID to serialised subscription metadata. */
+        private final Map<String, byte[]> memberSubscriptions;
+
+        /** Current rebalance generation. */
+        private final int generationId;
+
+        /** The member elected as group leader. */
+        private final String leaderId;
+
+        /** Map from member ID to serialised partition assignment bytes. */
+        private final Map<String, byte[]> assignments;
+
+        /**
+         * Creates a new {@code GroupState}.
+         *
+         * @param memberSubscriptions map from member ID to serialised subscription metadata
+         * @param generationId        current rebalance generation
+         * @param leaderId            the member elected as group leader
+         * @param assignments         map from member ID to serialised partition assignment bytes
+         */
+        GroupState(
+                final Map<String, byte[]> memberSubscriptions,
+                final int generationId,
+                final String leaderId,
+                final Map<String, byte[]> assignments) {
+            this.memberSubscriptions = memberSubscriptions;
+            this.generationId = generationId;
+            this.leaderId = leaderId;
+            this.assignments = assignments;
+        }
+
+        /**
+         * Returns the member subscriptions map.
+         *
+         * @return map from member ID to serialised subscription metadata
+         */
+        Map<String, byte[]> memberSubscriptions() {
+            return memberSubscriptions;
+        }
+
+        /**
+         * Returns the current rebalance generation.
+         *
+         * @return the generation ID
+         */
+        int generationId() {
+            return generationId;
+        }
+
+        /**
+         * Returns the leader member ID.
+         *
+         * @return the leader member ID
+         */
+        String leaderId() {
+            return leaderId;
+        }
+
+        /**
+         * Returns the partition assignments map.
+         *
+         * @return map from member ID to serialised partition assignment bytes
+         */
+        Map<String, byte[]> assignments() {
+            return assignments;
+        }
+    }
 
     /** Active group states keyed by group ID. */
     private final Map<String, GroupState> groups = new ConcurrentHashMap<>();
 
-    /** Committed offsets: groupId → (topic, partition) → committed offset. */
+    /** Committed offsets: groupId -> (topic, partition) -> committed offset. */
     private final Map<String, Map<TopicPartitionKey, Long>> committedOffsets = new ConcurrentHashMap<>();
 
     /**
@@ -239,12 +342,60 @@ public final class GroupCoordinator {
 
     /**
      * A committed offset entry for a specific topic and partition.
-     *
-     * @param topic     the topic name
-     * @param partition the partition index
-     * @param offset    the committed offset
      */
-    public record CommittedOffsetEntry(String topic, int partition, long offset) {}
+    @EqualsAndHashCode
+    @ToString
+    public static final class CommittedOffsetEntry {
+
+        /** The topic name. */
+        private final String topic;
+
+        /** The partition index. */
+        private final int partition;
+
+        /** The committed offset. */
+        private final long offset;
+
+        /**
+         * Creates a new {@code CommittedOffsetEntry}.
+         *
+         * @param topic     the topic name
+         * @param partition the partition index
+         * @param offset    the committed offset
+         */
+        public CommittedOffsetEntry(final String topic, final int partition, final long offset) {
+            this.topic = topic;
+            this.partition = partition;
+            this.offset = offset;
+        }
+
+        /**
+         * Returns the topic name.
+         *
+         * @return the topic name
+         */
+        public String topic() {
+            return topic;
+        }
+
+        /**
+         * Returns the partition index.
+         *
+         * @return the partition index
+         */
+        public int partition() {
+            return partition;
+        }
+
+        /**
+         * Returns the committed offset.
+         *
+         * @return the committed offset
+         */
+        public long offset() {
+            return offset;
+        }
+    }
 
     /**
      * Returns all committed offsets for a consumer group.
@@ -259,7 +410,7 @@ public final class GroupCoordinator {
         }
         return groupOffsets.entrySet().stream()
             .map(e -> new CommittedOffsetEntry(e.getKey().topic(), e.getKey().partition(), e.getValue()))
-            .toList();
+            .collect(Collectors.toList());
     }
 
     /**
