@@ -178,7 +178,14 @@ public class OrderNotificationServiceTest {
 ### Standalone Docker Container
 
 Kafkaesque can also run as a standalone service via Docker, useful during local development or
-in CI pipelines:
+in CI pipelines. A pre-built image is published to GitHub Container Registry on each release:
+
+```bash
+docker pull ghcr.io/dcminter/kafkaesque:latest
+docker run -p 9092:9092 ghcr.io/dcminter/kafkaesque:latest
+```
+
+Or build locally from source:
 
 ```bash
 docker build -t kafkaesque .

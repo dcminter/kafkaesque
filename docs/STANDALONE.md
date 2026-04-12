@@ -6,17 +6,27 @@ local development, in CI pipelines, or in Docker Compose stacks alongside your a
 
 ## Running with Docker
 
-### Building the image
+### Using the pre-built image
+
+A pre-built image is published to GitHub Container Registry on each release:
+
+```bash
+docker pull ghcr.io/dcminter/kafkaesque:latest
+docker run -p 9092:9092 ghcr.io/dcminter/kafkaesque:latest
+```
+
+You can also pin to a specific version:
+
+```bash
+docker pull ghcr.io/dcminter/kafkaesque:0.1.0
+```
+
+### Building the image locally
 
 From the repository root:
 
 ```bash
 docker build -t kafkaesque .
-```
-
-### Running the container
-
-```bash
 docker run -p 9092:9092 kafkaesque
 ```
 
@@ -44,6 +54,20 @@ docker run -p 19092:19092 \
 ```
 
 ### Docker Compose
+
+Using the pre-built image:
+
+```yaml
+services:
+  kafkaesque:
+    image: ghcr.io/dcminter/kafkaesque:latest
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKAESQUE_AUTO_CREATE_TOPICS: "true"
+```
+
+Or building from source:
 
 ```yaml
 services:
