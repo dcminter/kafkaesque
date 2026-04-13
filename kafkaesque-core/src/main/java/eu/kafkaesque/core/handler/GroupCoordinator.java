@@ -240,6 +240,39 @@ public final class GroupCoordinator {
     }
 
     /**
+     * Updates the leader of a consumer group.
+     *
+     * <p>Used when a rebalance occurs and the previous leader is no longer among
+     * the pending members.</p>
+     *
+     * @param groupId  the consumer group ID
+     * @param leaderId the new leader member ID
+     */
+    public void setLeader(final String groupId, final String leaderId) {
+        groups.computeIfPresent(groupId, (gid, existing) ->
+            new GroupState(existing.memberSubscriptions(), existing.generationId(),
+                leaderId, existing.assignments()));
+    }
+
+    /**
+     * Increments the generation ID for a consumer group and clears any stale assignments.
+     *
+     * @param groupId the consumer group ID
+     * @return the new generation ID
+     */
+    public int incrementGeneration(final String groupId) {
+        final var state = groups.get(groupId);
+        if (state == null) {
+            return 1;
+        }
+        final var newGen = state.generationId() + 1;
+        groups.put(groupId, new GroupState(
+            state.memberSubscriptions(), newGen, state.leaderId(),
+            new ConcurrentHashMap<>()));
+        return newGen;
+    }
+
+    /**
      * Returns the serialised partition assignment bytes for a specific group member.
      *
      * @param groupId  the consumer group ID

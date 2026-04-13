@@ -90,7 +90,7 @@ final class ConsumerDataApiHandler {
                                 .setErrorCode((short) 0)
                                 .setTimestamp(partition.timestamp() >= 0 ? partition.timestamp() : -1L)
                                 .setOffset(offset)
-                                .setLeaderEpoch(0);
+                                .setLeaderEpoch(-1);
                         })
                         .collect(Collectors.toList())))
                 .collect(Collectors.toList());

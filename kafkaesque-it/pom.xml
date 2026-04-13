@@ -35,6 +35,12 @@
             <groupId>eu.kafkaesque</groupId>
             <artifactId>kafkaesque-core</artifactId>
             <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.kafka</groupId>
+                    <artifactId>kafka-clients</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Kafka client for testing — version overridable via -Dkafka.clients.test.version -->
@@ -148,6 +154,9 @@
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
                     <argLine>${nativeAccessArg}</argLine>
+                    <systemPropertyVariables>
+                        <kafka.api.level>${kafka.api.level}</kafka.api.level>
+                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>
@@ -172,7 +181,6 @@
         <!--
             API level profiles control which test source directories are compiled.
             Default (kafka.api.level=3): all directories are compiled.
-            See docs/MULTIVERSION.md for recommended version/level combinations.
         -->
         <profile>
             <id>api-level-1</id>

@@ -1,5 +1,6 @@
 package eu.kafkaesque.it;
 
+import org.junit.jupiter.api.condition.DisabledIfSystemProperty;
 import org.testcontainers.containers.KafkaContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -13,10 +14,14 @@ import org.testcontainers.utility.DockerImageName;
  * expected behavior is verified as correct against a real Kafka service,
  * giving confidence that the {@link KafkaesqueIT} assertions are meaningful.</p>
  *
+ * <p>Disabled when {@code kafka.api.level=1} because the Testcontainers broker
+ * (cp-kafka 7.8) is incompatible with very old client libraries (1.x&ndash;2.x).</p>
+ *
  * @see AbstractKafkaBehaviorIT
  * @see KafkaesqueIT
  */
 @Testcontainers
+@DisabledIfSystemProperty(named = "kafka.api.level", matches = "1")
 class RealKafkaIT extends AbstractKafkaBehaviorIT {
 
     @Container

@@ -394,7 +394,7 @@ final class ClusterApiHandler {
             .mapToObj(i -> new MetadataResponseData.MetadataResponsePartition()
                 .setPartitionIndex(i)
                 .setLeaderId(1)
-                .setLeaderEpoch(0)
+                .setLeaderEpoch(-1)
                 .setReplicaNodes(of(1))
                 .setIsrNodes(of(1))
                 .setErrorCode((short) 0))
