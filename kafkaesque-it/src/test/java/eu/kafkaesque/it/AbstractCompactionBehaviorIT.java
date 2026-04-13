@@ -10,12 +10,12 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import static eu.kafkaesque.it.KafkaCompat.poll;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.awaitility.Awaitility.await;
@@ -81,7 +81,7 @@ abstract class AbstractCompactionBehaviorIT {
 
             // Obtain partition assignment before seeking
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(200));
+                poll(consumer, 200);
                 return !consumer.assignment().isEmpty();
             });
 
@@ -91,7 +91,7 @@ abstract class AbstractCompactionBehaviorIT {
                 final List<ConsumerRecord<String, String>> records = new ArrayList<>();
                 int emptyPolls = 0;
                 while (emptyPolls < 3) {
-                    final var batch = consumer.poll(Duration.ofMillis(300));
+                    final var batch = poll(consumer, 300);
                     if (batch.isEmpty()) {
                         emptyPolls++;
                     } else {
@@ -142,7 +142,7 @@ abstract class AbstractCompactionBehaviorIT {
             consumer.subscribe(List.of(topicName));
 
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(200));
+                poll(consumer, 200);
                 return !consumer.assignment().isEmpty();
             });
 
@@ -154,7 +154,7 @@ abstract class AbstractCompactionBehaviorIT {
                 final List<ConsumerRecord<String, String>> records = new ArrayList<>();
                 int emptyPolls = 0;
                 while (emptyPolls < 3) {
-                    final var batch = consumer.poll(Duration.ofMillis(300));
+                    final var batch = poll(consumer, 300);
                     if (batch.isEmpty()) {
                         emptyPolls++;
                     } else {

@@ -13,7 +13,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -22,6 +21,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 
+import static eu.kafkaesque.it.KafkaCompat.poll;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.List.of;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -97,7 +97,7 @@ abstract class AbstractConsumerBehaviorIT {
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
         await().atMost(10, SECONDS).until(() -> {
-            consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+            poll(consumer, 100).forEach(received::add);
             return received.size() >= 2;
         });
 
@@ -134,7 +134,7 @@ abstract class AbstractConsumerBehaviorIT {
 
         final List<String> receivedValues = new ArrayList<>();
         await().atMost(10, SECONDS).until(() -> {
-            consumer.poll(Duration.ofMillis(100)).forEach(r -> receivedValues.add(r.value()));
+            poll(consumer, 100).forEach(r -> receivedValues.add(r.value()));
             return receivedValues.size() >= messageCount;
         });
 
@@ -168,7 +168,7 @@ abstract class AbstractConsumerBehaviorIT {
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
         await().atMost(10, SECONDS).until(() -> {
-            consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+            poll(consumer, 100).forEach(received::add);
             return !received.isEmpty();
         });
 
@@ -202,7 +202,7 @@ abstract class AbstractConsumerBehaviorIT {
         // When
         final List<ConsumerRecord<String, String>> received = new ArrayList<>();
         await().atMost(10, SECONDS).until(() -> {
-            consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+            poll(consumer, 100).forEach(received::add);
             return !received.isEmpty();
         });
 
@@ -257,8 +257,8 @@ abstract class AbstractConsumerBehaviorIT {
             final List<String> receivedByB = new ArrayList<>();
 
             await().atMost(15, SECONDS).until(() -> {
-                consumerA.poll(Duration.ofMillis(100)).forEach(r -> receivedByA.add(r.value()));
-                consumerB.poll(Duration.ofMillis(100)).forEach(r -> receivedByB.add(r.value()));
+                poll(consumerA, 100).forEach(r -> receivedByA.add(r.value()));
+                poll(consumerB, 100).forEach(r -> receivedByB.add(r.value()));
                 return receivedByA.size() >= 2 && receivedByB.size() >= 2;
             });
 
@@ -313,8 +313,8 @@ abstract class AbstractConsumerBehaviorIT {
             // When – poll both until the combined set contains all messages
             final Set<String> received = new HashSet<>();
             await().atMost(20, SECONDS).until(() -> {
-                consumerA.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
-                consumerB.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                poll(consumerA, 100).forEach(r -> received.add(r.value()));
+                poll(consumerB, 100).forEach(r -> received.add(r.value()));
                 return received.size() >= 2;
             });
 

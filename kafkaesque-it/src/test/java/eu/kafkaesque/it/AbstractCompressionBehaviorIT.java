@@ -11,12 +11,12 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.UUID;
+import static eu.kafkaesque.it.KafkaCompat.poll;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -79,7 +79,7 @@ abstract class AbstractCompressionBehaviorIT {
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.size() >= 2;
             });
 

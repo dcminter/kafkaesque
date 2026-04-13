@@ -7,12 +7,12 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Properties;
 
 import static java.util.List.of;
 import static java.util.concurrent.TimeUnit.SECONDS;
+import static eu.kafkaesque.junit4.KafkaCompat.poll;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.awaitility.Awaitility.await;
@@ -44,7 +44,7 @@ class KafkaesqueRuleConsumerFactoryTest {
             producer.send(new ProducerRecord<>("test-topic", "key", "value")).get();
 
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                poll(consumer, 100).forEach(r -> received.add(r.value()));
                 return !received.isEmpty();
             });
         }
@@ -61,7 +61,7 @@ class KafkaesqueRuleConsumerFactoryTest {
             producer.send(new ProducerRecord<>("test-topic", "key", "value")).get();
 
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                poll(consumer, 100).forEach(r -> received.add(r.value()));
                 return !received.isEmpty();
             });
         }
@@ -79,7 +79,7 @@ class KafkaesqueRuleConsumerFactoryTest {
             producer.send(new ProducerRecord<>("test-topic", "key", "value")).get();
 
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                poll(consumer, 100).forEach(r -> received.add(r.value()));
                 return !received.isEmpty();
             });
         }
@@ -102,7 +102,7 @@ class KafkaesqueRuleConsumerFactoryTest {
             producer.send(new ProducerRecord<>("test-topic", "key", "value")).get();
 
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                poll(consumer, 100).forEach(r -> received.add(r.value()));
                 return !received.isEmpty();
             });
         }
@@ -116,7 +116,7 @@ class KafkaesqueRuleConsumerFactoryTest {
 
         kafka.after();
 
-        assertThatThrownBy(() -> consumer.poll(Duration.ofMillis(100)))
+        assertThatThrownBy(() -> poll(consumer, 100))
             .isInstanceOf(IllegalStateException.class);
     }
 }

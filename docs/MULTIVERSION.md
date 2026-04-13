@@ -69,7 +69,8 @@ The integration tests are split into three source directories, compiled conditio
 ./mvnw clean verify -Dkafka.clients.test.version=4.2.0 -Dkafka.api.level=4
 ```
 
-CI runs a matrix job that tests against all candidate versions listed above.
+CI runs a matrix job that tests against all candidate versions listed above,
+passing the appropriate `kafka.api.level` for each version.
 
 ## How it works
 
@@ -82,6 +83,19 @@ CI runs a matrix job that tests against all candidate versions listed above.
   * The integration test module (`kafkaesque-it`) uses `build-helper-maven-plugin` to
     conditionally add extra test source directories based on `kafka.api.level`. Maven
     profiles set the plugin execution phase to `none` when a tier should be skipped.
+
+## Cross-version compatibility in test code
+
+`KafkaConsumer.poll(long)` was deprecated in Kafka 2.0 and removed in 4.0.
+`KafkaConsumer.poll(Duration)` was added in 2.0. There is no single source-compatible
+call across all supported versions. Each test module therefore has a `KafkaCompat`
+utility class that uses reflection to call whichever `poll` overload is available at
+runtime. All test code should use `KafkaCompat.poll(consumer, timeoutMs)` rather than
+calling `consumer.poll(...)` directly.
+
+Similarly, `ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG` was added in Kafka 2.1. Test code
+uses the string literal `"delivery.timeout.ms"` instead of the constant for
+compatibility with Kafka 1.x and 2.0.x.
 
 ## Historical test results
 

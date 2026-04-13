@@ -9,12 +9,12 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.UUID;
 
+import static eu.kafkaesque.it.KafkaCompat.poll;
 import static java.util.List.of;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -96,7 +96,7 @@ abstract class AbstractIdempotentProducerBehaviorIT {
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.size() >= 5;
             });
 
@@ -148,13 +148,13 @@ abstract class AbstractIdempotentProducerBehaviorIT {
 
             // Wait until the record arrives (the send already completed, so it should be immediate)
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.size() >= 1;
             });
 
             // Poll a few extra times: if the broker stored a duplicate it will appear here
-            consumer.poll(Duration.ofMillis(300)).forEach(received::add);
-            consumer.poll(Duration.ofMillis(300)).forEach(received::add);
+            poll(consumer, 300).forEach(received::add);
+            poll(consumer, 300).forEach(received::add);
 
             assertThat(received)
                 .as("broker must store the record exactly once even when the producer retries "
@@ -206,7 +206,7 @@ abstract class AbstractIdempotentProducerBehaviorIT {
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.size() >= 5;
             });
 

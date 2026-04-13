@@ -11,12 +11,12 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static eu.kafkaesque.it.KafkaCompat.poll;
 import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -63,7 +63,7 @@ abstract class AbstractConsumerGroupAdminBehaviorIT {
             // Create and poll a consumer to establish the group
             try (final var consumer = createConsumer(getBootstrapServers(), groupId)) {
                 consumer.subscribe(of(topicName));
-                consumer.poll(Duration.ofSeconds(10));
+                poll(consumer, 10000);
                 consumer.commitSync();
 
                 // When
@@ -102,7 +102,7 @@ abstract class AbstractConsumerGroupAdminBehaviorIT {
 
             try (final var consumer = createConsumer(getBootstrapServers(), groupId)) {
                 consumer.subscribe(of(topicName));
-                consumer.poll(Duration.ofSeconds(10));
+                poll(consumer, 10000);
                 consumer.commitSync();
 
                 // When
@@ -142,7 +142,7 @@ abstract class AbstractConsumerGroupAdminBehaviorIT {
             // Create consumer, poll, commit, then close it
             try (final var consumer = createConsumer(getBootstrapServers(), groupId)) {
                 consumer.subscribe(of(topicName));
-                consumer.poll(Duration.ofSeconds(10));
+                poll(consumer, 10000);
                 consumer.commitSync();
             }
 
@@ -181,7 +181,7 @@ abstract class AbstractConsumerGroupAdminBehaviorIT {
 
             try (final var consumer = createConsumer(getBootstrapServers(), groupId)) {
                 consumer.subscribe(of(topicName));
-                consumer.poll(Duration.ofSeconds(10));
+                poll(consumer, 10000);
                 consumer.commitSync();
             }
 

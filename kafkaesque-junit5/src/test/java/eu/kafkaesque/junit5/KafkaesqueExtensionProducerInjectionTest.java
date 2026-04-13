@@ -8,12 +8,12 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Properties;
 import java.util.UUID;
 import static java.util.concurrent.TimeUnit.SECONDS;
 
+import static eu.kafkaesque.junit5.KafkaCompat.poll;
 import static java.util.List.of;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -39,7 +39,7 @@ class KafkaesqueExtensionProducerInjectionTest {
             producer.send(new ProducerRecord<>("producer-inject-simple", "key", "hello")).get();
 
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                poll(consumer, 100).forEach(r -> received.add(r.value()));
                 return !received.isEmpty();
             });
         }
@@ -62,7 +62,7 @@ class KafkaesqueExtensionProducerInjectionTest {
         try (var consumer = createConsumer(server.getBootstrapServers())) {
             consumer.subscribe(of("producer-inject-transactional"));
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                poll(consumer, 100).forEach(r -> received.add(r.value()));
                 return !received.isEmpty();
             });
         }

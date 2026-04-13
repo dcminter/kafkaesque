@@ -9,11 +9,11 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import static eu.kafkaesque.it.KafkaCompat.poll;
 import static java.util.List.of;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -110,7 +110,7 @@ abstract class AbstractTransactionBehaviorIT {
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.size() >= 2;
             });
 
@@ -150,7 +150,7 @@ abstract class AbstractTransactionBehaviorIT {
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.stream().anyMatch(r -> "sentinel".equals(r.key()));
             });
 
@@ -190,7 +190,7 @@ abstract class AbstractTransactionBehaviorIT {
             // When – poll until sentinel is received (proves consumer reached the sentinel offset)
             final List<ConsumerRecord<String, String>> phase1 = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(phase1::add);
+                poll(consumer, 100).forEach(phase1::add);
                 return phase1.stream().anyMatch(r -> "sentinel".equals(r.key()));
             });
 
@@ -205,7 +205,7 @@ abstract class AbstractTransactionBehaviorIT {
             // Then – the transactional records are now visible
             final List<ConsumerRecord<String, String>> phase2 = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(phase2::add);
+                poll(consumer, 100).forEach(phase2::add);
                 return phase2.size() >= 2;
             });
 
@@ -242,7 +242,7 @@ abstract class AbstractTransactionBehaviorIT {
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.size() >= 2;
             });
 
@@ -281,7 +281,7 @@ abstract class AbstractTransactionBehaviorIT {
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.size() >= 2;
             });
 
@@ -327,7 +327,7 @@ abstract class AbstractTransactionBehaviorIT {
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.size() >= 3;
             });
 
@@ -371,7 +371,7 @@ abstract class AbstractTransactionBehaviorIT {
 
             final List<ConsumerRecord<String, String>> received = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(received::add);
+                poll(consumer, 100).forEach(received::add);
                 return received.stream().anyMatch(r -> "sentinel".equals(r.key()));
             });
 
@@ -423,7 +423,7 @@ abstract class AbstractTransactionBehaviorIT {
             final List<ConsumerRecord<String, String>> phase1 = new ArrayList<>();
             final long deadline = System.currentTimeMillis() + 2000;
             while (System.currentTimeMillis() < deadline) {
-                consumer.poll(Duration.ofMillis(200)).forEach(phase1::add);
+                poll(consumer, 200).forEach(phase1::add);
             }
 
             // Then – nothing visible while the transaction is open
@@ -436,7 +436,7 @@ abstract class AbstractTransactionBehaviorIT {
             // Then – both records are now visible in offset order
             final List<ConsumerRecord<String, String>> phase2 = new ArrayList<>();
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(phase2::add);
+                poll(consumer, 100).forEach(phase2::add);
                 return phase2.size() >= 2;
             });
 

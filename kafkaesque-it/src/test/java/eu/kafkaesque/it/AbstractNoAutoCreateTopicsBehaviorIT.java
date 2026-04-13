@@ -119,7 +119,7 @@ abstract class AbstractNoAutoCreateTopicsBehaviorIT {
         props.put(ProducerConfig.RETRIES_CONFIG, 0);
         props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 10000);
         props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
-        props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 11000);
+        props.put("delivery.timeout.ms", 11000);
         return new KafkaProducer<>(props);
     }
 }

@@ -5,13 +5,13 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.UUID;
 
 import static java.util.List.of;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.assertj.core.api.Assertions.assertThat;
+import static eu.kafkaesque.junit4.KafkaCompat.poll;
 import static org.awaitility.Awaitility.await;
 
 /**
@@ -44,7 +44,7 @@ class KafkaesqueRuleClassRuleTest {
             producer.send(new ProducerRecord<>(topic, "key1", "value1")).get();
 
             await().atMost(10, SECONDS).until(() -> {
-                consumer.poll(Duration.ofMillis(100)).forEach(r -> received.add(r.value()));
+                poll(consumer, 100).forEach(r -> received.add(r.value()));
                 return !received.isEmpty();
             });
         }
