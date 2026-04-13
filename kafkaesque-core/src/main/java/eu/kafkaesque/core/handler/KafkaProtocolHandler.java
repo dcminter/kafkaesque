@@ -447,7 +447,7 @@ public final class KafkaProtocolHandler {
             final var response = dispatchRequest(apiKey, header, buffer, connection, key);
             buffer.position(startPosition + requestSize);
             writeResponse(connection, response);
-        } catch (final Exception e) {
+        } catch (final Throwable e) {
             log.error("Error processing request", e);
         }
     }
@@ -476,13 +476,15 @@ public final class KafkaProtocolHandler {
             case PRODUCE:          return producerApiHandler.generateProduceResponse(header, buffer);
             case JOIN_GROUP:
                 return consumerGroupApiHandler.generateJoinGroupResponse(header, buffer, connection, key);
-            case SYNC_GROUP:       return consumerGroupApiHandler.generateSyncGroupResponse(header, buffer);
+            case SYNC_GROUP:
+                return consumerGroupApiHandler.generateSyncGroupResponse(header, buffer, connection, key);
             case HEARTBEAT:        return consumerGroupApiHandler.generateHeartbeatResponse(header, buffer);
             case LEAVE_GROUP:      return consumerGroupApiHandler.generateLeaveGroupResponse(header, buffer);
             case LIST_GROUPS:      return consumerGroupApiHandler.generateListGroupsResponse(header, buffer);
             case CONSUMER_GROUP_DESCRIBE:
                 return consumerGroupApiHandler.generateConsumerGroupDescribeResponse(header, buffer);
             case DELETE_GROUPS:    return consumerGroupApiHandler.generateDeleteGroupsResponse(header, buffer);
+            case DESCRIBE_GROUPS:  return consumerGroupApiHandler.generateDescribeGroupsResponse(header, buffer);
             case OFFSET_FETCH:     return consumerDataApiHandler.generateOffsetFetchResponse(header, buffer);
             case OFFSET_COMMIT:    return consumerDataApiHandler.generateOffsetCommitResponse(header, buffer);
             case LIST_OFFSETS:     return consumerDataApiHandler.generateListOffsetsResponse(header, buffer);

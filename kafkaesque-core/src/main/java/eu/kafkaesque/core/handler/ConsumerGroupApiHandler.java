@@ -9,6 +9,8 @@ import org.apache.kafka.common.message.ConsumerGroupDescribeRequestData;
 import org.apache.kafka.common.message.ConsumerGroupDescribeResponseData;
 import org.apache.kafka.common.message.DeleteGroupsRequestData;
 import org.apache.kafka.common.message.DeleteGroupsResponseData;
+import org.apache.kafka.common.message.DescribeGroupsRequestData;
+import org.apache.kafka.common.message.DescribeGroupsResponseData;
 import org.apache.kafka.common.message.HeartbeatRequestData;
 import org.apache.kafka.common.message.HeartbeatResponseData;
 import org.apache.kafka.common.message.JoinGroupRequestData;
@@ -28,6 +30,7 @@ import java.nio.channels.SelectionKey;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -67,6 +70,12 @@ final class ConsumerGroupApiHandler {
      * rebalance.</p>
      */
     static final long REBALANCE_WINDOW_MS = 200L;
+
+    /**
+     * Maximum time (in milliseconds) to wait for the leader to sync before
+     * responding with an empty assignment.
+     */
+    private static final long SYNC_TIMEOUT_MS = 500L;
 
     /** Pending JoinGroup entry for a single member awaiting rebalance completion. */
     @EqualsAndHashCode
@@ -167,13 +176,115 @@ final class ConsumerGroupApiHandler {
         }
     }
 
+    /** Pending SyncGroup entry for a follower awaiting the leader's assignment. */
+    @EqualsAndHashCode
+    @ToString
+    private static final class PendingSync {
+
+        /** The group ID. */
+        private final String groupId;
+
+        /** The member ID. */
+        private final String memberId;
+
+        /** The protocol name from the request. */
+        private final String protocolName;
+
+        /** The request header for sending the deferred response. */
+        private final RequestHeader requestHeader;
+
+        /** The client connection for this member. */
+        private final ClientConnection connection;
+
+        /** The NIO selection key for this connection. */
+        private final SelectionKey selectionKey;
+
+        /**
+         * Creates a new pending sync entry.
+         *
+         * @param groupId        the group ID
+         * @param memberId       the member ID
+         * @param protocolName   the protocol name
+         * @param requestHeader  the request header
+         * @param connection     the client connection
+         * @param selectionKey   the NIO selection key
+         */
+        PendingSync(final String groupId, final String memberId,
+                    final String protocolName, final RequestHeader requestHeader,
+                    final ClientConnection connection, final SelectionKey selectionKey) {
+            this.groupId = groupId;
+            this.memberId = memberId;
+            this.protocolName = protocolName;
+            this.requestHeader = requestHeader;
+            this.connection = connection;
+            this.selectionKey = selectionKey;
+        }
+
+        /**
+         * Returns the group ID.
+         *
+         * @return the group ID
+         */
+        String groupId() {
+            return groupId;
+        }
+
+        /**
+         * Returns the member ID.
+         *
+         * @return the member ID
+         */
+        String memberId() {
+            return memberId;
+        }
+
+        /**
+         * Returns the protocol name.
+         *
+         * @return the protocol name
+         */
+        String protocolName() {
+            return protocolName;
+        }
+
+        /**
+         * Returns the request header.
+         *
+         * @return the request header
+         */
+        RequestHeader requestHeader() {
+            return requestHeader;
+        }
+
+        /**
+         * Returns the client connection.
+         *
+         * @return the client connection
+         */
+        ClientConnection connection() {
+            return connection;
+        }
+
+        /**
+         * Returns the NIO selection key.
+         *
+         * @return the selection key
+         */
+        SelectionKey selectionKey() {
+            return selectionKey;
+        }
+    }
+
     private final GroupCoordinator groupCoordinator;
 
-    /** Callback invoked to deliver each deferred JoinGroup response to the NIO event loop. */
+    /** Callback invoked to deliver each deferred response to the NIO event loop. */
     private final Consumer<DeferredResponse> responseDispatcher;
 
     /** Pending joins per group ID, populated as JoinGroup requests arrive. */
     private final Map<String, List<PendingJoin>> pendingJoins = new ConcurrentHashMap<>();
+
+    /** Pending follower syncs per group ID, awaiting the leader's assignment. */
+    private final Map<String, List<PendingSync>> pendingSyncs = new ConcurrentHashMap<>();
 
     /** One outstanding rebalance timer per group. */
     private final Map<String, ScheduledFuture<?>> rebalanceTimers = new ConcurrentHashMap<>();
@@ -252,8 +363,8 @@ final class ConsumerGroupApiHandler {
                 return;
             }
 
-            final var leader = groupCoordinator.getLeader(groupId);
-            final var generationId = groupCoordinator.getGenerationId(groupId);
+            final var leader = electLeaderForRebalance(groupId, joins);
+            final var generationId = groupCoordinator.incrementGeneration(groupId);
             final var protocolName = joins.get(0).protocolName();
 
             final var memberList = joins.stream()
@@ -295,17 +406,49 @@ final class ConsumerGroupApiHandler {
     }
 
     /**
+     * Elects a leader for a rebalance from the pending members. If the current leader
+     * is among the pending members it is retained; otherwise the first pending member
+     * is promoted.
+     *
+     * @param groupId the consumer group ID
+     * @param joins   the pending join entries
+     * @return the elected leader member ID
+     */
+    private String electLeaderForRebalance(final String groupId, final List<PendingJoin> joins) {
+        final var pendingMemberIds = joins.stream()
+            .map(PendingJoin::memberId)
+            .collect(Collectors.toSet());
+        final var currentLeader = groupCoordinator.getLeader(groupId);
+        final var leader = pendingMemberIds.contains(currentLeader)
+            ? currentLeader
+            : joins.get(0).memberId();
+        if (!leader.equals(currentLeader)) {
+            groupCoordinator.setLeader(groupId, leader);
+        }
+        return leader;
+    }
+
+    /**
      * Generates a SYNC_GROUP response, storing the leader's assignments and returning
      * this member's assignment.
      *
+     * <p>When the leader sends its assignments, any pending follower syncs for the same
+     * group are completed immediately. When a follower arrives before the leader, its
+     * response is deferred until the leader syncs or a timeout expires.</p>
+     *
      * @param requestHeader the request header
      * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param connection    the client connection for this member
+     * @param selectionKey  the NIO selection key for this connection
+     * @return the serialised response buffer, or null when the response is deferred
      */
-    ByteBuffer generateSyncGroupResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
+    ByteBuffer generateSyncGroupResponse(
+            final RequestHeader requestHeader, final ByteBuffer buffer,
+            final ClientConnection connection, final SelectionKey selectionKey) {
         try {
             final var accessor = new ByteBufferAccessor(buffer);
             final var request = new SyncGroupRequestData(accessor, requestHeader.apiVersion());
+            final var protocolName = request.protocolName() != null ? request.protocolName() : "range";
 
             if (!request.assignments().isEmpty()) {
                 final var assignments = request.assignments().stream()
@@ -313,26 +456,83 @@ final class ConsumerGroupApiHandler {
                         SyncGroupRequestData.SyncGroupRequestAssignment::memberId,
                         SyncGroupRequestData.SyncGroupRequestAssignment::assignment));
                 groupCoordinator.syncGroup(request.groupId(), assignments);
+                completePendingSyncs(request.groupId());
             }
 
-            final var assignment = groupCoordinator.getMemberAssignment(request.groupId(), request.memberId());
-            final var protocolName = request.protocolName() != null ? request.protocolName() : "range";
+            final var assignment = groupCoordinator.getMemberAssignment(
+                request.groupId(), request.memberId());
 
-            final var data = new SyncGroupResponseData()
-                .setErrorCode((short) 0)
-                .setProtocolType("consumer")
-                .setProtocolName(protocolName)
-                .setAssignment(assignment);
+            final var isKnownFollower = assignment.length == 0
+                && groupCoordinator.hasGroup(request.groupId())
+                && groupCoordinator.getMemberCount(request.groupId()) > 1
+                && !request.memberId().equals(groupCoordinator.getLeader(request.groupId()));
+            if (isKnownFollower && selectionKey != null) {
+                // Follower arrived before leader — defer until leader syncs or timeout
+                pendingSyncs.computeIfAbsent(request.groupId(), k -> new ArrayList<>())
+                    .add(new PendingSync(
+                        request.groupId(), request.memberId(), protocolName,
+                        requestHeader, connection, selectionKey));
+                scheduler.schedule(
+                    () -> completePendingSyncs(request.groupId()),
+                    SYNC_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+                log.debug("SyncGroup deferred: group={}, member={}", request.groupId(), request.memberId());
+                return null;
+            }
 
             log.debug("SyncGroup: group={}, member={}, assignmentBytes={}",
                 request.groupId(), request.memberId(), assignment.length);
 
-            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.SYNC_GROUP);
+            return buildSyncGroupResponse(requestHeader, protocolName, assignment);
 
         } catch (final Exception e) {
             log.error("Error generating SyncGroup response", e);
             return null;
         }
+    }
+
+    /**
+     * Completes all pending follower syncs for a group by sending their assignments
+     * via the deferred response mechanism.
+     *
+     * @param groupId the consumer group ID
+     */
+    private void completePendingSyncs(final String groupId) {
+        final var syncs = pendingSyncs.remove(groupId);
+        if (syncs == null || syncs.isEmpty()) {
+            return;
+        }
+        for (final var sync : syncs) {
+            if (!sync.selectionKey().isValid()) {
+                log.debug("Skipping deferred sync — connection closed: group={}, member={}",
+                    groupId, sync.memberId());
+                continue;
+            }
+            final var assignment = groupCoordinator.getMemberAssignment(groupId, sync.memberId());
+            final var responseBuffer = buildSyncGroupResponse(
+                sync.requestHeader(), sync.protocolName(), assignment);
+            if (responseBuffer != null) {
+                responseDispatcher.accept(
+                    new DeferredResponse(sync.connection(), sync.selectionKey(), responseBuffer));
+            }
+        }
+    }
+
+    /**
+     * Builds a serialised SYNC_GROUP response.
+     *
+     * @param requestHeader the original request header
+     * @param protocolName  the protocol name
+     * @param assignment    the serialised partition assignment bytes
+     * @return the serialised response buffer
+     */
+    private static ByteBuffer buildSyncGroupResponse(
+            final RequestHeader requestHeader, final String protocolName, final byte[] assignment) {
+        final var data = new SyncGroupResponseData()
+            .setErrorCode((short) 0)
+            .setProtocolType("consumer")
+            .setProtocolName(protocolName)
+            .setAssignment(assignment);
+        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.SYNC_GROUP);
     }
 
     /**
@@ -497,6 +697,63 @@ final class ConsumerGroupApiHandler {
             log.error("Error generating DeleteGroups response", e);
             return null;
         }
+    }
+
+    /**
+     * Generates a DESCRIBE_GROUPS response with member details for the requested groups.
+     *
+     * <p>This handles the legacy {@link ApiKeys#DESCRIBE_GROUPS} API (key 15), used by
+     * older versions of the Kafka AdminClient before the newer
+     * {@link ApiKeys#CONSUMER_GROUP_DESCRIBE} (key 69) was introduced.</p>
+     *
+     * @param requestHeader the request header
+     * @param buffer        the buffer containing the request body
+     * @return the serialised response buffer, or null on error
+     */
+    ByteBuffer generateDescribeGroupsResponse(
+            final RequestHeader requestHeader, final ByteBuffer buffer) {
+        try {
+            final var accessor = new ByteBufferAccessor(buffer);
+            final var request = new DescribeGroupsRequestData(accessor, requestHeader.apiVersion());
+
+            final var groups = request.groups().stream()
+                .map(this::describeGroup)
+                .collect(Collectors.toList());
+
+            final var response = new DescribeGroupsResponseData()
+                .setThrottleTimeMs(0)
+                .setGroups(groups);
+
+            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DESCRIBE_GROUPS);
+        } catch (final Exception e) {
+            log.error("Error generating DescribeGroups response", e);
+            return null;
+        }
+    }
+
+    /**
+     * Builds a single described group entry for the DESCRIBE_GROUPS response.
+     *
+     * @param groupId the group ID to describe
+     * @return the described group entry
+     */
+    private DescribeGroupsResponseData.DescribedGroup describeGroup(final String groupId) {
+        final var members = groupCoordinator.getMembers(groupId).entrySet().stream()
+            .map(entry -> new DescribeGroupsResponseData.DescribedGroupMember()
+                .setMemberId(entry.getKey())
+                .setClientId("")
+                .setClientHost("")
+                .setMemberMetadata(entry.getValue())
+                .setMemberAssignment(
+                    groupCoordinator.getMemberAssignment(groupId, entry.getKey())))
+            .collect(Collectors.toList());
+        return new DescribeGroupsResponseData.DescribedGroup()
+            .setGroupId(groupId)
+            .setErrorCode((short) 0)
+            .setGroupState(groupCoordinator.hasGroup(groupId) ? "Stable" : "Dead")
+            .setProtocolType("consumer")
+            .setProtocolData("range")
+            .setMembers(members);
     }
 
     /**

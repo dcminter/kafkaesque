@@ -8,6 +8,7 @@ import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.record.CompressionType;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -21,6 +22,7 @@ import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Abstract base class defining compression behavior tests.
@@ -53,6 +55,8 @@ abstract class AbstractCompressionBehaviorIT {
     @ParameterizedTest(name = "compression={0}")
     @ValueSource(strings = {"uncompressed", "gzip", "snappy", "lz4", "zstd"})
     void shouldProduceAndConsumeWithCompression(final String compressionType) throws Exception {
+        assumeTrue(isCompressionSupported(compressionType),
+            compressionType + " not supported by this Kafka client version");
         final String bootstrapServers = getBootstrapServers();
         final String topicName = "compression-test-" + compressionType + "-" + UUID.randomUUID();
 
@@ -90,6 +94,24 @@ abstract class AbstractCompressionBehaviorIT {
             assertThat(received.get(1).value()).isEqualTo("v2");
 
             log.info("compression={}: consumed {} messages successfully", compressionType, received.size());
+        }
+    }
+
+    /**
+     * Checks whether the given compression type is supported by the current Kafka client.
+     *
+     * <p>Zstd was introduced in Kafka 2.1.0 (compression type id 4); older clients throw
+     * {@link IllegalArgumentException} when encountering it.</p>
+     *
+     * @param compressionType the compression type name to check
+     * @return {@code true} if the type is supported
+     */
+    private static boolean isCompressionSupported(final String compressionType) {
+        try {
+            CompressionType.forName(compressionType);
+            return true;
+        } catch (final IllegalArgumentException e) {
+            return false;
         }
     }
 }

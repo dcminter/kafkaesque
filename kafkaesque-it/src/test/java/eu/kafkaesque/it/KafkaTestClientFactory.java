@@ -32,6 +32,8 @@ final class KafkaTestClientFactory {
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
         props.put(ProducerConfig.ACKS_CONFIG, "all");
         props.put(ProducerConfig.RETRIES_CONFIG, 0);
+        props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 5000);
+        props.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 10_000);
         return new KafkaProducer<>(props);
     }
 

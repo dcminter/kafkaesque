@@ -16,10 +16,30 @@
     <description>Core implementation of Kafkaesque mock Kafka service</description>
 
     <dependencies>
-        <!-- Kafka protocol types -->
+        <!-- Kafka protocol types — optional so the shaded copy does not leak transitively -->
         <dependency>
             <groupId>org.apache.kafka</groupId>
             <artifactId>kafka-clients</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Compression native libraries required by the shaded kafka-clients code.
+             These contain native code and cannot be shaded/relocated, so they are
+             listed as regular (non-optional) runtime dependencies. -->
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>at.yawk.lz4</groupId>
+            <artifactId>lz4-java</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.xerial.snappy</groupId>
+            <artifactId>snappy-java</artifactId>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- Lombok -->

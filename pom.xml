@@ -61,6 +61,11 @@
         <!-- Code generation -->
         <lombok.version>1.18.42</lombok.version>
 
+        <!-- Compression native libraries (required by shaded kafka-clients in kafkaesque-core) -->
+        <zstd-jni.version>1.5.6-4</zstd-jni.version>
+        <lz4-java.version>1.10.1</lz4-java.version>
+        <snappy-java.version>1.1.10.5</snappy-java.version>
+
         <!-- Logging -->
         <slf4j.version>2.0.16</slf4j.version>
         <logback.version>1.5.25</logback.version>
@@ -173,6 +178,23 @@
                 <artifactId>junit-jupiter</artifactId>
                 <version>${testcontainers.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!-- Compression native libraries -->
+            <dependency>
+                <groupId>com.github.luben</groupId>
+                <artifactId>zstd-jni</artifactId>
+                <version>${zstd-jni.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>at.yawk.lz4</groupId>
+                <artifactId>lz4-java</artifactId>
+                <version>${lz4-java.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.xerial.snappy</groupId>
+                <artifactId>snappy-java</artifactId>
+                <version>${snappy-java.version}</version>
             </dependency>
 
             <!-- Logging -->

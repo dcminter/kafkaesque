@@ -152,7 +152,7 @@ class ConsumerGroupApiHandlerTest {
         final var syncHeader = new RequestHeader(ApiKeys.SYNC_GROUP, syncApiVersion, "client", 2);
 
         final var response = handler.generateSyncGroupResponse(
-            syncHeader, serialize(syncRequestData, syncApiVersion));
+            syncHeader, serialize(syncRequestData, syncApiVersion), null, validKey());
 
         assertThat(response).isNotNull();
         final var responseData = parseSyncGroupResponse(response, syncApiVersion);
