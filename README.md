@@ -12,11 +12,18 @@ it will not conflict with whatever version of `kafka-clients` your application u
 
 I'd call this a "potentially useful beta" - give it a whirl if you think it might be handy!
 
-Kafkaesque works with **kafka-clients 1.x through 4.x** and requires **Java 11** or later.
-
 > **Note:** From version 1.0.0 onwards, Kafkaesque targets Java 11 as the minimum supported version
 > (previous versions required Java 25). The library is tested and works with Java 11 and Java 25, so
 > we expect intermediate versions to be fine as well.
+
+> **Warning:** The version(s) on the main branch are now re-worked so that you can bring your own version
+> of the Apache Kafka clients library and not be forced to use 3.9.1 - and while this is Good News (Everybody)
+> all the heavy lifting for that was done by Claude and has not yet had any significant human review. That's
+> now under way, but for now the v1.0.0 tagged release is your best bet. Note also that this is a breaking
+> change in several ways, so the next release version will be v2.0.0 and will be compatible with
+> kafka-clients 1.x through 4.x
+
+Kafkaesque requires Java 11 or later.
 
 ## Why not just use real Kafka?
 
