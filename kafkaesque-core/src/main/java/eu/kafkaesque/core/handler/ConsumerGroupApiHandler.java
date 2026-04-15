@@ -30,7 +30,6 @@ import java.nio.channels.SelectionKey;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import static eu.kafkaesque.core.handler.ResponseSerializer.serialize;
 import static java.util.List.of;
 
 /**
@@ -393,12 +393,10 @@ final class ConsumerGroupApiHandler {
                     .setMemberId(join.memberId())
                     .setMembers(isLeader ? memberList : of());
 
-                final var responseBuffer = ResponseSerializer.serialize(
+                final var responseBuffer = serialize(
                     join.requestHeader(), data, ApiKeys.JOIN_GROUP);
-                if (responseBuffer != null) {
-                    responseDispatcher.accept(
-                        new DeferredResponse(join.connection(), join.selectionKey(), responseBuffer));
-                }
+                responseDispatcher.accept(
+                    new DeferredResponse(join.connection(), join.selectionKey(), responseBuffer));
             }
         } catch (final Exception e) {
             log.error("Error completing rebalance for group {}", groupId, e);
@@ -510,10 +508,8 @@ final class ConsumerGroupApiHandler {
             final var assignment = groupCoordinator.getMemberAssignment(groupId, sync.memberId());
             final var responseBuffer = buildSyncGroupResponse(
                 sync.requestHeader(), sync.protocolName(), assignment);
-            if (responseBuffer != null) {
-                responseDispatcher.accept(
-                    new DeferredResponse(sync.connection(), sync.selectionKey(), responseBuffer));
-            }
+            responseDispatcher.accept(
+                new DeferredResponse(sync.connection(), sync.selectionKey(), responseBuffer));
         }
     }
 
@@ -532,7 +528,7 @@ final class ConsumerGroupApiHandler {
             .setProtocolType("consumer")
             .setProtocolName(protocolName)
             .setAssignment(assignment);
-        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.SYNC_GROUP);
+        return serialize(requestHeader, data, ApiKeys.SYNC_GROUP);
     }
 
     /**
@@ -548,7 +544,7 @@ final class ConsumerGroupApiHandler {
             final var request = new HeartbeatRequestData(accessor, requestHeader.apiVersion());
             log.debug("Heartbeat: group={}, member={}", request.groupId(), request.memberId());
 
-            return ResponseSerializer.serialize(requestHeader,
+            return serialize(requestHeader,
                 new HeartbeatResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
                 ApiKeys.HEARTBEAT);
 
@@ -577,7 +573,7 @@ final class ConsumerGroupApiHandler {
 
             log.debug("LeaveGroup: group={}", request.groupId());
 
-            return ResponseSerializer.serialize(requestHeader,
+            return serialize(requestHeader,
                 new LeaveGroupResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
                 ApiKeys.LEAVE_GROUP);
 
@@ -612,7 +608,7 @@ final class ConsumerGroupApiHandler {
                 .setErrorCode((short) 0)
                 .setGroups(groups);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.LIST_GROUPS);
+            return serialize(requestHeader, response, ApiKeys.LIST_GROUPS);
         } catch (final Exception e) {
             log.error("Error generating ListGroups response", e);
             return null;
@@ -635,11 +631,11 @@ final class ConsumerGroupApiHandler {
 
             final var groups = request.groupIds().stream()
                 .map(gid -> {
-                    final var members = groupCoordinator.getMembers(gid).entrySet().stream()
-                        .map(entry -> new ConsumerGroupDescribeResponseData.Member()
-                            .setMemberId(entry.getKey())
-                            .setClientId("")
-                            .setClientHost(""))
+                    final var members = groupCoordinator.getMembers(gid).keySet().stream()
+                        .map(s -> new ConsumerGroupDescribeResponseData.Member()
+                                .setMemberId(s)
+                                .setClientId("")
+                                .setClientHost(""))
                         .collect(Collectors.toList());
                     return new ConsumerGroupDescribeResponseData.DescribedGroup()
                         .setGroupId(gid)
@@ -657,7 +653,7 @@ final class ConsumerGroupApiHandler {
                 .setThrottleTimeMs(0)
                 .setGroups(groups);
 
-            return ResponseSerializer.serialize(
+            return serialize(
                 requestHeader, response, ApiKeys.CONSUMER_GROUP_DESCRIBE);
         } catch (final Exception e) {
             log.error("Error generating ConsumerGroupDescribe response", e);
@@ -692,7 +688,7 @@ final class ConsumerGroupApiHandler {
                 .setThrottleTimeMs(0)
                 .setResults(results);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DELETE_GROUPS);
+            return serialize(requestHeader, response, ApiKeys.DELETE_GROUPS);
         } catch (final Exception e) {
             log.error("Error generating DeleteGroups response", e);
             return null;
@@ -724,7 +720,7 @@ final class ConsumerGroupApiHandler {
                 .setThrottleTimeMs(0)
                 .setGroups(groups);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DESCRIBE_GROUPS);
+            return serialize(requestHeader, response, ApiKeys.DESCRIBE_GROUPS);
         } catch (final Exception e) {
             log.error("Error generating DescribeGroups response", e);
             return null;

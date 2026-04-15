@@ -7,7 +7,6 @@ import eu.kafkaesque.core.storage.AclStore;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.TopicStore;
 import lombok.Getter;
-
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.protocol.ApiKeys;
@@ -63,7 +62,6 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li>{@link ApiKeys#PUSH_TELEMETRY} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  * </ul>
  *
- * @see KafkaesqueServer
  * @see ClientConnection
  * @see GroupCoordinator
  */
@@ -169,58 +167,9 @@ public final class KafkaProtocolHandler {
     /**
      * Creates a new protocol handler with a fresh event store and no server info,
      * with auto-topic-creation enabled.
-     *
-     * <p>Cluster responses will use built-in default host and port values until the handler
-     * is provided with real server info via the
-     * {@link #KafkaProtocolHandler(ServerInfo, EventStore)} constructor.</p>
      */
     public KafkaProtocolHandler() {
         this(null, true);
-    }
-
-    /**
-     * Creates a new protocol handler with the specified event store and no server info,
-     * with auto-topic-creation enabled.
-     *
-     * <p>Useful in tests that inject a pre-populated event store and do not need cluster
-     * metadata to reflect live server coordinates.</p>
-     *
-     * @param eventStore the event store to use for storing published records
-     */
-    public KafkaProtocolHandler(final EventStore eventStore) {
-        this(null, eventStore, new ListenerRegistry(), true);
-    }
-
-    /**
-     * Creates a new protocol handler with the specified server info and event store,
-     * with auto-topic-creation enabled.
-     *
-     * @param serverInfo the server info used to advertise host and port in cluster responses;
-     *                   may be {@code null} to use built-in defaults
-     * @param eventStore the event store to use for storing published records
-     */
-    public KafkaProtocolHandler(final ServerInfo serverInfo, final EventStore eventStore) {
-        this(serverInfo, eventStore, new ListenerRegistry(), true);
-    }
-
-    /**
-     * Creates a new protocol handler with the specified server info, event store,
-     * and auto-topic-creation behaviour.
-     *
-     * <p>A new {@link ListenerRegistry} is created for the {@link TopicStore}.
-     * The provided event store retains its own registry.</p>
-     *
-     * @param serverInfo              the server info used to advertise host and port in cluster responses;
-     *                                may be {@code null} to use built-in defaults
-     * @param eventStore              the event store to use for storing published records
-     * @param autoCreateTopicsEnabled {@code false} to return {@code UNKNOWN_TOPIC_OR_PARTITION}
-     *                                for unknown topics instead of auto-creating them
-     */
-    public KafkaProtocolHandler(
-            final ServerInfo serverInfo,
-            final EventStore eventStore,
-            final boolean autoCreateTopicsEnabled) {
-        this(serverInfo, eventStore, new ListenerRegistry(), autoCreateTopicsEnabled);
     }
 
     /**

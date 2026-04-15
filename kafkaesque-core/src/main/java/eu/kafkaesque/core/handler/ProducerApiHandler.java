@@ -20,9 +20,12 @@ import org.apache.kafka.common.requests.RequestHeader;
 import java.nio.ByteBuffer;
 import java.util.List;
 
+import static eu.kafkaesque.core.handler.ResponseSerializer.serialize;
 import static java.lang.Math.max;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Collections.unmodifiableList;
 import static java.util.List.of;
+import static java.util.stream.Collectors.toList;
 
 /**
  * Handles Kafka producer API responses.
@@ -104,7 +107,7 @@ final class ProducerApiHandler {
                 .setThrottleTimeMs(0)
                 .setResponses(topicResponses);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.PRODUCE);
+            return serialize(requestHeader, response, ApiKeys.PRODUCE);
 
         } catch (final Exception e) {
             log.error("Error generating Produce response", e);
@@ -132,7 +135,7 @@ final class ProducerApiHandler {
             .setPartitionResponses(topicData.partitionData().stream()
                 .map(partitionData -> buildPartitionResponse(
                     topicData.name(), partitionData, transactionalId, isTransactional))
-                .collect(java.util.stream.Collectors.toList()));
+                .collect(toList()));
     }
 
     /**
@@ -340,6 +343,6 @@ final class ProducerApiHandler {
         for (final var header : headerArray) {
             result.add(new RecordHeaderAdapter(header.key(), header.value()));
         }
-        return java.util.Collections.unmodifiableList(result);
+        return unmodifiableList(result);
     }
 }

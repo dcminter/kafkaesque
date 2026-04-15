@@ -47,7 +47,7 @@ final class IdempotentProducerRegistry {
          */
         @EqualsAndHashCode
         @ToString
-        static final class Store implements CheckResult {
+        final class Store implements CheckResult {
 
             /** The first offset assigned by the event store. */
             private final long baseOffset;
@@ -76,7 +76,7 @@ final class IdempotentProducerRegistry {
          */
         @EqualsAndHashCode
         @ToString
-        static final class Duplicate implements CheckResult {
+        final class Duplicate implements CheckResult {
 
             /** The first offset from the original store. */
             private final long cachedBaseOffset;
@@ -105,7 +105,7 @@ final class IdempotentProducerRegistry {
          */
         @EqualsAndHashCode
         @ToString
-        static final class Error implements CheckResult {
+        final class Error implements CheckResult {
 
             /** The Kafka protocol error to return to the client. */
             private final Errors errorCode;

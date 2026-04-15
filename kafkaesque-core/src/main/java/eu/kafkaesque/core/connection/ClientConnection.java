@@ -7,6 +7,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
 
+import static java.nio.ByteBuffer.allocate;
+
 /**
  * Represents a client connection to the Kafkaesque server.
  * Manages reading and writing data to/from the client using NIO channels.
@@ -46,8 +48,8 @@ public final class ClientConnection {
      */
     public ClientConnection(final SocketChannel channel) {
         this.channel = channel;
-        this.readBuffer = ByteBuffer.allocate(8192);
-        this.writeBuffer = ByteBuffer.allocate(8192);
+        this.readBuffer = allocate(8192);
+        this.writeBuffer = allocate(8192);
     }
 
     /**

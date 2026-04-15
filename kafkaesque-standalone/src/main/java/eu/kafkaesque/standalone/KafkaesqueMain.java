@@ -2,6 +2,12 @@ package eu.kafkaesque.standalone;
 
 import eu.kafkaesque.core.KafkaesqueServer;
 import lombok.extern.slf4j.Slf4j;
+import java.util.concurrent.CountDownLatch;
+
+import static java.lang.System.getenv;
+import static java.lang.Boolean.parseBoolean;
+import static java.lang.Integer.parseInt;
+import static java.lang.Runtime.getRuntime;
 
 /**
  * Entry point for running Kafkaesque as a standalone server.
@@ -60,7 +66,7 @@ public final class KafkaesqueMain {
      * @return the configured host, or {@value #DEFAULT_HOST} if unset
      */
     static String resolveHost() {
-        final var value = System.getenv("KAFKAESQUE_HOST");
+        final var value = getenv("KAFKAESQUE_HOST");
         return value != null && !value.isBlank() ? value.strip() : DEFAULT_HOST;
     }
 
@@ -70,11 +76,11 @@ public final class KafkaesqueMain {
      * @return the configured port, or {@value #DEFAULT_PORT} if unset
      */
     static int resolvePort() {
-        final var value = System.getenv("KAFKAESQUE_PORT");
+        final var value = getenv("KAFKAESQUE_PORT");
         if (value == null || value.isBlank()) {
             return DEFAULT_PORT;
         }
-        return Integer.parseInt(value.strip());
+        return parseInt(value.strip());
     }
 
     /**
@@ -84,15 +90,15 @@ public final class KafkaesqueMain {
      * @return {@code true} if topics should be auto-created (default), {@code false} otherwise
      */
     static boolean resolveAutoCreateTopics() {
-        final var value = System.getenv("KAFKAESQUE_AUTO_CREATE_TOPICS");
+        final var value = getenv("KAFKAESQUE_AUTO_CREATE_TOPICS");
         if (value == null || value.isBlank()) {
             return true;
         }
-        return Boolean.parseBoolean(value.strip());
+        return parseBoolean(value.strip());
     }
 
     private static void registerShutdownHook(final KafkaesqueServer server) {
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+        getRuntime().addShutdownHook(new Thread(() -> {
             log.info("Shutting down Kafkaesque server...");
             server.close();
             log.info("Kafkaesque server stopped.");
@@ -100,7 +106,6 @@ public final class KafkaesqueMain {
     }
 
     private static void awaitTermination() throws InterruptedException {
-        final var latch = new java.util.concurrent.CountDownLatch(1);
-        latch.await();
+        new CountDownLatch(1).await();
     }
 }

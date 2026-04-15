@@ -11,13 +11,22 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import eu.kafkaesque.core.listener.RecordPublishedListener;
+import eu.kafkaesque.core.listener.TopicCreatedListener;
+import eu.kafkaesque.core.listener.TransactionCompletedListener;
+
 import java.io.IOException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static java.util.List.of;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
@@ -261,5 +270,90 @@ class KafkaesqueServerEventRetrievalTest {
 
         // Verify topic-wide retrieval
         assertEquals(3, server.getRecordsByTopic(topic).size(), "Topic should have 3 records total");
+    }
+
+    @Test
+    void shouldGetRecordCountByTopicAndPartition() throws ExecutionException, InterruptedException {
+        final var topic = "test-topic";
+        adminClient.createTopics(of(new NewTopic(topic, 2, (short) 1))).all().get();
+
+        // Publish to different partitions
+        producer.send(new ProducerRecord<>(topic, 0, "key1", "value1")).get();
+        producer.send(new ProducerRecord<>(topic, 0, "key2", "value2")).get();
+        producer.send(new ProducerRecord<>(topic, 1, "key3", "value3")).get();
+        producer.flush();
+
+        // Check partition-specific counts
+        assertEquals(2L, server.getRecordCount(topic, 0), "Partition 0 should have 2 records");
+        assertEquals(1L, server.getRecordCount(topic, 1), "Partition 1 should have 1 record");
+    }
+
+    @Test
+    void shouldGetZeroRecordCountForEmptyPartition() {
+        assertEquals(0L, server.getRecordCount("non-existent", 0),
+            "Non-existent topic/partition should have 0 records");
+    }
+
+    @Test
+    void shouldNotifyRecordPublishedListener() throws ExecutionException, InterruptedException {
+        final var latch = new CountDownLatch(1);
+        final List<String> receivedValues = new CopyOnWriteArrayList<>();
+        server.addRecordPublishedListener(record -> {
+            receivedValues.add(record.value());
+            latch.countDown();
+        });
+
+        producer.send(new ProducerRecord<>("test-topic", "key1", "hello")).get();
+        producer.flush();
+
+        assertThat(latch.await(5, SECONDS)).isTrue();
+        assertThat(receivedValues).containsExactly("hello");
+    }
+
+    @Test
+    void shouldNotifyTopicCreatedListener() throws ExecutionException, InterruptedException {
+        final var latch = new CountDownLatch(1);
+        final List<String> createdTopics = new CopyOnWriteArrayList<>();
+        server.addTopicCreatedListener(topicName -> {
+            createdTopics.add(topicName);
+            latch.countDown();
+        });
+
+        adminClient.createTopics(of(new NewTopic("listener-topic", 1, (short) 1))).all().get();
+
+        assertThat(latch.await(5, SECONDS)).isTrue();
+        assertThat(createdTopics).containsExactly("listener-topic");
+    }
+
+    @Test
+    void shouldNotifyTransactionCompletedListener()
+            throws ExecutionException, InterruptedException, IOException {
+        final var latch = new CountDownLatch(1);
+        final List<String> txnIds = new CopyOnWriteArrayList<>();
+        final List<Boolean> committed = new CopyOnWriteArrayList<>();
+        server.addTransactionCompletedListener((final String id, final boolean wasCommitted) -> {
+            txnIds.add(id);
+            committed.add(wasCommitted);
+            latch.countDown();
+        });
+
+        // Create a transactional producer
+        final var txnProps = new Properties();
+        txnProps.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, server.getBootstrapServers());
+        txnProps.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        txnProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName());
+        txnProps.put(ProducerConfig.TRANSACTIONAL_ID_CONFIG, "test-txn-id");
+        txnProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true");
+
+        try (KafkaProducer<String, String> txnProducer = new KafkaProducer<>(txnProps)) {
+            txnProducer.initTransactions();
+            txnProducer.beginTransaction();
+            txnProducer.send(new ProducerRecord<>("txn-topic", "key", "value")).get();
+            txnProducer.commitTransaction();
+        }
+
+        assertThat(latch.await(5, SECONDS)).isTrue();
+        assertThat(txnIds).containsExactly("test-txn-id");
+        assertThat(committed).containsExactly(true);
     }
 }

@@ -24,12 +24,11 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static java.util.Arrays.stream;
 import static java.util.List.of;
+import static java.util.stream.Collectors.toList;
 
 /**
  * Handles Kafka cluster and topology API responses.
@@ -204,7 +203,7 @@ final class ClusterApiHandler {
                         .setHost(getServerHost())
                         .setPort(getServerPort())
                         .setErrorCode((short) 0))
-                    .collect(Collectors.toList());
+                    .collect(toList());
                 data.setCoordinators(coordinators);
             } else {
                 data.setErrorCode((short) 0)
@@ -353,7 +352,7 @@ final class ClusterApiHandler {
                 .setEligibleLeaderReplicas(of())
                 .setLastKnownElr(of())
                 .setOfflineReplicas(of()))
-            .collect(Collectors.toList());
+            .collect(toList());
 
         return new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopic()
             .setName(topicName)
@@ -398,7 +397,7 @@ final class ClusterApiHandler {
                 .setReplicaNodes(of(1))
                 .setIsrNodes(of(1))
                 .setErrorCode((short) 0))
-            .collect(Collectors.toList());
+            .collect(toList());
 
         return new MetadataResponseData.MetadataResponseTopic()
             .setName(topicName)

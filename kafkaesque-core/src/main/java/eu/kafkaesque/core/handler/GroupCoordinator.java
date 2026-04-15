@@ -8,10 +8,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 import static java.util.Map.copyOf;
 import static java.util.Map.of;
+import static java.util.stream.Collectors.toList;
 
 /**
  * Manages consumer group membership, partition assignments, and committed offsets
@@ -443,7 +443,7 @@ public final class GroupCoordinator {
         }
         return groupOffsets.entrySet().stream()
             .map(e -> new CommittedOffsetEntry(e.getKey().topic(), e.getKey().partition(), e.getValue()))
-            .collect(Collectors.toList());
+            .collect(toList());
     }
 
     /**

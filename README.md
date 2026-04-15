@@ -1,29 +1,16 @@
 # Kafkaesque
 
-![Build](https://github.com/dcminter/kafkaesque/actions/workflows/build_on_branch_or_pr.yml/badge.svg)
-
 A library for mocking [Apache Kafka](https://kafka.apache.org/) dependencies in a realistic way.
 
 Kafkaesque is compatible with the Kafka TCP wire-protocol but without the startup overhead required
-to launch the real Kafka brokers. It shades its own copy of the Kafka protocol classes internally, so
-it will not conflict with whatever version of `kafka-clients` your application uses.
+to launch the real Kafka brokers. You need to provide your preferred version of `kafka-clients` as
+a dependency when using Kafkaesque. Kafkaesque requires Java 11 or later.
 
 ## Status
 
+![Build](https://github.com/dcminter/kafkaesque/actions/workflows/build_on_branch_or_pr.yml/badge.svg)
+
 I'd call this a "potentially useful beta" - give it a whirl if you think it might be handy!
-
-> **Note:** From version 1.0.0 onwards, Kafkaesque targets Java 11 as the minimum supported version
-> (previous versions required Java 25). The library is tested and works with Java 11 and Java 25, so
-> we expect intermediate versions to be fine as well.
-
-> **Warning:** The version(s) on the main branch are now re-worked so that you can bring your own version
-> of the Apache Kafka clients library and not be forced to use 3.9.1 - and while this is Good News (Everybody)
-> all the heavy lifting for that was done by Claude and has not yet had any significant human review. That's
-> now under way, but for now the v1.0.0 tagged release is your best bet. Note also that this is a breaking
-> change in several ways, so the next release version will be v2.0.0 and will be compatible with
-> kafka-clients 1.x through 4.x
-
-Kafkaesque requires Java 11 or later.
 
 ## Why not just use real Kafka?
 
@@ -146,6 +133,7 @@ for configuration options and Docker Compose examples.
 
 # Features
 
+  * Support for versions 1.x through 4.x of the Apache Kafka client (`kafka-clients`)
   * Produce and fetch using standard Kafka clients
   * Multi-partition topics with configurable partition counts
   * Transactions (including `READ_COMMITTED` / `READ_UNCOMMITTED`)
@@ -166,7 +154,8 @@ for configuration options and Docker Compose examples.
 ## Installation
 
 Kafkaesque is published to Maven Central. Add the dependency for your test framework along with
-your own version of `kafka-clients` (Kafkaesque does not bring one transitively):
+your own version of `kafka-clients` - to avoid incompatibilities with your own test suite and
+application, Kafkaesque does not bring one in transitively:
 
 **JUnit 5 (Jupiter):**
 
@@ -174,7 +163,7 @@ your own version of `kafka-clients` (Kafkaesque does not bring one transitively)
 <dependency>
     <groupId>eu.kafkaesque</groupId>
     <artifactId>kafkaesque-junit5</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
     <scope>test</scope>
 </dependency>
 <!-- Bring your own Kafka client (1.x through 4.x) -->
@@ -192,7 +181,7 @@ your own version of `kafka-clients` (Kafkaesque does not bring one transitively)
 <dependency>
     <groupId>eu.kafkaesque</groupId>
     <artifactId>kafkaesque-junit4</artifactId>
-    <version>1.0.0</version>
+    <version>2.0.0</version>
     <scope>test</scope>
 </dependency>
 <!-- Bring your own Kafka client (1.x through 4.x) -->
@@ -212,12 +201,22 @@ your own version of `kafka-clients` (Kafkaesque does not bring one transitively)
         <dependency>
             <groupId>eu.kafkaesque</groupId>
             <artifactId>kafkaesque-bom</artifactId>
-            <version>1.0.0</version>
+            <version>2.0.0</version>
             <type>pom</type>
             <scope>import</scope>
         </dependency>
     </dependencies>
 </dependencyManagement>
+
+<!-- You still need to add kafka-clients explicitly -->
+<dependencies>
+    <dependency>
+        <groupId>org.apache.kafka</groupId>
+        <artifactId>kafka-clients</artifactId>
+        <version>${your.kafka.version}</version>
+        <scope>test</scope>
+    </dependency>
+</dependencies>
 ```
 
 ## Building and testing
@@ -255,6 +254,7 @@ docker run -p 9092:9092 kafkaesque
   * See [the standalone guide](docs/STANDALONE.md) for running Kafkaesque as a Docker container or executable JAR.
   * See [the listener documentation](docs/LISTENERS.md) for details of how to get various callbacks without using Kafka client libraries.
   * See [the event storage summary](docs/EVENT_STORAGE_SUMMARY.md) for details of the internal representation of events etc.
+  * See [the multiversion strategy summary]() for details of how Kafkaesque supports multiple `kafka-clients` versions while still using that library internally.
   * See [the future directions documentation](docs/FUTURE.md) for a sketch of features I plan to add to Kafkaesque.
 
 ## License & Development
@@ -264,6 +264,12 @@ The software [is licensed under the Apache License, Version 2.0](LICENSE.txt)
 This software is designed to support projects making extensive use of Apache Kafka. It embeds
 (shaded) Apache Kafka libraries internally for its wire-protocol types, and it therefore makes
 sense to release it under the same license.
+
+## Random note on language
+
+I bounce a bit between saying "I" and "We" in this documentation. Some of that is habit from the day job where "we"
+is usually the most accurate, some of that is because I'm often working with the cats on my desk, and some of it 
+is because (see next section) Claude was a contributor to this project.
 
 ## AI Declaration
 

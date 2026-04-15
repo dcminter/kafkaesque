@@ -14,8 +14,12 @@ import java.nio.channels.ClosedSelectorException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static eu.kafkaesque.core.storage.TopicStore.TopicDefinition;
+import static java.util.stream.Collectors.toList;
 
 /**
  * Main Kafkaesque server that implements the Kafka wire protocol.
@@ -409,7 +413,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param partition the partition index
      * @return unmodifiable list of records (empty if none exist)
      */
-    public java.util.List<StoredRecord> getRecords(final String topic, final int partition) {
+    public List<StoredRecord> getRecords(final String topic, final int partition) {
         return protocolHandler.getEventStore().getRecords(topic, partition);
     }
 
@@ -419,7 +423,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param topic the topic name
      * @return unmodifiable list of records (empty if none exist)
      */
-    public java.util.List<StoredRecord> getRecordsByTopic(final String topic) {
+    public List<StoredRecord> getRecordsByTopic(final String topic) {
         return protocolHandler.getEventStore().getRecordsByTopic(topic);
     }
 
@@ -430,7 +434,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param key the key to match (nullable)
      * @return unmodifiable list of records (empty if none exist)
      */
-    public java.util.List<StoredRecord> getRecordsByTopicAndKey(final String topic, final String key) {
+    public List<StoredRecord> getRecordsByTopicAndKey(final String topic, final String key) {
         return protocolHandler.getEventStore().getRecordsByTopicAndKey(topic, key);
     }
 
@@ -439,7 +443,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      *
      * @return unmodifiable list of all records
      */
-    public java.util.List<StoredRecord> getAllRecords() {
+    public List<StoredRecord> getAllRecords() {
         return protocolHandler.getEventStore().getAllRecords();
     }
 
@@ -449,7 +453,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param predicate the filter predicate
      * @return unmodifiable list of matching records
      */
-    public java.util.List<StoredRecord> findRecords(final java.util.function.Predicate<StoredRecord> predicate) {
+    public List<StoredRecord> findRecords(final java.util.function.Predicate<StoredRecord> predicate) {
         return protocolHandler.getEventStore().findRecords(predicate);
     }
 
@@ -488,7 +492,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      *
      * @return unmodifiable list of topic names
      */
-    public java.util.List<String> getKnownTopics() {
+    public List<String> getKnownTopics() {
         return protocolHandler.getEventStore().getTopics();
     }
 
@@ -502,11 +506,11 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      *
      * @return unmodifiable list of registered topic names
      */
-    public java.util.List<String> getRegisteredTopics() {
+    public List<String> getRegisteredTopics() {
         return protocolHandler.getTopicStore().getTopics()
             .stream()
-            .map(eu.kafkaesque.core.storage.TopicStore.TopicDefinition::name)
-            .collect(java.util.stream.Collectors.toList());
+            .map(TopicDefinition::name)
+            .collect(toList());
     }
 
     /**

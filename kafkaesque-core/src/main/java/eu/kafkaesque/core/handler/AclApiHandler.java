@@ -17,9 +17,10 @@ import org.apache.kafka.common.requests.RequestHeader;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toList;
+import static eu.kafkaesque.core.handler.ResponseSerializer.serialize;
 
 /**
  * Handles Kafka ACL API responses for {@link ApiKeys#CREATE_ACLS},
@@ -56,13 +57,13 @@ final class AclApiHandler {
 
             final var results = request.creations().stream()
                 .map(this::createAndBuildResult)
-                .collect(Collectors.toList());
+                .collect(toList());
 
             final var response = new CreateAclsResponseData()
                 .setThrottleTimeMs(0)
                 .setResults(results);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.CREATE_ACLS);
+            return serialize(requestHeader, response, ApiKeys.CREATE_ACLS);
         } catch (final Exception e) {
             log.error("Error generating CreateAcls response", e);
             return null;
@@ -97,7 +98,7 @@ final class AclApiHandler {
                 .setErrorMessage(null)
                 .setResources(resources);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DESCRIBE_ACLS);
+            return serialize(requestHeader, response, ApiKeys.DESCRIBE_ACLS);
         } catch (final Exception e) {
             log.error("Error generating DescribeAcls response", e);
             return null;
@@ -122,13 +123,13 @@ final class AclApiHandler {
 
             final var filterResults = request.filters().stream()
                 .map(this::deleteAndBuildFilterResult)
-                .collect(Collectors.toList());
+                .collect(toList());
 
             final var response = new DeleteAclsResponseData()
                 .setThrottleTimeMs(0)
                 .setFilterResults(filterResults);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DELETE_ACLS);
+            return serialize(requestHeader, response, ApiKeys.DELETE_ACLS);
         } catch (final Exception e) {
             log.error("Error generating DeleteAcls response", e);
             return null;
@@ -170,7 +171,7 @@ final class AclApiHandler {
 
         return grouped.values().stream()
             .map(AclApiHandler::buildResourceEntry)
-            .collect(Collectors.toList());
+            .collect(toList());
     }
 
     /**
@@ -188,7 +189,7 @@ final class AclApiHandler {
                 .setHost(b.host())
                 .setOperation(b.operation())
                 .setPermissionType(b.permissionType()))
-            .collect(Collectors.toList());
+            .collect(toList());
 
         return new DescribeAclsResponseData.DescribeAclsResource()
             .setResourceType(first.resourceType())
@@ -212,7 +213,7 @@ final class AclApiHandler {
 
         final var matchingAcls = deleted.stream()
             .map(AclApiHandler::buildMatchingAcl)
-            .collect(Collectors.toList());
+            .collect(toList());
 
         return new DeleteAclsResponseData.DeleteAclsFilterResult()
             .setErrorCode((short) 0)

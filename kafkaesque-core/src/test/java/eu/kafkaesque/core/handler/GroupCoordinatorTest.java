@@ -204,6 +204,50 @@ class GroupCoordinatorTest {
     }
 
     @Test
+    void deleteGroup_shouldRemoveGroupAndReturnTrue() {
+        coordinator.joinGroup("group-1", "member-a", new byte[0]);
+        coordinator.commitOffset("group-1", "topic-a", 0, 50L);
+
+        final var result = coordinator.deleteGroup("group-1");
+
+        assertThat(result).isTrue();
+        assertThat(coordinator.getMembers("group-1")).isEmpty();
+        assertThat(coordinator.getLeader("group-1")).isEmpty();
+        assertThat(coordinator.getCommittedOffset("group-1", "topic-a", 0)).isEqualTo(-1L);
+    }
+
+    @Test
+    void deleteGroup_forNonExistentGroup_shouldReturnFalse() {
+        final var result = coordinator.deleteGroup("unknown-group");
+
+        assertThat(result).isFalse();
+    }
+
+    @Test
+    void deleteGroup_shouldNotAffectOtherGroups() {
+        coordinator.joinGroup("group-1", "member-a", new byte[0]);
+        coordinator.commitOffset("group-1", "topic-a", 0, 10L);
+        coordinator.joinGroup("group-2", "member-b", new byte[0]);
+        coordinator.commitOffset("group-2", "topic-a", 0, 20L);
+
+        coordinator.deleteGroup("group-1");
+
+        assertThat(coordinator.getMembers("group-2")).containsKey("member-b");
+        assertThat(coordinator.getCommittedOffset("group-2", "topic-a", 0)).isEqualTo(20L);
+    }
+
+    @Test
+    void deleteGroup_deletedGroupCanBeRejoined() {
+        coordinator.joinGroup("group-1", "member-a", new byte[0]);
+        coordinator.deleteGroup("group-1");
+
+        final var memberId = coordinator.joinGroup("group-1", "member-b", new byte[0]);
+
+        assertThat(memberId).isEqualTo("member-b");
+        assertThat(coordinator.getMembers("group-1")).containsKey("member-b");
+    }
+
+    @Test
     void clear_shouldRemoveAllGroupStateAndOffsets() {
         coordinator.joinGroup("group-1", "member-1", new byte[0]);
         coordinator.commitOffset("group-1", "topic-a", 0, 50L);

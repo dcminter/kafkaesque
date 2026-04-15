@@ -23,8 +23,10 @@ import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
-import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Objects;
+
+import static eu.kafkaesque.core.handler.ResponseSerializer.serialize;
+import static java.util.stream.Collectors.toList;
 
 /**
  * Handles Kafka transaction coordinator API responses.
@@ -76,7 +78,7 @@ final class TransactionApiHandler {
                 .setProducerId(result.producerId())
                 .setProducerEpoch(result.epoch());
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.INIT_PRODUCER_ID);
+            return serialize(requestHeader, response, ApiKeys.INIT_PRODUCER_ID);
 
         } catch (final Exception e) {
             log.error("Error generating InitProducerId response", e);
@@ -112,7 +114,7 @@ final class TransactionApiHandler {
                 response.setResultsByTopicV3AndBelow(buildResultsByTopicV3AndBelow(request));
             }
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.ADD_PARTITIONS_TO_TXN);
+            return serialize(requestHeader, response, ApiKeys.ADD_PARTITIONS_TO_TXN);
 
         } catch (final Exception e) {
             log.error("Error generating AddPartitionsToTxn response", e);
@@ -135,7 +137,7 @@ final class TransactionApiHandler {
             log.debug("ADD_OFFSETS_TO_TXN: transactionalId={}, groupId={}",
                 request.transactionalId(), request.groupId());
 
-            return ResponseSerializer.serialize(requestHeader,
+            return serialize(requestHeader,
                 new AddOffsetsToTxnResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
                 ApiKeys.ADD_OFFSETS_TO_TXN);
 
@@ -178,7 +180,7 @@ final class TransactionApiHandler {
                     pendingCommits.size(), request.transactionalId());
             }
 
-            return ResponseSerializer.serialize(requestHeader,
+            return serialize(requestHeader,
                 new EndTxnResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
                 ApiKeys.END_TXN);
 
@@ -204,10 +206,10 @@ final class TransactionApiHandler {
             final var request = new WriteTxnMarkersRequestData(accessor, requestHeader.apiVersion());
 
             final var markerResults = request.markers().stream()
-                .map(marker -> buildWriteTxnMarkerResult(marker))
-                .collect(Collectors.toList());
+                .map(this::buildWriteTxnMarkerResult)
+                .collect(toList());
 
-            return ResponseSerializer.serialize(requestHeader,
+            return serialize(requestHeader,
                 new WriteTxnMarkersResponseData().setMarkers(markerResults),
                 ApiKeys.WRITE_TXN_MARKERS);
 
@@ -246,10 +248,10 @@ final class TransactionApiHandler {
                                 .setPartitionIndex(partition.partitionIndex())
                                 .setErrorCode((short) 0);
                         })
-                        .collect(Collectors.toList())))
-                .collect(Collectors.toList());
+                        .collect(toList())))
+                .collect(toList());
 
-            return ResponseSerializer.serialize(requestHeader,
+            return serialize(requestHeader,
                 new TxnOffsetCommitResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
                 ApiKeys.TXN_OFFSET_COMMIT);
 
@@ -327,8 +329,8 @@ final class TransactionApiHandler {
                     .map(p -> new WriteTxnMarkersResponseData.WritableTxnMarkerPartitionResult()
                         .setPartitionIndex(p)
                         .setErrorCode((short) 0))
-                    .collect(Collectors.toList())))
-            .collect(Collectors.toList());
+                    .collect(toList())))
+            .collect(toList());
         return new WriteTxnMarkersResponseData.WritableTxnMarkerResult()
             .setProducerId(marker.producerId())
             .setTopics(topicResults);
@@ -349,15 +351,15 @@ final class TransactionApiHandler {
             final var states = transactionCoordinator.getTransactionalIds().stream()
                 .map(txnId -> new ListTransactionsResponseData.TransactionState()
                     .setTransactionalId(txnId)
-                    .setProducerId(transactionCoordinator.getProducerIdAndEpoch(txnId).producerId())
+                    .setProducerId(Objects.requireNonNull(transactionCoordinator.getProducerIdAndEpoch(txnId)).producerId())
                     .setTransactionState("Ongoing"))
-                .collect(Collectors.toList());
+                .collect(toList());
 
             final var response = new ListTransactionsResponseData()
                 .setErrorCode((short) 0)
                 .setTransactionStates(states);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.LIST_TRANSACTIONS);
+            return serialize(requestHeader, response, ApiKeys.LIST_TRANSACTIONS);
         } catch (final Exception e) {
             log.error("Error generating ListTransactions response", e);
             return null;
@@ -402,12 +404,12 @@ final class TransactionApiHandler {
                         .setTransactionStartTimeMs(System.currentTimeMillis())
                         .setTopics(new DescribeTransactionsResponseData.TopicDataCollection());
                 })
-                .collect(Collectors.toList());
+                .collect(toList());
 
             final var response = new DescribeTransactionsResponseData()
                 .setTransactionStates(states);
 
-            return ResponseSerializer.serialize(
+            return serialize(
                 requestHeader, response, ApiKeys.DESCRIBE_TRANSACTIONS);
         } catch (final Exception e) {
             log.error("Error generating DescribeTransactions response", e);

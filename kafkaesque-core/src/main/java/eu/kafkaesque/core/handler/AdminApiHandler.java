@@ -34,12 +34,12 @@ import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
 import java.util.List;
-import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT;
 import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT_DELETE;
 import static eu.kafkaesque.core.storage.CleanupPolicy.DELETE;
+import static java.util.stream.Collectors.toList;
 
 /**
  * Handles Kafka admin API responses.
@@ -103,10 +103,10 @@ final class AdminApiHandler {
      */
     private Compression resolveCompression(
             final CreateTopicsRequestData.CreatableTopicConfigCollection configs) {
-        return StreamSupport.stream(configs.spliterator(), false)
+        return configs.stream()
             .filter(c -> "compression.type".equals(c.name()))
             .findFirst()
-            .<Compression>map(c -> compressionForName(c.value()))
+            .map(c -> compressionForName(c.value()))
             .orElse(Compression.NONE);
     }
 
@@ -121,7 +121,7 @@ final class AdminApiHandler {
      */
     private CleanupPolicy resolveCleanupPolicy(
             final CreateTopicsRequestData.CreatableTopicConfigCollection configs) {
-        return StreamSupport.stream(configs.spliterator(), false)
+        return configs.stream()
             .filter(c -> "cleanup.policy".equals(c.name()))
             .findFirst()
             .map(c -> resolveCleanupPolicyValue(c.value()))
@@ -156,7 +156,7 @@ final class AdminApiHandler {
      */
     private long resolveRetentionMs(
             final CreateTopicsRequestData.CreatableTopicConfigCollection configs) {
-        return StreamSupport.stream(configs.spliterator(), false)
+        return configs.stream()
             .filter(c -> "retention.ms".equals(c.name()))
             .findFirst()
             .map(c -> parseLongOrDefault(c.value(), Long.MAX_VALUE))
@@ -173,7 +173,7 @@ final class AdminApiHandler {
      */
     private long resolveRetentionBytes(
             final CreateTopicsRequestData.CreatableTopicConfigCollection configs) {
-        return StreamSupport.stream(configs.spliterator(), false)
+        return configs.stream()
             .filter(c -> "retention.bytes".equals(c.name()))
             .findFirst()
             .map(c -> parseLongOrDefault(c.value(), -1L))
@@ -276,7 +276,7 @@ final class AdminApiHandler {
 
             final var results = request.resources().stream()
                 .map(this::describeResource)
-                .collect(Collectors.toList());
+                .collect(toList());
 
             final var response = new DescribeConfigsResponseData()
                 .setThrottleTimeMs(0)
@@ -382,7 +382,7 @@ final class AdminApiHandler {
                     .setResourceName(resource.resourceName())
                     .setErrorCode((short) 0)
                     .setErrorMessage(null))
-                .collect(Collectors.toList());
+                .collect(toList());
             final var response = new AlterConfigsResponseData()
                 .setThrottleTimeMs(0)
                 .setResponses(responses);
@@ -414,7 +414,7 @@ final class AdminApiHandler {
                         .setErrorCode((short) 0)
                         .setErrorMessage(null);
                 })
-                .collect(Collectors.toList());
+                .collect(toList());
 
             final var response = new CreatePartitionsResponseData()
                 .setThrottleTimeMs(0)
@@ -485,13 +485,13 @@ final class AdminApiHandler {
         try {
             final var accessor = new ByteBufferAccessor(buffer);
             final var request = new IncrementalAlterConfigsRequestData(accessor, requestHeader.apiVersion());
-            final var responses = StreamSupport.stream(request.resources().spliterator(), false)
+            final var responses = request.resources().stream()
                 .map(resource -> new IncrementalAlterConfigsResponseData.AlterConfigsResourceResponse()
                     .setResourceType(resource.resourceType())
                     .setResourceName(resource.resourceName())
                     .setErrorCode((short) 0)
                     .setErrorMessage(null))
-                .collect(Collectors.toList());
+                .collect(toList());
             final var response = new IncrementalAlterConfigsResponseData()
                 .setThrottleTimeMs(0)
                 .setResponses(responses);
@@ -561,8 +561,8 @@ final class AdminApiHandler {
                                 .setPartitionId(p)
                                 .setErrorCode(Errors.ELECTION_NOT_NEEDED.code())
                                 .setErrorMessage(Errors.ELECTION_NOT_NEEDED.message()))
-                            .collect(Collectors.toList())))
-                    .collect(Collectors.toList());
+                            .collect(toList())))
+                    .collect(toList());
 
             final var response = new ElectLeadersResponseData()
                 .setThrottleTimeMs(0)
@@ -599,12 +599,12 @@ final class AdminApiHandler {
                             .setPartitionSize(0L)
                             .setOffsetLag(0L)
                             .setIsFutureKey(false))
-                        .collect(Collectors.toList());
+                        .collect(toList());
                     return new DescribeLogDirsResponseData.DescribeLogDirsTopic()
                         .setName(def.name())
                         .setPartitions(partitions);
                 })
-                .collect(Collectors.toList());
+                .collect(toList());
 
             final var logDir = new DescribeLogDirsResponseData.DescribeLogDirsResult()
                 .setErrorCode((short) 0)
@@ -648,8 +648,8 @@ final class AdminApiHandler {
                                 .AlterReplicaLogDirPartitionResult()
                                 .setPartitionIndex(p)
                                 .setErrorCode((short) 0))
-                            .collect(Collectors.toList()))))
-                .collect(Collectors.toList());
+                            .collect(toList()))))
+                .collect(toList());
 
             final var response = new AlterReplicaLogDirsResponseData()
                 .setThrottleTimeMs(0)

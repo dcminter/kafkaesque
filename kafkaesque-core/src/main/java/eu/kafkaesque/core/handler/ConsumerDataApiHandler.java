@@ -3,7 +3,6 @@ package eu.kafkaesque.core.handler;
 import eu.kafkaesque.core.handler.FetchSessionCoordinator.FetchSession;
 import eu.kafkaesque.core.handler.FetchSessionCoordinator.PartitionFetchState;
 import eu.kafkaesque.core.handler.FetchSessionCoordinator.TopicPartitionKey;
-import eu.kafkaesque.core.storage.CleanupPolicy;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.RecordHeader;
 import eu.kafkaesque.core.storage.StoredRecord;
@@ -22,13 +21,13 @@ import org.apache.kafka.common.message.OffsetFetchRequestData;
 import org.apache.kafka.common.message.OffsetFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
-import org.apache.kafka.common.record.CompressionType;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.TimestampType;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -37,10 +36,15 @@ import java.util.stream.Collectors;
 
 import static eu.kafkaesque.core.handler.FetchSessionCoordinator.FINAL_EPOCH;
 import static eu.kafkaesque.core.handler.FetchSessionCoordinator.INITIAL_EPOCH;
+import static eu.kafkaesque.core.handler.ResponseSerializer.serialize;
 import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT;
 import static eu.kafkaesque.core.storage.CleanupPolicy.COMPACT_DELETE;
 import static java.nio.charset.StandardCharsets.UTF_8;
+import static java.util.Collections.reverse;
+import static java.util.Comparator.comparingLong;
 import static java.util.List.of;
+import static java.util.stream.Collectors.groupingBy;
+import static java.util.stream.Collectors.toList;
 import static org.apache.kafka.common.protocol.Errors.FETCH_SESSION_ID_NOT_FOUND;
 import static org.apache.kafka.common.record.CompressionType.NONE;
 
@@ -92,10 +96,10 @@ final class ConsumerDataApiHandler {
                                 .setOffset(offset)
                                 .setLeaderEpoch(-1);
                         })
-                        .collect(Collectors.toList())))
-                .collect(Collectors.toList());
+                        .collect(toList())))
+                .collect(toList());
 
-            return ResponseSerializer.serialize(requestHeader,
+            return serialize(requestHeader,
                 new ListOffsetsResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
                 ApiKeys.LIST_OFFSETS);
 
@@ -125,13 +129,13 @@ final class ConsumerDataApiHandler {
             if (requestHeader.apiVersion() >= 8) {
                 final var groupResponses = request.groups().stream()
                     .map(group -> buildOffsetFetchGroupResponse(group.groupId(), group.topics()))
-                    .collect(Collectors.toList());
+                    .collect(toList());
                 data.setGroups(groupResponses);
             } else {
                 data.setTopics(buildOffsetFetchTopicResponses(request.groupId(), request.topics()));
             }
 
-            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.OFFSET_FETCH);
+            return serialize(requestHeader, data, ApiKeys.OFFSET_FETCH);
 
         } catch (final Exception e) {
             log.error("Error generating OffsetFetch response", e);
@@ -163,10 +167,10 @@ final class ConsumerDataApiHandler {
                                 .setPartitionIndex(partition.partitionIndex())
                                 .setErrorCode((short) 0);
                         })
-                        .collect(Collectors.toList())))
-                .collect(Collectors.toList());
+                        .collect(toList())))
+                .collect(toList());
 
-            return ResponseSerializer.serialize(requestHeader,
+            return serialize(requestHeader,
                 new OffsetCommitResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
                 ApiKeys.OFFSET_COMMIT);
 
@@ -247,7 +251,7 @@ final class ConsumerDataApiHandler {
         final var isolationLevel = request.isolationLevel();
         final var topicResponses = request.topics().stream()
             .map(topic -> buildFetchableTopicResponse(topic, isolationLevel))
-            .collect(Collectors.toList());
+            .collect(toList());
 
         final int responseSessionId;
         if (createSession) {
@@ -264,7 +268,7 @@ final class ConsumerDataApiHandler {
             .setSessionId(responseSessionId)
             .setResponses(topicResponses);
 
-        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.FETCH);
+        return serialize(requestHeader, data, ApiKeys.FETCH);
     }
 
     /**
@@ -282,7 +286,7 @@ final class ConsumerDataApiHandler {
             final RequestHeader requestHeader,
             final FetchRequestData request) {
         if (!fetchSessionCoordinator.closeSession(request.sessionId())) {
-            return ResponseSerializer.serialize(requestHeader,
+            return serialize(requestHeader,
                 new FetchResponseData()
                     .setThrottleTimeMs(0)
                     .setErrorCode(FETCH_SESSION_ID_NOT_FOUND.code())
@@ -290,7 +294,7 @@ final class ConsumerDataApiHandler {
                 ApiKeys.FETCH);
         }
 
-        return ResponseSerializer.serialize(requestHeader,
+        return serialize(requestHeader,
             new FetchResponseData()
                 .setThrottleTimeMs(0)
                 .setErrorCode((short) 0)
@@ -330,7 +334,7 @@ final class ConsumerDataApiHandler {
                 .setThrottleTimeMs(0)
                 .setErrorCode(result.errorCode())
                 .setSessionId(0);
-            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.FETCH);
+            return serialize(requestHeader, data, ApiKeys.FETCH);
         }
 
         final var isolationLevel = request.isolationLevel();
@@ -342,7 +346,7 @@ final class ConsumerDataApiHandler {
             .setSessionId(sessionId)
             .setResponses(topicResponses);
 
-        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.FETCH);
+        return serialize(requestHeader, data, ApiKeys.FETCH);
     }
 
     /**
@@ -361,7 +365,7 @@ final class ConsumerDataApiHandler {
             .setPartitions(topic.partitions().stream()
                 .map(partition -> buildPartitionData(
                     topic.topic(), partition.partition(), partition.fetchOffset(), isolationLevel))
-                .collect(Collectors.toList()));
+                .collect(toList()));
     }
 
     /**
@@ -380,7 +384,7 @@ final class ConsumerDataApiHandler {
                 entry.getValue().fetchOffset(), isolationLevel))
             .collect(Collectors.groupingBy(
                 entry -> entry.getKey().topic(),
-                Collectors.toList()));
+                toList()));
 
         return grouped.entrySet().stream()
             .map(topicEntry -> new FetchResponseData.FetchableTopicResponse()
@@ -389,8 +393,8 @@ final class ConsumerDataApiHandler {
                     .map(entry -> buildPartitionData(
                         entry.getKey().topic(), entry.getKey().partition(),
                         entry.getValue().fetchOffset(), isolationLevel))
-                    .collect(Collectors.toList())))
-            .collect(Collectors.toList());
+                    .collect(toList())))
+            .collect(toList());
     }
 
     /**
@@ -516,8 +520,8 @@ final class ConsumerDataApiHandler {
                             .setMetadata("")
                             .setErrorCode((short) 0);
                     })
-                    .collect(Collectors.toList())))
-            .collect(Collectors.toList());
+                    .collect(toList())))
+            .collect(toList());
     }
 
     /**
@@ -529,7 +533,7 @@ final class ConsumerDataApiHandler {
     private List<OffsetFetchResponseData.OffsetFetchResponseTopics> buildAllCommittedOffsetsResponse(
             final String groupId) {
         return groupCoordinator.getCommittedOffsets(groupId).stream()
-            .collect(java.util.stream.Collectors.groupingBy(GroupCoordinator.CommittedOffsetEntry::topic))
+            .collect(groupingBy(GroupCoordinator.CommittedOffsetEntry::topic))
             .entrySet().stream()
             .map(entry -> new OffsetFetchResponseData.OffsetFetchResponseTopics()
                 .setName(entry.getKey())
@@ -540,8 +544,8 @@ final class ConsumerDataApiHandler {
                         .setCommittedLeaderEpoch(-1)
                         .setMetadata("")
                         .setErrorCode((short) 0))
-                    .collect(Collectors.toList())))
-            .collect(Collectors.toList());
+                    .collect(toList())))
+            .collect(toList());
     }
 
     /**
@@ -569,8 +573,8 @@ final class ConsumerDataApiHandler {
                             .setMetadata("")
                             .setErrorCode((short) 0);
                     })
-                    .collect(Collectors.toList())))
-            .collect(Collectors.toList());
+                    .collect(toList())))
+            .collect(toList());
     }
 
     /**
@@ -605,7 +609,7 @@ final class ConsumerDataApiHandler {
         final var stored = effective.stream()
             .filter(r -> r.offset() >= fetchOffset)
             .filter(r -> isolationLevel != 1 || r.offset() < lso)
-            .collect(Collectors.toList());
+            .collect(toList());
 
         if (stored.isEmpty()) {
             return MemoryRecords.EMPTY;
@@ -654,7 +658,7 @@ final class ConsumerDataApiHandler {
         final var retainedOffsets = buildRetainedOffsetsAfterCompaction(records);
         return records.stream()
             .filter(r -> r.key() == null || retainedOffsets.contains(r.offset()))
-            .collect(Collectors.toList());
+            .collect(toList());
     }
 
     /**
@@ -691,7 +695,7 @@ final class ConsumerDataApiHandler {
         final long cutoffMs = System.currentTimeMillis() - retentionMs;
         return records.stream()
             .filter(r -> r.timestamp() > cutoffMs)
-            .collect(Collectors.toList());
+            .collect(toList());
     }
 
     /**
@@ -711,16 +715,16 @@ final class ConsumerDataApiHandler {
      */
     private List<StoredRecord> applyRetentionBytes(
             final List<StoredRecord> records, final long retentionBytes) {
-        final var reversed = new java.util.ArrayList<>(records);
-        java.util.Collections.reverse(reversed);
+        final var reversed = new ArrayList<>(records);
+        reverse(reversed);
         final long[] accumulated = {0L};
         return reversed.stream()
             .takeWhile(r -> {
                 accumulated[0] += recordByteSize(r);
                 return accumulated[0] <= retentionBytes;
             })
-            .sorted(Comparator.comparingLong(StoredRecord::offset))
-            .collect(Collectors.toList());
+            .sorted(comparingLong(StoredRecord::offset))
+            .collect(toList());
     }
 
     /**
@@ -752,17 +756,18 @@ final class ConsumerDataApiHandler {
             .min()
             .orElse(0L);
         final var buf = ByteBuffer.allocate(estimateBufferSize(stored, compression));
-        final var builder = MemoryRecords.builder(
-            buf, RecordBatch.CURRENT_MAGIC_VALUE, compression, TimestampType.CREATE_TIME, baseOffset);
-        stored.stream()
-            .sorted(Comparator.comparingLong(StoredRecord::offset))
-            .forEach(r -> builder.appendWithOffset(
-                r.offset(),
-                r.timestamp(),
-                r.key() != null ? r.key().getBytes(UTF_8) : null,
-                r.value() != null ? r.value().getBytes(UTF_8) : null,
-                toKafkaHeaders(r.headers())));
-        return builder.build();
+        try (var builder = MemoryRecords.builder(
+                buf, RecordBatch.CURRENT_MAGIC_VALUE, compression, TimestampType.CREATE_TIME, baseOffset)) {
+            stored.stream()
+                    .sorted(Comparator.comparingLong(StoredRecord::offset))
+                    .forEach(r -> builder.appendWithOffset(
+                            r.offset(),
+                            r.timestamp(),
+                            r.key() != null ? r.key().getBytes(UTF_8) : null,
+                            r.value() != null ? r.value().getBytes(UTF_8) : null,
+                            toKafkaHeaders(r.headers())));
+            return builder.build();
+        }
     }
 
     /**
