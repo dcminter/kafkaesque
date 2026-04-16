@@ -12,9 +12,18 @@ Kafkaesque in Jupiter test classes.
     <version>${kafkaesque.version}</version>
     <scope>test</scope>
 </dependency>
+
+
+<!-- Bring your own Kafka client (1.x through 4.x) -->
+<dependency>
+    <groupId>org.apache.kafka</groupId>
+    <artifactId>kafka-clients</artifactId>
+    <version>${your.kafka.version}</version>
+</dependency>
 ```
 
-This transitively brings in `kafkaesque-core`, so you only need the one dependency.
+This transitively brings in `kafkaesque-core`, so you only need the one dependency - though you will also need to bring
+in an Apache Kafka client library (whichever version is most appropriate for your application).
 
 ## Quick Start
 
