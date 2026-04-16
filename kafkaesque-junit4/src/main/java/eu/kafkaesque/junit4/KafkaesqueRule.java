@@ -74,6 +74,9 @@ import static java.util.Arrays.asList;
 @Slf4j
 public final class KafkaesqueRule extends ExternalResource {
 
+    /** The port number to bind the server to; {@code 0} for an OS-assigned ephemeral port. */
+    private final int port;
+
     /** Whether producers may auto-create unknown topics. */
     private final boolean autoCreateTopics;
 
@@ -87,19 +90,22 @@ public final class KafkaesqueRule extends ExternalResource {
     private KafkaesqueServer server;
 
     /**
-     * Creates a rule with default settings: auto-create topics enabled, no pre-created topics.
+     * Creates a rule with default settings: ephemeral port, auto-create topics enabled,
+     * no pre-created topics.
      */
     public KafkaesqueRule() {
-        this(true, List.of());
+        this(0, true, List.of());
     }
 
     /**
      * Creates a rule with the given configuration.
      *
+     * @param port             the port number to bind to; {@code 0} for an OS-assigned ephemeral port
      * @param autoCreateTopics whether producers may auto-create unknown topics
      * @param topics           topics to pre-create when the server starts
      */
-    private KafkaesqueRule(final boolean autoCreateTopics, final List<TopicDefinition> topics) {
+    private KafkaesqueRule(final int port, final boolean autoCreateTopics, final List<TopicDefinition> topics) {
+        this.port = port;
         this.autoCreateTopics = autoCreateTopics;
         this.topics = topics;
     }
@@ -122,7 +128,7 @@ public final class KafkaesqueRule extends ExternalResource {
      */
     @Override
     protected void before() throws Exception {
-        server = new KafkaesqueServer("localhost", 0, autoCreateTopics);
+        server = new KafkaesqueServer("localhost", port, autoCreateTopics);
         server.start();
         topics.forEach(t -> server.createTopic(t.name(), t.numPartitions(), t.replicationFactor()));
         log.info("Kafkaesque server started on {}", server.getBootstrapServers());
@@ -370,6 +376,9 @@ public final class KafkaesqueRule extends ExternalResource {
      */
     public static final class Builder {
 
+        /** The port number to bind to; {@code 0} for an OS-assigned ephemeral port. */
+        private int port;
+
         /** Whether producers may auto-create unknown topics. */
         private boolean autoCreateTopics = true;
 
@@ -380,6 +389,21 @@ public final class KafkaesqueRule extends ExternalResource {
          * Creates a new builder with default settings.
          */
         Builder() {
+        }
+
+        /**
+         * Sets the port number the server should listen on.
+         *
+         * <p>When set to {@code 0} (the default), the operating system assigns an available
+         * ephemeral port automatically. Set to a specific positive value to bind the server
+         * to an explicit port.</p>
+         *
+         * @param port the port number; {@code 0} for an OS-assigned ephemeral port
+         * @return this builder
+         */
+        public Builder port(final int port) {
+            this.port = port;
+            return this;
         }
 
         /**
@@ -433,7 +457,7 @@ public final class KafkaesqueRule extends ExternalResource {
          * @return a new rule instance
          */
         public KafkaesqueRule build() {
-            return new KafkaesqueRule(autoCreateTopics, List.copyOf(topics));
+            return new KafkaesqueRule(port, autoCreateTopics, List.copyOf(topics));
         }
     }
 }

@@ -69,6 +69,23 @@ class MixedTest {
 }
 ```
 
+### Explicit Port
+
+By default, the server binds to an OS-assigned ephemeral port. Set the `port` attribute to
+bind to a specific port:
+
+```java
+@Kafkaesque(port = 19092)
+class FixedPortTest {
+    @Test
+    void serverRunsOnPort19092(KafkaesqueServer kafkaesque) throws Exception {
+        assertThat(kafkaesque.getPort()).isEqualTo(19092);
+    }
+}
+```
+
+This is useful when your application under test needs to connect to a predictable address.
+
 ### Auto-Create Topics
 
 By default, producing to an unknown topic creates it automatically (mirroring real Kafka's

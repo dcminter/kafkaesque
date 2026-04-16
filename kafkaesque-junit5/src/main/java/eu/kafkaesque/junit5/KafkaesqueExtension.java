@@ -207,7 +207,7 @@ public final class KafkaesqueExtension
      * @throws Exception if the server cannot be started
      */
     private void startServer(final ExtensionContext context, final String key) throws Exception {
-        final var server = new KafkaesqueServer("localhost", 0, resolveAutoCreateTopics(context));
+        final var server = new KafkaesqueServer("localhost", resolvePort(context), resolveAutoCreateTopics(context));
         server.start();
         createTopics(server, context);
         context.getStore(NAMESPACE).put(key, server);
@@ -244,6 +244,25 @@ public final class KafkaesqueExtension
             .map(Arrays::asList)
             .orElse(of());
         return concat(classTopics.stream(), methodTopics.stream()).collect(java.util.stream.Collectors.toList());
+    }
+
+    /**
+     * Resolves the port number from the nearest {@link Kafkaesque} annotation.
+     *
+     * <p>Checks the test method first, then the test class. Returns {@code 0} (ephemeral port)
+     * if no annotation is found.</p>
+     *
+     * @param context the current extension context
+     * @return the port number to bind to; {@code 0} for an OS-assigned ephemeral port
+     */
+    private int resolvePort(final ExtensionContext context) {
+        return context.getTestMethod()
+            .map(m -> m.getAnnotation(Kafkaesque.class))
+            .map(Kafkaesque::port)
+            .orElseGet(() -> {
+                final var annotation = context.getRequiredTestClass().getAnnotation(Kafkaesque.class);
+                return annotation == null ? 0 : annotation.port();
+            });
     }
 
     /**

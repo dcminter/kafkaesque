@@ -69,6 +69,17 @@ public @interface Kafkaesque {
     Lifecycle lifecycle() default Lifecycle.PER_CLASS;
 
     /**
+     * The port number the {@link eu.kafkaesque.core.KafkaesqueServer} should listen on.
+     *
+     * <p>When set to {@code 0} (the default), the operating system assigns an available
+     * ephemeral port automatically. Set to a specific positive value to bind the server
+     * to an explicit port — useful when tests need a predictable address.</p>
+     *
+     * @return the port number; defaults to {@code 0} (ephemeral)
+     */
+    int port() default 0;
+
+    /**
      * Whether producers may auto-create unknown topics.
      *
      * <p>When {@code true} (the default), producing to an unknown topic will cause the topic to

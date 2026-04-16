@@ -90,6 +90,7 @@ public static KafkaesqueRule kafkaesqueRule = KafkaesqueRule.builder()
 
 | Method | Description |
 |---|---|
+| `port(int)` | Port to bind to; `0` (default) for an OS-assigned ephemeral port |
 | `autoCreateTopics(boolean)` | Whether unknown topics are created on produce (default: `true`) |
 | `topic(String)` | Add a topic with 1 partition |
 | `topic(String, int)` | Add a topic with the given partition count |
