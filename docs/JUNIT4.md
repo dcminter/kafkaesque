@@ -44,9 +44,9 @@ public class MyKafkaTest {
 
 ## `@Rule` vs `@ClassRule`
 
-| Annotation | Field | Behaviour |
-|---|---|---|
-| `@Rule` | Instance field | Fresh server per test method |
+| Annotation   | Field          | Behaviour                              |
+|--------------|----------------|----------------------------------------|
+| `@Rule`      | Instance field | Fresh server per test method           |
 | `@ClassRule` | `static` field | One shared server for the entire class |
 
 ### Per-Method (fresh server each test)
@@ -96,12 +96,12 @@ public static KafkaesqueRule kafkaesqueRule = KafkaesqueRule.builder()
 
 ### Builder Methods
 
-| Method | Description |
-|---|---|
-| `port(int)` | Port to bind to; `0` (default) for an OS-assigned ephemeral port |
-| `autoCreateTopics(boolean)` | Whether unknown topics are created on produce (default: `true`) |
-| `topic(String)` | Add a topic with 1 partition |
-| `topic(String, int)` | Add a topic with the given partition count |
+| Method                       | Description                                                         |
+|------------------------------|---------------------------------------------------------------------|
+| `port(int)`                  | Port to bind to; `0` (default) for an OS-assigned ephemeral port    |
+| `autoCreateTopics(boolean)`  | Whether unknown topics are created on produce (default: `true`)     |
+| `topic(String)`              | Add a topic with 1 partition                                        |
+| `topic(String, int)`         | Add a topic with the given partition count                          |
 | `topics(TopicDefinition...)` | Add topics with full control (name, partitions, replication factor) |
 
 ### `TopicDefinition`

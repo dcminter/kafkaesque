@@ -219,6 +219,20 @@ application, Kafkaesque does not bring one in transitively:
 </dependencies>
 ```
 
+## Performance
+
+A very quick and dirty benchmark (using [the kafkaesque-speed-test repository](https://github.com/dcminter/kafkaesque-speed-test))
+gives the following performance numbers:
+
+| Test Broker          | Startup Duration | Shutdown Duration |
+|----------------------|------------------|-------------------|
+| KafkaesqueServer     | 264 ms           | 41 ms             |
+| EmbeddedKafkaBroker  | 1835 ms          | 2104 ms           |
+| TestContainers Kafka | 2012 ms          | 245 ms            |
+
+Note - this is run on underwhelming (2017 edition) hardware; the relative performance of the underlying tools is the 
+interesting part.
+
 ## Building and testing
 
 The build tool is [Maven](https://maven.apache.org/) and we're using [Maven Wrapper](https://maven.apache.org/tools/wrapper/)

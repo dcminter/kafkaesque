@@ -49,10 +49,10 @@ class MyKafkaTest {
 
 When placed on a class, the `lifecycle` attribute controls server lifetime:
 
-| Value | Behaviour |
-|---|---|
+| Value                 | Behaviour                                            |
+|-----------------------|------------------------------------------------------|
 | `PER_CLASS` (default) | One server for the entire class, shared by all tests |
-| `PER_METHOD` | A fresh server for each test method |
+| `PER_METHOD`          | A fresh server for each test method                  |
 
 ```java
 @Kafkaesque(lifecycle = Lifecycle.PER_METHOD)
@@ -142,14 +142,14 @@ class ProducerTest {
 
 ### Attributes
 
-| Attribute | Default | Description |
-|---|---|---|
-| `keySerializer` | `StringSerializer` | Serializer for record keys |
-| `valueSerializer` | `StringSerializer` | Serializer for record values |
-| `acks` | `"all"` | Acknowledgement mode |
-| `retries` | `0` | Retry count |
-| `idempotent` | `false` | Enable exactly-once semantics |
-| `transactionalId` | `""` | Non-empty enables transactional production |
+| Attribute         | Default            | Description                                |
+|-------------------|--------------------|--------------------------------------------|
+| `keySerializer`   | `StringSerializer` | Serializer for record keys                 |
+| `valueSerializer` | `StringSerializer` | Serializer for record values               |
+| `acks`            | `"all"`            | Acknowledgement mode                       |
+| `retries`         | `0`                | Retry count                                |
+| `idempotent`      | `false`            | Enable exactly-once semantics              |
+| `transactionalId` | `""`               | Non-empty enables transactional production |
 
 ### Transactional Producers
 
@@ -184,14 +184,14 @@ call `subscribe()` or `assign()` yourself.
 
 ### Attributes
 
-| Attribute | Default | Description |
-|---|---|---|
-| `topics` | `{}` | Topics to subscribe to (empty = manual subscription) |
-| `groupId` | `""` | Consumer group ID (empty = random UUID per test) |
-| `keyDeserializer` | `StringDeserializer` | Deserializer for record keys |
-| `valueDeserializer` | `StringDeserializer` | Deserializer for record values |
-| `autoOffsetReset` | `"earliest"` | Offset reset policy |
-| `isolationLevel` | `READ_UNCOMMITTED` | Transaction isolation level |
+| Attribute           | Default              | Description                                          |
+|---------------------|----------------------|------------------------------------------------------|
+| `topics`            | `{}`                 | Topics to subscribe to (empty = manual subscription) |
+| `groupId`           | `""`                 | Consumer group ID (empty = random UUID per test)     |
+| `keyDeserializer`   | `StringDeserializer` | Deserializer for record keys                         |
+| `valueDeserializer` | `StringDeserializer` | Deserializer for record values                       |
+| `autoOffsetReset`   | `"earliest"`         | Offset reset policy                                  |
+| `isolationLevel`    | `READ_UNCOMMITTED`   | Transaction isolation level                          |
 
 ### Isolation Level
 

@@ -52,7 +52,7 @@
         <assertj.version>3.27.7</assertj.version>
         <awaitility.version>4.2.2</awaitility.version>
         <mockito.version>5.14.2</mockito.version>
-        <testcontainers.version>1.20.4</testcontainers.version>
+        <testcontainers.version>1.21.4</testcontainers.version>
         <commons-compress.version>1.28.0</commons-compress.version>
 
         <!-- Native access arg (empty by default, set by profile on Java 16+) -->
