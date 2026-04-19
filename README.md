@@ -15,14 +15,19 @@ I'd call this a "potentially useful beta" - give it a whirl if you think it migh
 A very quick and dirty benchmark (using [the kafkaesque-speed-test repository](https://github.com/dcminter/kafkaesque-speed-test))
 gives the following performance numbers:
 
-| Test Broker          | Startup Duration | Shutdown Duration |
-|----------------------|------------------|-------------------|
-| KafkaesqueServer     | 25 ms            | 39 ms             |
-| EmbeddedKafkaBroker  | 1851 ms          | 3090 ms           |
-| TestContainers Kafka | 1958 ms          | 251 ms            |
+| Test Broker                        | Startup Duration | Shutdown Duration |
+|------------------------------------|------------------|-------------------|
+| KafkaesqueServer                   | 25 ms            | 39 ms             |
+| KafkaesqueServer in TestContainers | 620 ms           | 360 ms            |
+| EmbeddedKafkaBroker                | 1851 ms          | 3090 ms           |
+| TestContainers Kafka               | 1958 ms          | 251 ms            |
 
 This is run on underwhelming (2017 edition) hardware; the relative performance of the underlying tools is the
-interesting part. Obviously at the end of the day Kafkaesque isn't Kafka so there's stuff it's not doing that 
+interesting part. 
+
+![Startup Time Comparison Histogram](docs/startup_times.png)
+
+Obviously at the end of the day Kafkaesque isn't Kafka so there's stuff it's not doing that 
 the others must, but that's kind of the point!
 
 ## Why not just use real Kafka?
