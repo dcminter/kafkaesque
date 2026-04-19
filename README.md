@@ -226,11 +226,11 @@ gives the following performance numbers:
 
 | Test Broker          | Startup Duration | Shutdown Duration |
 |----------------------|------------------|-------------------|
-| KafkaesqueServer     | 264 ms           | 41 ms             |
-| EmbeddedKafkaBroker  | 1835 ms          | 2104 ms           |
-| TestContainers Kafka | 2012 ms          | 245 ms            |
+| KafkaesqueServer     | 25 ms            | 39 ms             |
+| EmbeddedKafkaBroker  | 1851 ms          | 3090 ms           |
+| TestContainers Kafka | 1958 ms          | 251 ms            |
 
-Note - this is run on underwhelming (2017 edition) hardware; the relative performance of the underlying tools is the 
+This is run on underwhelming (2017 edition) hardware; the relative performance of the underlying tools is the 
 interesting part.
 
 ## Building and testing
