@@ -86,7 +86,7 @@ class ProducerApiHandlerTest {
 
         invokeProduceRequest(topic, 0, txnId, "k", "v");
 
-        assertThat(eventStore.getTransactionState(topic, 0, 0L)).isEqualTo(TransactionState.PENDING);
+        assertThat(eventStore.getTransactionState(topic, 0, 0L)).hasValue(TransactionState.PENDING);
         assertThat(eventStore.getRecords(topic, 0, (byte) 1)).isEmpty();
         assertThat(eventStore.getRecords(topic, 0, (byte) 0)).hasSize(1);
     }

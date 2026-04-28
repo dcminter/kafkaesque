@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -181,13 +182,14 @@ public final class EventStore {
         }
 
         /**
-         * Returns the transaction state for the given offset, or {@code null} for non-transactional records.
+         * Returns the transaction state for the given offset, or {@link Optional#empty()} for
+         * non-transactional records.
          *
          * @param offset the record offset
-         * @return the transaction state, or {@code null}
+         * @return the transaction state, or empty if the record is non-transactional
          */
-        TransactionState getTransactionState(final long offset) {
-            return transactionStates.get(offset);
+        Optional<TransactionState> getTransactionState(final long offset) {
+            return Optional.ofNullable(transactionStates.get(offset));
         }
 
         /**
@@ -399,16 +401,19 @@ public final class EventStore {
     }
 
     /**
-     * Returns the transaction state of a specific record, or {@code null} for non-transactional records.
+     * Returns the transaction state of a specific record, or {@link Optional#empty()} for
+     * non-transactional records (or for unknown topic/partition combinations).
      *
      * @param topic     the topic name
      * @param partition the partition index
      * @param offset    the record offset
-     * @return the transaction state, or {@code null} if the record is non-transactional
+     * @return the transaction state, or empty if the record is non-transactional or the
+     *         topic/partition is unknown
      */
-    public TransactionState getTransactionState(final String topic, final int partition, final long offset) {
-        final var ps = partitions.get(new TopicPartitionKey(topic, partition));
-        return ps != null ? ps.getTransactionState(offset) : null;
+    public Optional<TransactionState> getTransactionState(
+            final String topic, final int partition, final long offset) {
+        return Optional.ofNullable(partitions.get(new TopicPartitionKey(topic, partition)))
+            .flatMap(ps -> ps.getTransactionState(offset));
     }
 
     /**
@@ -491,9 +496,11 @@ public final class EventStore {
             // READ_UNCOMMITTED: all records are visible regardless of transaction state
             return true;
         }
-        final var state = ps.getTransactionState(offset);
-        // READ_COMMITTED: hide aborted and pending records
-        return state != TransactionState.ABORTED && state != TransactionState.PENDING;
+        // READ_COMMITTED: hide aborted and pending records (non-transactional records,
+        // signalled by an empty Optional, are always visible).
+        return ps.getTransactionState(offset)
+            .map(state -> state != TransactionState.ABORTED && state != TransactionState.PENDING)
+            .orElse(true);
     }
 
     /**

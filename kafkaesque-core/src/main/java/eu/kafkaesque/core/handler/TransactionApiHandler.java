@@ -23,7 +23,6 @@ import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
-import java.util.Objects;
 
 import static eu.kafkaesque.core.handler.ResponseSerializer.serialize;
 import static java.util.stream.Collectors.toList;
@@ -351,7 +350,7 @@ final class TransactionApiHandler {
             final var states = transactionCoordinator.getTransactionalIds().stream()
                 .map(txnId -> new ListTransactionsResponseData.TransactionState()
                     .setTransactionalId(txnId)
-                    .setProducerId(Objects.requireNonNull(transactionCoordinator.getProducerIdAndEpoch(txnId)).producerId())
+                    .setProducerId(transactionCoordinator.getProducerIdAndEpoch(txnId).orElseThrow().producerId())
                     .setTransactionState("Ongoing"))
                 .collect(toList());
 
@@ -381,29 +380,9 @@ final class TransactionApiHandler {
             final var request = new DescribeTransactionsRequestData(accessor, requestHeader.apiVersion());
 
             final var states = request.transactionalIds().stream()
-                .map(txnId -> {
-                    final var idAndEpoch = transactionCoordinator.getProducerIdAndEpoch(txnId);
-                    if (idAndEpoch == null) {
-                        return new DescribeTransactionsResponseData.TransactionState()
-                            .setTransactionalId(txnId)
-                            .setErrorCode((short) 0)
-                            .setTransactionState("")
-                            .setProducerId(-1L)
-                            .setProducerEpoch((short) -1)
-                            .setTransactionTimeoutMs(0)
-                            .setTransactionStartTimeMs(-1L)
-                            .setTopics(new DescribeTransactionsResponseData.TopicDataCollection());
-                    }
-                    return new DescribeTransactionsResponseData.TransactionState()
-                        .setTransactionalId(txnId)
-                        .setErrorCode((short) 0)
-                        .setTransactionState("Ongoing")
-                        .setProducerId(idAndEpoch.producerId())
-                        .setProducerEpoch(idAndEpoch.epoch())
-                        .setTransactionTimeoutMs(60000)
-                        .setTransactionStartTimeMs(System.currentTimeMillis())
-                        .setTopics(new DescribeTransactionsResponseData.TopicDataCollection());
-                })
+                .map(txnId -> transactionCoordinator.getProducerIdAndEpoch(txnId)
+                    .map(idAndEpoch -> ongoingTransactionState(txnId, idAndEpoch))
+                    .orElseGet(() -> unknownTransactionState(txnId)))
                 .collect(toList());
 
             final var response = new DescribeTransactionsResponseData()
@@ -415,5 +394,44 @@ final class TransactionApiHandler {
             log.error("Error generating DescribeTransactions response", e);
             return null;
         }
+    }
+
+    /**
+     * Builds the describe-transactions entry for an unknown transactional ID. The Kafka
+     * protocol expects a successful response with sentinel values rather than an error.
+     *
+     * @param txnId the transactional producer ID that was not found
+     * @return a transaction-state entry with empty/sentinel fields
+     */
+    private static DescribeTransactionsResponseData.TransactionState unknownTransactionState(final String txnId) {
+        return new DescribeTransactionsResponseData.TransactionState()
+            .setTransactionalId(txnId)
+            .setErrorCode((short) 0)
+            .setTransactionState("")
+            .setProducerId(-1L)
+            .setProducerEpoch((short) -1)
+            .setTransactionTimeoutMs(0)
+            .setTransactionStartTimeMs(-1L)
+            .setTopics(new DescribeTransactionsResponseData.TopicDataCollection());
+    }
+
+    /**
+     * Builds the describe-transactions entry for an ongoing transaction.
+     *
+     * @param txnId      the transactional producer ID
+     * @param idAndEpoch the assigned producer ID and epoch
+     * @return a transaction-state entry reporting the ongoing transaction
+     */
+    private static DescribeTransactionsResponseData.TransactionState ongoingTransactionState(
+            final String txnId, final TransactionCoordinator.ProducerIdAndEpoch idAndEpoch) {
+        return new DescribeTransactionsResponseData.TransactionState()
+            .setTransactionalId(txnId)
+            .setErrorCode((short) 0)
+            .setTransactionState("Ongoing")
+            .setProducerId(idAndEpoch.producerId())
+            .setProducerEpoch(idAndEpoch.epoch())
+            .setTransactionTimeoutMs(60000)
+            .setTransactionStartTimeMs(System.currentTimeMillis())
+            .setTopics(new DescribeTransactionsResponseData.TopicDataCollection());
     }
 }

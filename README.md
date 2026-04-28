@@ -265,6 +265,7 @@ docker run -p 9092:9092 kafkaesque
   * See [the event storage summary](docs/EVENT_STORAGE_SUMMARY.md) for details of the internal representation of events etc.
   * See [the multiversion strategy summary]() for details of how Kafkaesque supports multiple `kafka-clients` versions while still using that library internally.
   * See [the future directions documentation](docs/FUTURE.md) for a sketch of features I plan to add to Kafkaesque.
+  * See [BUGS.md](BUGS.md) for known issues and contract inconsistencies that are tracked for future fixes.
 
 ## License & Development
 

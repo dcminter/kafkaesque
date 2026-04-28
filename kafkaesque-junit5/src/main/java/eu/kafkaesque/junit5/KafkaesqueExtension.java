@@ -20,6 +20,7 @@ import java.io.IOException;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.UUID;
 
@@ -92,7 +93,7 @@ public final class KafkaesqueExtension
      */
     @Override
     public void beforeAll(final ExtensionContext context) throws Exception {
-        if (getClassLifecycle(context) == Kafkaesque.Lifecycle.PER_CLASS) {
+        if (isClassLifecycle(context, Kafkaesque.Lifecycle.PER_CLASS)) {
             startServer(context, CLASS_SERVER_KEY);
         }
     }
@@ -106,7 +107,7 @@ public final class KafkaesqueExtension
      */
     @Override
     public void afterAll(final ExtensionContext context) {
-        if (getClassLifecycle(context) == Kafkaesque.Lifecycle.PER_CLASS) {
+        if (isClassLifecycle(context, Kafkaesque.Lifecycle.PER_CLASS)) {
             stopServer(context, CLASS_SERVER_KEY);
         }
     }
@@ -129,7 +130,7 @@ public final class KafkaesqueExtension
         if (context.getStore(NAMESPACE).get(METHOD_SERVER_KEY) != null) {
             return; // already started by an earlier registration of this extension for this method
         }
-        if (hasMethodAnnotation(context) || getClassLifecycle(context) == Kafkaesque.Lifecycle.PER_METHOD) {
+        if (hasMethodAnnotation(context) || isClassLifecycle(context, Kafkaesque.Lifecycle.PER_METHOD)) {
             startServer(context, METHOD_SERVER_KEY);
         }
     }
@@ -144,7 +145,7 @@ public final class KafkaesqueExtension
      */
     @Override
     public void afterEach(final ExtensionContext context) {
-        if (hasMethodAnnotation(context) || getClassLifecycle(context) == Kafkaesque.Lifecycle.PER_METHOD) {
+        if (hasMethodAnnotation(context) || isClassLifecycle(context, Kafkaesque.Lifecycle.PER_METHOD)) {
             stopServer(context, METHOD_SERVER_KEY);
         }
     }
@@ -417,16 +418,28 @@ public final class KafkaesqueExtension
     }
 
     /**
-     * Returns the {@link Kafkaesque.Lifecycle} configured on the test class, or {@code null}
-     * if the class carries no {@link Kafkaesque} annotation (e.g. when the extension was
-     * registered only via a method annotation).
+     * Returns the {@link Kafkaesque.Lifecycle} configured on the test class, or
+     * {@link Optional#empty()} if the class carries no {@link Kafkaesque} annotation
+     * (e.g. when the extension was registered only via a method annotation).
      *
      * @param context the current extension context
-     * @return the configured class lifecycle, or {@code null} if not present
+     * @return the configured class lifecycle, or empty if no class-level annotation is present
      */
-    private Kafkaesque.Lifecycle getClassLifecycle(final ExtensionContext context) {
-        final var annotation = context.getRequiredTestClass().getAnnotation(Kafkaesque.class);
-        return annotation != null ? annotation.lifecycle() : null;
+    private Optional<Kafkaesque.Lifecycle> getClassLifecycle(final ExtensionContext context) {
+        return ofNullable(context.getRequiredTestClass().getAnnotation(Kafkaesque.class))
+            .map(Kafkaesque::lifecycle);
+    }
+
+    /**
+     * Returns {@code true} when the test class carries {@link Kafkaesque} with the supplied
+     * lifecycle. A class without {@link Kafkaesque} returns {@code false} for any lifecycle.
+     *
+     * @param context  the current extension context
+     * @param expected the lifecycle to match against
+     * @return {@code true} if the class lifecycle equals {@code expected}, otherwise {@code false}
+     */
+    private boolean isClassLifecycle(final ExtensionContext context, final Kafkaesque.Lifecycle expected) {
+        return getClassLifecycle(context).filter(l -> l == expected).isPresent();
     }
 
     /**

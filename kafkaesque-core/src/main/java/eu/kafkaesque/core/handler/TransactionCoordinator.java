@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -338,11 +339,11 @@ public final class TransactionCoordinator {
      * Returns the producer ID and epoch for a given transactional ID.
      *
      * @param transactionalId the transactional producer ID
-     * @return the producer ID and epoch, or {@code null} if unknown
+     * @return the producer ID and epoch, or {@link Optional#empty()} if unknown
      */
-    public ProducerIdAndEpoch getProducerIdAndEpoch(final String transactionalId) {
-        final var state = producers.get(transactionalId);
-        return state != null ? new ProducerIdAndEpoch(state.producerId(), state.epoch()) : null;
+    public Optional<ProducerIdAndEpoch> getProducerIdAndEpoch(final String transactionalId) {
+        return Optional.ofNullable(producers.get(transactionalId))
+            .map(state -> new ProducerIdAndEpoch(state.producerId(), state.epoch()));
     }
 
     /**

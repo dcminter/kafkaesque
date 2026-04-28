@@ -104,7 +104,7 @@ class TransactionCoordinatorTest {
 
         final var committed = eventStore.getRecords(topic, 0, (byte) 1);
         assertThat(committed).hasSize(1);
-        assertThat(eventStore.getTransactionState(topic, 0, 0L)).isEqualTo(TransactionState.COMMITTED);
+        assertThat(eventStore.getTransactionState(topic, 0, 0L)).hasValue(TransactionState.COMMITTED);
     }
 
     @Test
@@ -117,7 +117,7 @@ class TransactionCoordinatorTest {
 
         final var committed = eventStore.getRecords(topic, 0, (byte) 1);
         assertThat(committed).isEmpty();
-        assertThat(eventStore.getTransactionState(topic, 0, 0L)).isEqualTo(TransactionState.ABORTED);
+        assertThat(eventStore.getTransactionState(topic, 0, 0L)).hasValue(TransactionState.ABORTED);
     }
 
     @Test

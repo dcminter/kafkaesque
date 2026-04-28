@@ -7,6 +7,9 @@
     Standards enforced:
       - Immutability: all method, constructor, catch, and for-each parameters must be final
       - Collection interface types: concrete collection classes are disallowed as declared types
+      - Optional discipline: Optional may only be used as a method return type, never as a
+        parameter or field type; raw null is preferred only where it carries protocol or
+        Map-API semantics
       - Concise methods: methods may not exceed 60 lines of implementation
       - Javadoc: all non-private types, methods, and fields must be documented
 -->
@@ -44,6 +47,44 @@
                 CopyOnWriteArrayList,               java.util.concurrent.CopyOnWriteArrayList,
                 CopyOnWriteArraySet,                java.util.concurrent.CopyOnWriteArraySet
             "/>
+        </module>
+
+        <!-- ===== Optional as a parameter type ===== -->
+        <!--
+            Optional must not be used as a method or constructor parameter. The convention
+            in this codebase is that Optional is a return-type tool only; parameters should
+            either be required (use a plain reference and Objects.requireNonNull at the
+            boundary) or overloaded.
+        -->
+        <module name="IllegalType">
+            <property name="illegalClassNames" value="
+                Optional,                           java.util.Optional,
+                OptionalInt,                        java.util.OptionalInt,
+                OptionalLong,                       java.util.OptionalLong,
+                OptionalDouble,                     java.util.OptionalDouble
+            "/>
+            <property name="tokens" value="PARAMETER_DEF"/>
+        </module>
+
+        <!-- ===== Optional as a field type ===== -->
+        <!--
+            Optional must not be declared as a field. Reserve it for return values. This is
+            enforced via a regex because Checkstyle's IllegalType module cannot cleanly
+            distinguish field declarations from local variables (both are VARIABLE_DEF).
+
+            The regex matches a line that:
+              - starts with field-modifier keywords (private/protected/public/static/final),
+              - then an Optional* type, optionally with type-parameter brackets,
+              - then an identifier,
+              - then a field terminator (;, =, or ,).
+            Method declarations are excluded because they have `(` after the identifier
+            instead of one of those terminators. Local variables start further indented
+            inside method bodies and do not begin with these field modifiers.
+        -->
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="^\s*(private|protected|public|static|final|\s)+\s*Optional(Int|Long|Double)?(\s*&lt;.*?&gt;)?\s+\w+\s*[;,=]"/>
+            <property name="message" value="Optional must not be used as a field type; reserve it for return values."/>
+            <property name="ignoreComments" value="true"/>
         </module>
 
         <!-- ===== Concise methods ===== -->

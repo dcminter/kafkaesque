@@ -16,6 +16,10 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -81,6 +85,13 @@ public final class KafkaProtocolHandler {
     private final AdminApiHandler adminApiHandler;
     private final TransactionApiHandler transactionApiHandler;
     private final AclApiHandler aclApiHandler;
+
+    /**
+     * Maps each supported {@link ApiKeys} value to the {@link ApiRequestHandler} that produces
+     * its response. Built once in the constructor, exposed as an unmodifiable view, and read
+     * by {@link #dispatchRequest}.
+     */
+    private final Map<ApiKeys, ApiRequestHandler> handlers;
 
     /**
      * Queue of responses that could not be written immediately (e.g. deferred JoinGroup
@@ -216,6 +227,7 @@ public final class KafkaProtocolHandler {
         this.adminApiHandler = new AdminApiHandler(this.topicStore, eventStore);
         this.transactionApiHandler = new TransactionApiHandler(transactionCoordinator, groupCoordinator);
         this.aclApiHandler = new AclApiHandler(new AclStore());
+        this.handlers = buildHandlers();
     }
 
     /**
@@ -402,14 +414,15 @@ public final class KafkaProtocolHandler {
     }
 
     /**
-     * Routes a parsed request to the appropriate handler based on its API key.
+     * Routes a parsed request to its registered {@link ApiRequestHandler} via the dispatcher
+     * map. Returns {@code null} for unhandled keys and for handlers that defer their response.
      *
      * @param apiKey     the API key identifying the request type
      * @param header     the parsed request header
      * @param buffer     the request body buffer
      * @param connection the client connection
      * @param key        the selection key for this connection
-     * @return the serialised response buffer, or {@code null} if unhandled
+     * @return the serialised response buffer, or {@code null} if no response should be written
      */
     private ByteBuffer dispatchRequest(
             final ApiKeys apiKey,
@@ -417,130 +430,199 @@ public final class KafkaProtocolHandler {
             final ByteBuffer buffer,
             final ClientConnection connection,
             final SelectionKey key) {
-        switch (apiKey) {
-            case API_VERSIONS:     return clusterApiHandler.generateApiVersionsResponse(header);
-            case METADATA:         return clusterApiHandler.generateMetadataResponse(header, buffer);
-            case DESCRIBE_CLUSTER: return clusterApiHandler.generateDescribeClusterResponse(header);
-            case FIND_COORDINATOR: return clusterApiHandler.generateFindCoordinatorResponse(header, buffer);
-            case PRODUCE:          return producerApiHandler.generateProduceResponse(header, buffer);
-            case JOIN_GROUP:
-                return consumerGroupApiHandler.generateJoinGroupResponse(header, buffer, connection, key);
-            case SYNC_GROUP:
-                return consumerGroupApiHandler.generateSyncGroupResponse(header, buffer, connection, key);
-            case HEARTBEAT:        return consumerGroupApiHandler.generateHeartbeatResponse(header, buffer);
-            case LEAVE_GROUP:      return consumerGroupApiHandler.generateLeaveGroupResponse(header, buffer);
-            case LIST_GROUPS:      return consumerGroupApiHandler.generateListGroupsResponse(header, buffer);
-            case CONSUMER_GROUP_DESCRIBE:
-                return consumerGroupApiHandler.generateConsumerGroupDescribeResponse(header, buffer);
-            case DELETE_GROUPS:    return consumerGroupApiHandler.generateDeleteGroupsResponse(header, buffer);
-            case DESCRIBE_GROUPS:  return consumerGroupApiHandler.generateDescribeGroupsResponse(header, buffer);
-            case OFFSET_FETCH:     return consumerDataApiHandler.generateOffsetFetchResponse(header, buffer);
-            case OFFSET_COMMIT:    return consumerDataApiHandler.generateOffsetCommitResponse(header, buffer);
-            case LIST_OFFSETS:     return consumerDataApiHandler.generateListOffsetsResponse(header, buffer);
-            case FETCH:            return consumerDataApiHandler.generateFetchResponse(header, buffer);
-            case CREATE_TOPICS:
-            case DELETE_TOPICS:
-            case DESCRIBE_CONFIGS:
-            case ALTER_CONFIGS:
-            case CREATE_PARTITIONS:
-            case DELETE_RECORDS:
-            case INCREMENTAL_ALTER_CONFIGS:
-            case ELECT_LEADERS:
-            case DESCRIBE_LOG_DIRS:
-            case ALTER_REPLICA_LOG_DIRS:
-                return dispatchAdminRequest(apiKey, header, buffer);
-            case DESCRIBE_TOPIC_PARTITIONS:
-                return clusterApiHandler.generateDescribeTopicPartitionsResponse(header, buffer);
-            case CREATE_ACLS:
-            case DESCRIBE_ACLS:
-            case DELETE_ACLS:
-                return dispatchAclRequest(apiKey, header, buffer);
-            case INIT_PRODUCER_ID:
-            case ADD_PARTITIONS_TO_TXN:
-            case ADD_OFFSETS_TO_TXN:
-            case END_TXN:
-            case WRITE_TXN_MARKERS:
-            case TXN_OFFSET_COMMIT:
-            case LIST_TRANSACTIONS:
-            case DESCRIBE_TRANSACTIONS:
-                return dispatchTransactionRequest(apiKey, header, buffer);
-            case GET_TELEMETRY_SUBSCRIPTIONS:
-            case PUSH_TELEMETRY:
-                log.debug("Telemetry API not supported: {}", apiKey);
-                return clusterApiHandler.generateUnsupportedResponse(header, apiKey);
-            default:
-                log.warn("Unhandled API key: {} (id={})", apiKey, apiKey.id);
-                return null;
+        final var handler = handlers.get(apiKey);
+        if (handler == null) {
+            log.warn("Unhandled API key: {} (id={})", apiKey, apiKey.id);
+            return null;
         }
+        return handler.handle(new RequestContext(apiKey, header, buffer, connection, key));
     }
 
     /**
-     * Dispatches an admin API request to the admin handler.
+     * Builds the dispatcher map from {@link ApiKeys} to {@link ApiRequestHandler}, registering
+     * one entry per supported request type. Called from the primary constructor after all
+     * collaborators are wired.
      *
-     * @param apiKey the admin API key
-     * @param header the request header
-     * @param buffer the request body buffer
-     * @return the serialised response buffer, or {@code null} on error
+     * @return an immutable view of the populated dispatcher map
      */
-    private ByteBuffer dispatchAdminRequest(
-            final ApiKeys apiKey, final RequestHeader header, final ByteBuffer buffer) {
-        switch (apiKey) {
-            case CREATE_TOPICS:            return adminApiHandler.generateCreateTopicsResponse(header, buffer);
-            case DELETE_TOPICS:            return adminApiHandler.generateDeleteTopicsResponse(header, buffer);
-            case DESCRIBE_CONFIGS:         return adminApiHandler.generateDescribeConfigsResponse(header, buffer);
-            case ALTER_CONFIGS:            return adminApiHandler.generateAlterConfigsResponse(header, buffer);
-            case CREATE_PARTITIONS:        return adminApiHandler.generateCreatePartitionsResponse(header, buffer);
-            case DELETE_RECORDS:           return adminApiHandler.generateDeleteRecordsResponse(header, buffer);
-            case INCREMENTAL_ALTER_CONFIGS:
-                return adminApiHandler.generateIncrementalAlterConfigsResponse(header, buffer);
-            case ELECT_LEADERS:            return adminApiHandler.generateElectLeadersResponse(header, buffer);
-            case DESCRIBE_LOG_DIRS:        return adminApiHandler.generateDescribeLogDirsResponse(header, buffer);
-            case ALTER_REPLICA_LOG_DIRS:
-                return adminApiHandler.generateAlterReplicaLogDirsResponse(header, buffer);
-            default:                       return null;
-        }
+    private Map<ApiKeys, ApiRequestHandler> buildHandlers() {
+        final var map = new EnumMap<ApiKeys, ApiRequestHandler>(ApiKeys.class);
+        registerClusterHandlers(map);
+        registerProducerHandlers(map);
+        registerConsumerGroupHandlers(map);
+        registerConsumerDataHandlers(map);
+        registerAdminHandlers(map);
+        registerAclHandlers(map);
+        registerTransactionHandlers(map);
+        registerTelemetryHandlers(map);
+        return Collections.unmodifiableMap(map);
     }
 
     /**
-     * Dispatches a transaction-related API request to the transaction handler.
+     * Registers the cluster-related API handlers (versions, metadata, coordinator lookup,
+     * cluster description, and topic-partition description).
      *
-     * @param apiKey the transaction API key
-     * @param header the request header
-     * @param buffer the request body buffer
-     * @return the serialised response buffer, or {@code null} on error
+     * @param map the mutable dispatcher map to populate
      */
-    private ByteBuffer dispatchTransactionRequest(
-            final ApiKeys apiKey, final RequestHeader header, final ByteBuffer buffer) {
-        switch (apiKey) {
-            case INIT_PRODUCER_ID:      return transactionApiHandler.generateInitProducerIdResponse(header, buffer);
-            case ADD_PARTITIONS_TO_TXN: return transactionApiHandler.generateAddPartitionsToTxnResponse(header, buffer);
-            case ADD_OFFSETS_TO_TXN:    return transactionApiHandler.generateAddOffsetsToTxnResponse(header, buffer);
-            case END_TXN:               return transactionApiHandler.generateEndTxnResponse(header, buffer);
-            case WRITE_TXN_MARKERS:     return transactionApiHandler.generateWriteTxnMarkersResponse(header, buffer);
-            case TXN_OFFSET_COMMIT:     return transactionApiHandler.generateTxnOffsetCommitResponse(header, buffer);
-            case LIST_TRANSACTIONS:     return transactionApiHandler.generateListTransactionsResponse(header, buffer);
-            case DESCRIBE_TRANSACTIONS:
-                return transactionApiHandler.generateDescribeTransactionsResponse(header, buffer);
-            default:                    return null;
-        }
+    private void registerClusterHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
+        map.put(ApiKeys.API_VERSIONS,
+            ctx -> clusterApiHandler.generateApiVersionsResponse(ctx.header()));
+        map.put(ApiKeys.METADATA,
+            ctx -> clusterApiHandler.generateMetadataResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DESCRIBE_CLUSTER,
+            ctx -> clusterApiHandler.generateDescribeClusterResponse(ctx.header()));
+        map.put(ApiKeys.FIND_COORDINATOR,
+            ctx -> clusterApiHandler.generateFindCoordinatorResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DESCRIBE_TOPIC_PARTITIONS,
+            ctx -> clusterApiHandler.generateDescribeTopicPartitionsResponse(ctx.header(), ctx.buffer()));
     }
 
     /**
-     * Dispatches an ACL-related API request to the ACL handler.
+     * Registers the producer API handler ({@code PRODUCE}).
      *
-     * @param apiKey the ACL API key
-     * @param header the request header
-     * @param buffer the request body buffer
-     * @return the serialised response buffer, or {@code null} on error
+     * @param map the mutable dispatcher map to populate
      */
-    private ByteBuffer dispatchAclRequest(
-            final ApiKeys apiKey, final RequestHeader header, final ByteBuffer buffer) {
-        switch (apiKey) {
-            case CREATE_ACLS:   return aclApiHandler.generateCreateAclsResponse(header, buffer);
-            case DESCRIBE_ACLS: return aclApiHandler.generateDescribeAclsResponse(header, buffer);
-            case DELETE_ACLS:   return aclApiHandler.generateDeleteAclsResponse(header, buffer);
-            default:            return null;
-        }
+    private void registerProducerHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
+        map.put(ApiKeys.PRODUCE,
+            ctx -> producerApiHandler.generateProduceResponse(ctx.header(), ctx.buffer()));
+    }
+
+    /**
+     * Registers the consumer-group lifecycle handlers. {@code JOIN_GROUP} and
+     * {@code SYNC_GROUP} pass the connection and selection key from the context so that
+     * deferred responses can be written when the rebalance window closes.
+     *
+     * @param map the mutable dispatcher map to populate
+     */
+    private void registerConsumerGroupHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
+        map.put(ApiKeys.JOIN_GROUP,
+            ctx -> consumerGroupApiHandler.generateJoinGroupResponse(
+                ctx.header(), ctx.buffer(), ctx.connection(), ctx.key()));
+        map.put(ApiKeys.SYNC_GROUP,
+            ctx -> consumerGroupApiHandler.generateSyncGroupResponse(
+                ctx.header(), ctx.buffer(), ctx.connection(), ctx.key()));
+        map.put(ApiKeys.HEARTBEAT,
+            ctx -> consumerGroupApiHandler.generateHeartbeatResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.LEAVE_GROUP,
+            ctx -> consumerGroupApiHandler.generateLeaveGroupResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.LIST_GROUPS,
+            ctx -> consumerGroupApiHandler.generateListGroupsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.CONSUMER_GROUP_DESCRIBE,
+            ctx -> consumerGroupApiHandler.generateConsumerGroupDescribeResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DELETE_GROUPS,
+            ctx -> consumerGroupApiHandler.generateDeleteGroupsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DESCRIBE_GROUPS,
+            ctx -> consumerGroupApiHandler.generateDescribeGroupsResponse(ctx.header(), ctx.buffer()));
+    }
+
+    /**
+     * Registers the consumer-data API handlers (offsets and fetches).
+     *
+     * @param map the mutable dispatcher map to populate
+     */
+    private void registerConsumerDataHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
+        map.put(ApiKeys.OFFSET_FETCH,
+            ctx -> consumerDataApiHandler.generateOffsetFetchResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.OFFSET_COMMIT,
+            ctx -> consumerDataApiHandler.generateOffsetCommitResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.LIST_OFFSETS,
+            ctx -> consumerDataApiHandler.generateListOffsetsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.FETCH,
+            ctx -> consumerDataApiHandler.generateFetchResponse(ctx.header(), ctx.buffer()));
+    }
+
+    /**
+     * Registers the admin API handlers (topic and config administration).
+     *
+     * @param map the mutable dispatcher map to populate
+     */
+    private void registerAdminHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
+        map.put(ApiKeys.CREATE_TOPICS,
+            ctx -> adminApiHandler.generateCreateTopicsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DELETE_TOPICS,
+            ctx -> adminApiHandler.generateDeleteTopicsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DESCRIBE_CONFIGS,
+            ctx -> adminApiHandler.generateDescribeConfigsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.ALTER_CONFIGS,
+            ctx -> adminApiHandler.generateAlterConfigsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.CREATE_PARTITIONS,
+            ctx -> adminApiHandler.generateCreatePartitionsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DELETE_RECORDS,
+            ctx -> adminApiHandler.generateDeleteRecordsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.INCREMENTAL_ALTER_CONFIGS,
+            ctx -> adminApiHandler.generateIncrementalAlterConfigsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.ELECT_LEADERS,
+            ctx -> adminApiHandler.generateElectLeadersResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DESCRIBE_LOG_DIRS,
+            ctx -> adminApiHandler.generateDescribeLogDirsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.ALTER_REPLICA_LOG_DIRS,
+            ctx -> adminApiHandler.generateAlterReplicaLogDirsResponse(ctx.header(), ctx.buffer()));
+    }
+
+    /**
+     * Registers the ACL API handlers.
+     *
+     * @param map the mutable dispatcher map to populate
+     */
+    private void registerAclHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
+        map.put(ApiKeys.CREATE_ACLS,
+            ctx -> aclApiHandler.generateCreateAclsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DESCRIBE_ACLS,
+            ctx -> aclApiHandler.generateDescribeAclsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DELETE_ACLS,
+            ctx -> aclApiHandler.generateDeleteAclsResponse(ctx.header(), ctx.buffer()));
+    }
+
+    /**
+     * Registers the transaction API handlers.
+     *
+     * @param map the mutable dispatcher map to populate
+     */
+    private void registerTransactionHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
+        map.put(ApiKeys.INIT_PRODUCER_ID,
+            ctx -> transactionApiHandler.generateInitProducerIdResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.ADD_PARTITIONS_TO_TXN,
+            ctx -> transactionApiHandler.generateAddPartitionsToTxnResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.ADD_OFFSETS_TO_TXN,
+            ctx -> transactionApiHandler.generateAddOffsetsToTxnResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.END_TXN,
+            ctx -> transactionApiHandler.generateEndTxnResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.WRITE_TXN_MARKERS,
+            ctx -> transactionApiHandler.generateWriteTxnMarkersResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.TXN_OFFSET_COMMIT,
+            ctx -> transactionApiHandler.generateTxnOffsetCommitResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.LIST_TRANSACTIONS,
+            ctx -> transactionApiHandler.generateListTransactionsResponse(ctx.header(), ctx.buffer()));
+        map.put(ApiKeys.DESCRIBE_TRANSACTIONS,
+            ctx -> transactionApiHandler.generateDescribeTransactionsResponse(ctx.header(), ctx.buffer()));
+    }
+
+    /**
+     * Registers the telemetry API handlers, which return an {@code UNSUPPORTED_VERSION} response
+     * because telemetry collection is not implemented.
+     *
+     * @param map the mutable dispatcher map to populate
+     */
+    private void registerTelemetryHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
+        final ApiRequestHandler telemetry = ctx -> {
+            log.debug("Telemetry API not supported: {}", ctx.apiKey());
+            return clusterApiHandler.generateUnsupportedResponse(ctx.header(), ctx.apiKey());
+        };
+        map.put(ApiKeys.GET_TELEMETRY_SUBSCRIPTIONS, telemetry);
+        map.put(ApiKeys.PUSH_TELEMETRY, telemetry);
+    }
+
+    /**
+     * Returns the set of {@link ApiKeys} values for which a handler is registered.
+     *
+     * <p>Exposed at package-private visibility so that unit tests can assert the supported set
+     * without resorting to reflection. The returned set is the live key set of an unmodifiable
+     * map; callers must not attempt to mutate it.</p>
+     *
+     * @return an unmodifiable view of the registered API keys
+     */
+    Set<ApiKeys> registeredApiKeys() {
+        return handlers.keySet();
     }
 
     /**
