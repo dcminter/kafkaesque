@@ -1,6 +1,7 @@
 package eu.kafkaesque.core.storage;
 
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 
 import java.time.Instant;
 import java.util.List;
@@ -15,6 +16,7 @@ import static java.util.List.of;
  * its key, value, timestamp, headers, and position within the topic partition.</p>
  */
 @EqualsAndHashCode
+@Getter
 public final class StoredRecord {
 
     /** The topic name this record was published to. */
@@ -64,69 +66,6 @@ public final class StoredRecord {
         this.headers = (headers == null) ? of() : copyOf(headers);
         this.key = key;
         this.value = value;
-    }
-
-    /**
-     * Returns the topic name this record was published to.
-     *
-     * @return the topic name
-     */
-    public String topic() {
-        return topic;
-    }
-
-    /**
-     * Returns the partition index within the topic.
-     *
-     * @return the partition index
-     */
-    public int partition() {
-        return partition;
-    }
-
-    /**
-     * Returns the offset assigned to this record within the partition.
-     *
-     * @return the offset
-     */
-    public long offset() {
-        return offset;
-    }
-
-    /**
-     * Returns the timestamp when the record was published (epoch milliseconds).
-     *
-     * @return the timestamp
-     */
-    public long timestamp() {
-        return timestamp;
-    }
-
-    /**
-     * Returns the record headers (never null; empty if none were set).
-     *
-     * @return the record headers
-     */
-    public List<RecordHeader> headers() {
-        return headers;
-    }
-
-    /**
-     * Returns the record key as a string (nullable).
-     *
-     * @return the record key
-     */
-    public String key() {
-        return key;
-    }
-
-    /**
-     * Returns the record value as a string (nullable).
-     *
-     * @return the record value
-     */
-    public String value() {
-        return value;
     }
 
     /**

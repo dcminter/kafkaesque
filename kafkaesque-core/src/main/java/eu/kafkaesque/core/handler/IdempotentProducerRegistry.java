@@ -1,6 +1,8 @@
 package eu.kafkaesque.core.handler;
 
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.protocol.Errors;
@@ -47,28 +49,12 @@ final class IdempotentProducerRegistry {
          */
         @EqualsAndHashCode
         @ToString
+        @Getter
+        @RequiredArgsConstructor
         final class Store implements CheckResult {
 
             /** The first offset assigned by the event store. */
             private final long baseOffset;
-
-            /**
-             * Creates a new {@code Store} result.
-             *
-             * @param baseOffset the first offset assigned by the event store
-             */
-            Store(final long baseOffset) {
-                this.baseOffset = baseOffset;
-            }
-
-            /**
-             * Returns the first offset assigned by the event store.
-             *
-             * @return the first offset assigned by the event store
-             */
-            long baseOffset() {
-                return baseOffset;
-            }
         }
 
         /**
@@ -76,28 +62,12 @@ final class IdempotentProducerRegistry {
          */
         @EqualsAndHashCode
         @ToString
+        @Getter
+        @RequiredArgsConstructor
         final class Duplicate implements CheckResult {
 
             /** The first offset from the original store. */
             private final long cachedBaseOffset;
-
-            /**
-             * Creates a new {@code Duplicate} result.
-             *
-             * @param cachedBaseOffset the first offset from the original store
-             */
-            Duplicate(final long cachedBaseOffset) {
-                this.cachedBaseOffset = cachedBaseOffset;
-            }
-
-            /**
-             * Returns the first offset from the original store.
-             *
-             * @return the first offset from the original store
-             */
-            long cachedBaseOffset() {
-                return cachedBaseOffset;
-            }
         }
 
         /**
@@ -105,28 +75,12 @@ final class IdempotentProducerRegistry {
          */
         @EqualsAndHashCode
         @ToString
+        @Getter
+        @RequiredArgsConstructor
         final class Error implements CheckResult {
 
             /** The Kafka protocol error to return to the client. */
             private final Errors errorCode;
-
-            /**
-             * Creates a new {@code Error} result.
-             *
-             * @param errorCode the Kafka protocol error to return to the client
-             */
-            Error(final Errors errorCode) {
-                this.errorCode = errorCode;
-            }
-
-            /**
-             * Returns the Kafka protocol error to return to the client.
-             *
-             * @return the Kafka protocol error to return to the client
-             */
-            Errors errorCode() {
-                return errorCode;
-            }
         }
     }
 
@@ -135,6 +89,8 @@ final class IdempotentProducerRegistry {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     private static final class ProducerPartitionKey {
 
         /** The long producer ID assigned by {@code INIT_PRODUCER_ID}. */
@@ -148,59 +104,6 @@ final class IdempotentProducerRegistry {
 
         /** The partition index. */
         private final int partition;
-
-        /**
-         * Creates a new {@code ProducerPartitionKey}.
-         *
-         * @param producerId    the long producer ID assigned by {@code INIT_PRODUCER_ID}
-         * @param producerEpoch the producer epoch
-         * @param topic         the topic name
-         * @param partition     the partition index
-         */
-        ProducerPartitionKey(
-                final long producerId, final short producerEpoch,
-                final String topic, final int partition) {
-            this.producerId = producerId;
-            this.producerEpoch = producerEpoch;
-            this.topic = topic;
-            this.partition = partition;
-        }
-
-        /**
-         * Returns the producer ID.
-         *
-         * @return the producer ID
-         */
-        long producerId() {
-            return producerId;
-        }
-
-        /**
-         * Returns the producer epoch.
-         *
-         * @return the producer epoch
-         */
-        short producerEpoch() {
-            return producerEpoch;
-        }
-
-        /**
-         * Returns the topic name.
-         *
-         * @return the topic name
-         */
-        String topic() {
-            return topic;
-        }
-
-        /**
-         * Returns the partition index.
-         *
-         * @return the partition index
-         */
-        int partition() {
-            return partition;
-        }
     }
 
     /**
@@ -209,6 +112,8 @@ final class IdempotentProducerRegistry {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     private static final class ProducerPartitionState {
 
         /** The {@code baseSequence} of the last stored batch. */
@@ -219,46 +124,6 @@ final class IdempotentProducerRegistry {
 
         /** The first offset assigned to the last stored batch. */
         private final long cachedBaseOffset;
-
-        /**
-         * Creates a new {@code ProducerPartitionState}.
-         *
-         * @param lastBaseSequence the {@code baseSequence} of the last stored batch
-         * @param lastBatchCount   the number of records in the last stored batch
-         * @param cachedBaseOffset the first offset assigned to the last stored batch
-         */
-        ProducerPartitionState(final int lastBaseSequence, final int lastBatchCount, final long cachedBaseOffset) {
-            this.lastBaseSequence = lastBaseSequence;
-            this.lastBatchCount = lastBatchCount;
-            this.cachedBaseOffset = cachedBaseOffset;
-        }
-
-        /**
-         * Returns the {@code baseSequence} of the last stored batch.
-         *
-         * @return the last base sequence
-         */
-        int lastBaseSequence() {
-            return lastBaseSequence;
-        }
-
-        /**
-         * Returns the number of records in the last stored batch.
-         *
-         * @return the last batch count
-         */
-        int lastBatchCount() {
-            return lastBatchCount;
-        }
-
-        /**
-         * Returns the first offset assigned to the last stored batch.
-         *
-         * @return the cached base offset
-         */
-        long cachedBaseOffset() {
-            return cachedBaseOffset;
-        }
     }
 
     /** Per-partition idempotency state, keyed by (producerId, epoch, topic, partition). */

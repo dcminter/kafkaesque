@@ -1,6 +1,8 @@
 package eu.kafkaesque.core.storage;
 
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 
 /**
@@ -11,6 +13,8 @@ import lombok.ToString;
  */
 @EqualsAndHashCode
 @ToString
+@Getter
+@RequiredArgsConstructor
 public final class RecordHeaderAdapter implements RecordHeader {
 
     /** The header key. */
@@ -18,25 +22,4 @@ public final class RecordHeaderAdapter implements RecordHeader {
 
     /** The header value (may be null). */
     private final byte[] value;
-
-    /**
-     * Creates a new record header with the given key and value.
-     *
-     * @param key   the header key (must not be null)
-     * @param value the header value (may be null)
-     */
-    public RecordHeaderAdapter(final String key, final byte[] value) {
-        this.key = key;
-        this.value = value;
-    }
-
-    @Override
-    public String key() {
-        return key;
-    }
-
-    @Override
-    public byte[] value() {
-        return value;
-    }
 }

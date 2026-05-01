@@ -1,6 +1,8 @@
 package eu.kafkaesque.junit4;
 
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 
 /**
@@ -30,6 +32,8 @@ import lombok.ToString;
  */
 @EqualsAndHashCode
 @ToString
+@Getter
+@RequiredArgsConstructor
 public final class TopicDefinition {
 
     /** The topic name. */
@@ -40,19 +44,6 @@ public final class TopicDefinition {
 
     /** The replication factor. */
     private final short replicationFactor;
-
-    /**
-     * Creates a topic definition with all parameters specified.
-     *
-     * @param name              the topic name
-     * @param numPartitions     the number of partitions
-     * @param replicationFactor the replication factor
-     */
-    public TopicDefinition(final String name, final int numPartitions, final short replicationFactor) {
-        this.name = name;
-        this.numPartitions = numPartitions;
-        this.replicationFactor = replicationFactor;
-    }
 
     /**
      * Creates a topic definition with a single partition and replication factor of 1.
@@ -71,32 +62,5 @@ public final class TopicDefinition {
      */
     public TopicDefinition(final String name, final int numPartitions) {
         this(name, numPartitions, (short) 1);
-    }
-
-    /**
-     * Returns the topic name.
-     *
-     * @return the topic name
-     */
-    public String name() {
-        return name;
-    }
-
-    /**
-     * Returns the number of partitions.
-     *
-     * @return the number of partitions
-     */
-    public int numPartitions() {
-        return numPartitions;
-    }
-
-    /**
-     * Returns the replication factor.
-     *
-     * @return the replication factor
-     */
-    public short replicationFactor() {
-        return replicationFactor;
     }
 }

@@ -380,7 +380,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param listener the listener to register
      */
     public void addRecordPublishedListener(final RecordPublishedListener listener) {
-        protocolHandler.getListenerRegistry().addRecordPublishedListener(listener);
+        protocolHandler.listenerRegistry().addRecordPublishedListener(listener);
     }
 
     /**
@@ -392,7 +392,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param listener the listener to register
      */
     public void addTopicCreatedListener(final TopicCreatedListener listener) {
-        protocolHandler.getListenerRegistry().addTopicCreatedListener(listener);
+        protocolHandler.listenerRegistry().addTopicCreatedListener(listener);
     }
 
     /**
@@ -401,7 +401,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @param listener the listener to register
      */
     public void addTransactionCompletedListener(final TransactionCompletedListener listener) {
-        protocolHandler.getListenerRegistry().addTransactionCompletedListener(listener);
+        protocolHandler.listenerRegistry().addTransactionCompletedListener(listener);
     }
 
     // Event retrieval methods
@@ -414,7 +414,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return unmodifiable list of records (empty if none exist)
      */
     public List<StoredRecord> getRecords(final String topic, final int partition) {
-        return protocolHandler.getEventStore().getRecords(topic, partition);
+        return protocolHandler.eventStore().getRecords(topic, partition);
     }
 
     /**
@@ -424,7 +424,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return unmodifiable list of records (empty if none exist)
      */
     public List<StoredRecord> getRecordsByTopic(final String topic) {
-        return protocolHandler.getEventStore().getRecordsByTopic(topic);
+        return protocolHandler.eventStore().getRecordsByTopic(topic);
     }
 
     /**
@@ -435,7 +435,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return unmodifiable list of records (empty if none exist)
      */
     public List<StoredRecord> getRecordsByTopicAndKey(final String topic, final String key) {
-        return protocolHandler.getEventStore().getRecordsByTopicAndKey(topic, key);
+        return protocolHandler.eventStore().getRecordsByTopicAndKey(topic, key);
     }
 
     /**
@@ -444,7 +444,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return unmodifiable list of all records
      */
     public List<StoredRecord> getAllRecords() {
-        return protocolHandler.getEventStore().getAllRecords();
+        return protocolHandler.eventStore().getAllRecords();
     }
 
     /**
@@ -454,7 +454,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return unmodifiable list of matching records
      */
     public List<StoredRecord> findRecords(final java.util.function.Predicate<StoredRecord> predicate) {
-        return protocolHandler.getEventStore().findRecords(predicate);
+        return protocolHandler.eventStore().findRecords(predicate);
     }
 
     /**
@@ -463,7 +463,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return the total record count
      */
     public long getTotalRecordCount() {
-        return protocolHandler.getEventStore().getTotalRecordCount();
+        return protocolHandler.eventStore().getTotalRecordCount();
     }
 
     /**
@@ -473,7 +473,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return the record count for the topic
      */
     public long getRecordCount(final String topic) {
-        return protocolHandler.getEventStore().getRecordCount(topic);
+        return protocolHandler.eventStore().getRecordCount(topic);
     }
 
     /**
@@ -484,7 +484,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return the record count for the partition
      */
     public long getRecordCount(final String topic, final int partition) {
-        return protocolHandler.getEventStore().getRecordCount(topic, partition);
+        return protocolHandler.eventStore().getRecordCount(topic, partition);
     }
 
     /**
@@ -493,7 +493,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return unmodifiable list of topic names
      */
     public List<String> getKnownTopics() {
-        return protocolHandler.getEventStore().getTopics();
+        return protocolHandler.eventStore().getTopics();
     }
 
     /**
@@ -507,7 +507,7 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * @return unmodifiable list of registered topic names
      */
     public List<String> getRegisteredTopics() {
-        return protocolHandler.getTopicStore().getTopics()
+        return protocolHandler.topicStore().getTopics()
             .stream()
             .map(TopicDefinition::name)
             .collect(toList());
@@ -520,6 +520,6 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * between test cases while keeping the server running.</p>
      */
     public void clearRecords() {
-        protocolHandler.getEventStore().clear();
+        protocolHandler.eventStore().clear();
     }
 }

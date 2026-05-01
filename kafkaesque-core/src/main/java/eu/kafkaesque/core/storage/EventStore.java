@@ -2,6 +2,8 @@ package eu.kafkaesque.core.storage;
 
 import eu.kafkaesque.core.listener.ListenerRegistry;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import java.util.ArrayList;
@@ -39,6 +41,8 @@ public final class EventStore {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     private static final class TopicPartitionKey {
 
         /** The topic name. */
@@ -46,35 +50,6 @@ public final class EventStore {
 
         /** The partition index. */
         private final int partition;
-
-        /**
-         * Creates a new topic partition key.
-         *
-         * @param topic     the topic name
-         * @param partition the partition index
-         */
-        TopicPartitionKey(final String topic, final int partition) {
-            this.topic = topic;
-            this.partition = partition;
-        }
-
-        /**
-         * Returns the topic name.
-         *
-         * @return the topic name
-         */
-        String topic() {
-            return topic;
-        }
-
-        /**
-         * Returns the partition index.
-         *
-         * @return the partition index
-         */
-        int partition() {
-            return partition;
-        }
     }
 
     /**
@@ -82,6 +57,8 @@ public final class EventStore {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     private static final class PartitionOffset {
 
         /** The topic name. */
@@ -92,46 +69,6 @@ public final class EventStore {
 
         /** The record offset. */
         private final long offset;
-
-        /**
-         * Creates a new partition offset.
-         *
-         * @param topic     the topic name
-         * @param partition the partition index
-         * @param offset    the record offset
-         */
-        PartitionOffset(final String topic, final int partition, final long offset) {
-            this.topic = topic;
-            this.partition = partition;
-            this.offset = offset;
-        }
-
-        /**
-         * Returns the topic name.
-         *
-         * @return the topic name
-         */
-        String topic() {
-            return topic;
-        }
-
-        /**
-         * Returns the partition index.
-         *
-         * @return the partition index
-         */
-        int partition() {
-            return partition;
-        }
-
-        /**
-         * Returns the record offset.
-         *
-         * @return the offset
-         */
-        long offset() {
-            return offset;
-        }
     }
 
     /**

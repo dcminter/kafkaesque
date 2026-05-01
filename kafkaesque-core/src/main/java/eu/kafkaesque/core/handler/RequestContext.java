@@ -2,6 +2,8 @@ package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.connection.ClientConnection;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.requests.AbstractRequest;
@@ -29,6 +31,8 @@ import java.nio.channels.SelectionKey;
  */
 @EqualsAndHashCode
 @ToString
+@Getter
+@RequiredArgsConstructor
 final class RequestContext {
 
     /** The API key identifying the request type. */
@@ -45,71 +49,4 @@ final class RequestContext {
 
     /** The selection key for the connection; used by handlers that defer responses. */
     private final SelectionKey key;
-
-    /**
-     * Creates a new {@code RequestContext}.
-     *
-     * @param apiKey     the API key identifying the request type
-     * @param header     the parsed Kafka request header
-     * @param request    the parsed Kafka request body
-     * @param connection the originating client connection
-     * @param key        the selection key for the connection
-     */
-    RequestContext(
-            final ApiKeys apiKey,
-            final RequestHeader header,
-            final AbstractRequest request,
-            final ClientConnection connection,
-            final SelectionKey key) {
-        this.apiKey = apiKey;
-        this.header = header;
-        this.request = request;
-        this.connection = connection;
-        this.key = key;
-    }
-
-    /**
-     * Returns the API key identifying the request type.
-     *
-     * @return the API key
-     */
-    ApiKeys apiKey() {
-        return apiKey;
-    }
-
-    /**
-     * Returns the parsed Kafka request header.
-     *
-     * @return the request header
-     */
-    RequestHeader header() {
-        return header;
-    }
-
-    /**
-     * Returns the parsed Kafka request body.
-     *
-     * @return the parsed request
-     */
-    AbstractRequest request() {
-        return request;
-    }
-
-    /**
-     * Returns the originating client connection.
-     *
-     * @return the client connection
-     */
-    ClientConnection connection() {
-        return connection;
-    }
-
-    /**
-     * Returns the selection key for the connection.
-     *
-     * @return the selection key
-     */
-    SelectionKey key() {
-        return key;
-    }
 }

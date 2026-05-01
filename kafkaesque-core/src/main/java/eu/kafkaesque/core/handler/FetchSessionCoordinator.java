@@ -1,6 +1,8 @@
 package eu.kafkaesque.core.handler;
 
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.message.FetchRequestData;
@@ -47,6 +49,8 @@ final class FetchSessionCoordinator {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     static final class TopicPartitionKey {
 
         /** The topic name. */
@@ -54,35 +58,6 @@ final class FetchSessionCoordinator {
 
         /** The partition index. */
         private final int partition;
-
-        /**
-         * Creates a new {@code TopicPartitionKey}.
-         *
-         * @param topic     the topic name
-         * @param partition the partition index
-         */
-        TopicPartitionKey(final String topic, final int partition) {
-            this.topic = topic;
-            this.partition = partition;
-        }
-
-        /**
-         * Returns the topic name.
-         *
-         * @return the topic name
-         */
-        String topic() {
-            return topic;
-        }
-
-        /**
-         * Returns the partition index.
-         *
-         * @return the partition index
-         */
-        int partition() {
-            return partition;
-        }
     }
 
     /**
@@ -90,6 +65,8 @@ final class FetchSessionCoordinator {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     static final class PartitionFetchState {
 
         /** The offset from which to start fetching records. */
@@ -97,35 +74,6 @@ final class FetchSessionCoordinator {
 
         /** The maximum bytes to return for this partition. */
         private final int maxBytes;
-
-        /**
-         * Creates a new {@code PartitionFetchState}.
-         *
-         * @param fetchOffset the offset from which to start fetching records
-         * @param maxBytes    the maximum bytes to return for this partition
-         */
-        PartitionFetchState(final long fetchOffset, final int maxBytes) {
-            this.fetchOffset = fetchOffset;
-            this.maxBytes = maxBytes;
-        }
-
-        /**
-         * Returns the offset from which to start fetching records.
-         *
-         * @return the fetch offset
-         */
-        long fetchOffset() {
-            return fetchOffset;
-        }
-
-        /**
-         * Returns the maximum bytes to return for this partition.
-         *
-         * @return the maximum bytes
-         */
-        int maxBytes() {
-            return maxBytes;
-        }
     }
 
     /**
@@ -133,6 +81,8 @@ final class FetchSessionCoordinator {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     static final class FetchSession {
 
         /** The unique session identifier assigned by this coordinator. */
@@ -143,47 +93,6 @@ final class FetchSessionCoordinator {
 
         /** The currently tracked partitions and their fetch state. */
         private final Map<TopicPartitionKey, PartitionFetchState> partitions;
-
-        /**
-         * Creates a new {@code FetchSession}.
-         *
-         * @param sessionId  the unique session identifier assigned by this coordinator
-         * @param nextEpoch  the next expected epoch from the client (starts at 1 after session creation)
-         * @param partitions the currently tracked partitions and their fetch state
-         */
-        FetchSession(final int sessionId, final int nextEpoch,
-                     final Map<TopicPartitionKey, PartitionFetchState> partitions) {
-            this.sessionId = sessionId;
-            this.nextEpoch = nextEpoch;
-            this.partitions = partitions;
-        }
-
-        /**
-         * Returns the unique session identifier.
-         *
-         * @return the session ID
-         */
-        int sessionId() {
-            return sessionId;
-        }
-
-        /**
-         * Returns the next expected epoch from the client.
-         *
-         * @return the next epoch
-         */
-        int nextEpoch() {
-            return nextEpoch;
-        }
-
-        /**
-         * Returns the currently tracked partitions and their fetch state.
-         *
-         * @return the partitions map
-         */
-        Map<TopicPartitionKey, PartitionFetchState> partitions() {
-            return partitions;
-        }
     }
 
     /**
@@ -191,6 +100,8 @@ final class FetchSessionCoordinator {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     static final class SessionResult {
 
         /** The updated session, or {@code null} if an error occurred. */
@@ -198,35 +109,6 @@ final class FetchSessionCoordinator {
 
         /** The Kafka error code (0 for success, non-zero for error). */
         private final short errorCode;
-
-        /**
-         * Creates a new {@code SessionResult}.
-         *
-         * @param session   the updated session, or {@code null} if an error occurred
-         * @param errorCode the Kafka error code (0 for success, non-zero for error)
-         */
-        SessionResult(final FetchSession session, final short errorCode) {
-            this.session = session;
-            this.errorCode = errorCode;
-        }
-
-        /**
-         * Returns the updated session, or {@code null} if an error occurred.
-         *
-         * @return the session
-         */
-        FetchSession session() {
-            return session;
-        }
-
-        /**
-         * Returns the Kafka error code.
-         *
-         * @return the error code
-         */
-        short errorCode() {
-            return errorCode;
-        }
 
         /**
          * Returns {@code true} if this result represents an error condition.

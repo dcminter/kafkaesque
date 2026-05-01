@@ -2,6 +2,7 @@ package eu.kafkaesque.core.handler;
 
 import eu.kafkaesque.core.storage.EventStore;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,8 @@ public final class TransactionCoordinator {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     public static final class ProducerIdAndEpoch {
 
         /** The stable producer ID. */
@@ -49,35 +52,6 @@ public final class TransactionCoordinator {
 
         /** The producer epoch; incremented on each {@code INIT_PRODUCER_ID}. */
         private final short epoch;
-
-        /**
-         * Creates a new producer identity.
-         *
-         * @param producerId the stable producer ID
-         * @param epoch      the producer epoch
-         */
-        public ProducerIdAndEpoch(final long producerId, final short epoch) {
-            this.producerId = producerId;
-            this.epoch = epoch;
-        }
-
-        /**
-         * Returns the stable producer ID.
-         *
-         * @return the producer ID
-         */
-        public long producerId() {
-            return producerId;
-        }
-
-        /**
-         * Returns the producer epoch.
-         *
-         * @return the epoch
-         */
-        public short epoch() {
-            return epoch;
-        }
     }
 
     /**
@@ -88,6 +62,8 @@ public final class TransactionCoordinator {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     public static final class PendingOffsetCommit {
 
         /** The consumer group ID. */
@@ -101,63 +77,13 @@ public final class TransactionCoordinator {
 
         /** The committed offset value. */
         private final long offset;
-
-        /**
-         * Creates a new pending offset commit entry.
-         *
-         * @param groupId        the consumer group ID
-         * @param topic          the topic name
-         * @param partitionIndex the partition index
-         * @param offset         the committed offset value
-         */
-        public PendingOffsetCommit(final String groupId, final String topic,
-                                   final int partitionIndex, final long offset) {
-            this.groupId = groupId;
-            this.topic = topic;
-            this.partitionIndex = partitionIndex;
-            this.offset = offset;
-        }
-
-        /**
-         * Returns the consumer group ID.
-         *
-         * @return the group ID
-         */
-        public String groupId() {
-            return groupId;
-        }
-
-        /**
-         * Returns the topic name.
-         *
-         * @return the topic name
-         */
-        public String topic() {
-            return topic;
-        }
-
-        /**
-         * Returns the partition index.
-         *
-         * @return the partition index
-         */
-        public int partitionIndex() {
-            return partitionIndex;
-        }
-
-        /**
-         * Returns the committed offset value.
-         *
-         * @return the offset
-         */
-        public long offset() {
-            return offset;
-        }
     }
 
     /** Internal state kept per transactional ID. */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     private static final class ProducerState {
 
         /** The stable producer ID. */
@@ -165,35 +91,6 @@ public final class TransactionCoordinator {
 
         /** The producer epoch. */
         private final short epoch;
-
-        /**
-         * Creates a new producer state.
-         *
-         * @param producerId the stable producer ID
-         * @param epoch      the producer epoch
-         */
-        ProducerState(final long producerId, final short epoch) {
-            this.producerId = producerId;
-            this.epoch = epoch;
-        }
-
-        /**
-         * Returns the stable producer ID.
-         *
-         * @return the producer ID
-         */
-        long producerId() {
-            return producerId;
-        }
-
-        /**
-         * Returns the producer epoch.
-         *
-         * @return the epoch
-         */
-        short epoch() {
-            return epoch;
-        }
     }
 
     private final AtomicLong nextProducerId = new AtomicLong(1L);

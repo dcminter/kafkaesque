@@ -1,7 +1,6 @@
 package eu.kafkaesque.core.connection;
 
 import lombok.Getter;
-import lombok.experimental.Accessors;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -16,12 +15,8 @@ import static java.nio.ByteBuffer.allocate;
  * <p>This class encapsulates the socket channel and associated buffers for a single
  * client connection. While the channel and buffers themselves are immutable references,
  * the buffer contents are mutable as they are used for I/O operations.</p>
- *
- * <p>Note: This class uses Lombok's {@code @Getter} with {@code @Accessors(fluent = true)}
- * to generate record-style accessor methods (e.g., {@code channel()} instead of {@code getChannel()}).</p>
  */
 @Getter
-@Accessors(fluent = true)
 public final class ClientConnection {
 
     /**

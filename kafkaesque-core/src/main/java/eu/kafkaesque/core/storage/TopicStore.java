@@ -2,6 +2,8 @@ package eu.kafkaesque.core.storage;
 
 import eu.kafkaesque.core.listener.ListenerRegistry;
 import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.compress.Compression;
@@ -37,6 +39,8 @@ public final class TopicStore {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     public static final class TopicCreationConfig {
 
         /** The number of partitions. */
@@ -58,32 +62,6 @@ public final class TopicStore {
         private final long retentionBytes;
 
         /**
-         * Creates a new topic creation configuration.
-         *
-         * @param numPartitions     the number of partitions
-         * @param replicationFactor the replication factor
-         * @param compression       the compression to apply when serving FETCH responses
-         * @param cleanupPolicy     the log cleanup policy
-         * @param retentionMs       maximum record age in milliseconds;
-         *                          {@code Long.MAX_VALUE} means unlimited
-         * @param retentionBytes    maximum bytes per partition; {@code -1} means unlimited
-         */
-        public TopicCreationConfig(
-                final int numPartitions,
-                final short replicationFactor,
-                final Compression compression,
-                final CleanupPolicy cleanupPolicy,
-                final long retentionMs,
-                final long retentionBytes) {
-            this.numPartitions = numPartitions;
-            this.replicationFactor = replicationFactor;
-            this.compression = compression;
-            this.cleanupPolicy = cleanupPolicy;
-            this.retentionMs = retentionMs;
-            this.retentionBytes = retentionBytes;
-        }
-
-        /**
          * Returns a default config with the given partitions and replication factor,
          * no compression, delete cleanup policy, and unlimited retention.
          *
@@ -96,60 +74,6 @@ public final class TopicStore {
                 numPartitions, replicationFactor, Compression.NONE,
                 DELETE, Long.MAX_VALUE, -1L);
         }
-
-        /**
-         * Returns the number of partitions.
-         *
-         * @return the number of partitions
-         */
-        public int numPartitions() {
-            return numPartitions;
-        }
-
-        /**
-         * Returns the replication factor.
-         *
-         * @return the replication factor
-         */
-        public short replicationFactor() {
-            return replicationFactor;
-        }
-
-        /**
-         * Returns the compression to apply when serving FETCH responses.
-         *
-         * @return the compression
-         */
-        public Compression compression() {
-            return compression;
-        }
-
-        /**
-         * Returns the log cleanup policy.
-         *
-         * @return the cleanup policy
-         */
-        public CleanupPolicy cleanupPolicy() {
-            return cleanupPolicy;
-        }
-
-        /**
-         * Returns the maximum record age in milliseconds.
-         *
-         * @return the retention in milliseconds
-         */
-        public long retentionMs() {
-            return retentionMs;
-        }
-
-        /**
-         * Returns the maximum bytes per partition.
-         *
-         * @return the retention in bytes
-         */
-        public long retentionBytes() {
-            return retentionBytes;
-        }
     }
 
     /**
@@ -157,6 +81,8 @@ public final class TopicStore {
      */
     @EqualsAndHashCode
     @ToString
+    @Getter
+    @RequiredArgsConstructor
     public static final class TopicDefinition {
 
         /** The topic name. */
@@ -182,110 +108,6 @@ public final class TopicStore {
 
         /** Maximum bytes per partition; {@code -1} means unlimited. */
         private final long retentionBytes;
-
-        /**
-         * Creates a new topic definition.
-         *
-         * @param name              the topic name
-         * @param numPartitions     the number of partitions
-         * @param replicationFactor the replication factor
-         * @param topicId           the stable UUID assigned to this topic at creation time
-         * @param compression       the compression to apply when serving FetchResponses for this topic
-         * @param cleanupPolicy     the log cleanup policy
-         * @param retentionMs       maximum record age in milliseconds;
-         *                          {@code Long.MAX_VALUE} means unlimited
-         * @param retentionBytes    maximum bytes per partition; {@code -1} means unlimited
-         */
-        public TopicDefinition(
-                final String name,
-                final int numPartitions,
-                final short replicationFactor,
-                final Uuid topicId,
-                final Compression compression,
-                final CleanupPolicy cleanupPolicy,
-                final long retentionMs,
-                final long retentionBytes) {
-            this.name = name;
-            this.numPartitions = numPartitions;
-            this.replicationFactor = replicationFactor;
-            this.topicId = topicId;
-            this.compression = compression;
-            this.cleanupPolicy = cleanupPolicy;
-            this.retentionMs = retentionMs;
-            this.retentionBytes = retentionBytes;
-        }
-
-        /**
-         * Returns the topic name.
-         *
-         * @return the topic name
-         */
-        public String name() {
-            return name;
-        }
-
-        /**
-         * Returns the number of partitions.
-         *
-         * @return the number of partitions
-         */
-        public int numPartitions() {
-            return numPartitions;
-        }
-
-        /**
-         * Returns the replication factor.
-         *
-         * @return the replication factor
-         */
-        public short replicationFactor() {
-            return replicationFactor;
-        }
-
-        /**
-         * Returns the stable UUID assigned to this topic at creation time.
-         *
-         * @return the topic ID
-         */
-        public Uuid topicId() {
-            return topicId;
-        }
-
-        /**
-         * Returns the compression to apply when serving FetchResponses for this topic.
-         *
-         * @return the compression
-         */
-        public Compression compression() {
-            return compression;
-        }
-
-        /**
-         * Returns the log cleanup policy.
-         *
-         * @return the cleanup policy
-         */
-        public CleanupPolicy cleanupPolicy() {
-            return cleanupPolicy;
-        }
-
-        /**
-         * Returns the maximum record age in milliseconds.
-         *
-         * @return the retention in milliseconds
-         */
-        public long retentionMs() {
-            return retentionMs;
-        }
-
-        /**
-         * Returns the maximum bytes per partition.
-         *
-         * @return the retention in bytes
-         */
-        public long retentionBytes() {
-            return retentionBytes;
-        }
     }
 
     private final Map<String, TopicDefinition> topics = new ConcurrentHashMap<>();
