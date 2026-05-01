@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.storage;
 
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 
@@ -51,6 +52,7 @@ public final class StoredRecord {
      * @param key       the record key as a string (nullable)
      * @param value     the record value as a string (nullable)
      */
+    @Builder
     public StoredRecord(
             final String topic,
             final int partition,

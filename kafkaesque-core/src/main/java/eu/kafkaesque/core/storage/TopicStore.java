@@ -1,6 +1,8 @@
 package eu.kafkaesque.core.storage;
 
 import eu.kafkaesque.core.listener.ListenerRegistry;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -40,7 +42,8 @@ public final class TopicStore {
     @EqualsAndHashCode
     @ToString
     @Getter
-    @RequiredArgsConstructor
+    @Builder
+    @AllArgsConstructor
     public static final class TopicCreationConfig {
 
         /** The number of partitions. */
@@ -50,30 +53,20 @@ public final class TopicStore {
         private final short replicationFactor;
 
         /** The compression to apply when serving FETCH responses. */
-        private final Compression compression;
+        @Builder.Default
+        private final Compression compression = Compression.NONE;
 
         /** The log cleanup policy. */
-        private final CleanupPolicy cleanupPolicy;
+        @Builder.Default
+        private final CleanupPolicy cleanupPolicy = DELETE;
 
         /** Maximum record age in milliseconds; {@code Long.MAX_VALUE} means unlimited. */
-        private final long retentionMs;
+        @Builder.Default
+        private final long retentionMs = Long.MAX_VALUE;
 
         /** Maximum bytes per partition; {@code -1} means unlimited. */
-        private final long retentionBytes;
-
-        /**
-         * Returns a default config with the given partitions and replication factor,
-         * no compression, delete cleanup policy, and unlimited retention.
-         *
-         * @param numPartitions     the number of partitions
-         * @param replicationFactor the replication factor
-         * @return a default {@code TopicCreationConfig}
-         */
-        static TopicCreationConfig defaults(final int numPartitions, final short replicationFactor) {
-            return new TopicCreationConfig(
-                numPartitions, replicationFactor, Compression.NONE,
-                DELETE, Long.MAX_VALUE, -1L);
-        }
+        @Builder.Default
+        private final long retentionBytes = -1L;
     }
 
     /**
@@ -82,6 +75,7 @@ public final class TopicStore {
     @EqualsAndHashCode
     @ToString
     @Getter
+    @Builder
     @RequiredArgsConstructor
     public static final class TopicDefinition {
 
@@ -164,9 +158,11 @@ public final class TopicStore {
     public void createTopic(
             final String name, final int numPartitions,
             final short replicationFactor, final Compression compression) {
-        createTopic(name, new TopicCreationConfig(
-            numPartitions, replicationFactor, compression,
-            DELETE, Long.MAX_VALUE, -1L));
+        createTopic(name, TopicCreationConfig.builder()
+            .numPartitions(numPartitions)
+            .replicationFactor(replicationFactor)
+            .compression(compression)
+            .build());
     }
 
     /**

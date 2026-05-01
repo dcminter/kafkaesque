@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.storage;
 
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public final class AclStore {
     @EqualsAndHashCode
     @ToString
     @Getter
+    @Builder
     @RequiredArgsConstructor
     public static final class AclBinding {
 

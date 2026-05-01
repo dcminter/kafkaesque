@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.storage;
 
+import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +18,7 @@ import java.util.List;
 @EqualsAndHashCode
 @ToString
 @Getter
+@Builder
 @RequiredArgsConstructor
 public final class RecordData {
 
