@@ -7,29 +7,30 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.compress.Compression;
-import org.apache.kafka.common.message.AlterConfigsRequestData;
 import org.apache.kafka.common.message.AlterConfigsResponseData;
-import org.apache.kafka.common.message.CreatePartitionsRequestData;
 import org.apache.kafka.common.message.CreatePartitionsResponseData;
 import org.apache.kafka.common.message.CreateTopicsRequestData;
 import org.apache.kafka.common.message.CreateTopicsResponseData;
-import org.apache.kafka.common.message.AlterReplicaLogDirsRequestData;
 import org.apache.kafka.common.message.AlterReplicaLogDirsResponseData;
-import org.apache.kafka.common.message.DeleteRecordsRequestData;
 import org.apache.kafka.common.message.DeleteRecordsResponseData;
-import org.apache.kafka.common.message.DeleteTopicsRequestData;
 import org.apache.kafka.common.message.DeleteTopicsResponseData;
 import org.apache.kafka.common.message.DescribeConfigsRequestData;
 import org.apache.kafka.common.message.DescribeConfigsResponseData;
-import org.apache.kafka.common.message.DescribeLogDirsRequestData;
 import org.apache.kafka.common.message.DescribeLogDirsResponseData;
-import org.apache.kafka.common.message.ElectLeadersRequestData;
 import org.apache.kafka.common.message.ElectLeadersResponseData;
-import org.apache.kafka.common.message.IncrementalAlterConfigsRequestData;
 import org.apache.kafka.common.message.IncrementalAlterConfigsResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
-import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.requests.AlterConfigsRequest;
+import org.apache.kafka.common.requests.AlterReplicaLogDirsRequest;
+import org.apache.kafka.common.requests.CreatePartitionsRequest;
+import org.apache.kafka.common.requests.CreateTopicsRequest;
+import org.apache.kafka.common.requests.DeleteRecordsRequest;
+import org.apache.kafka.common.requests.DeleteTopicsRequest;
+import org.apache.kafka.common.requests.DescribeConfigsRequest;
+import org.apache.kafka.common.requests.DescribeLogDirsRequest;
+import org.apache.kafka.common.requests.ElectLeadersRequest;
+import org.apache.kafka.common.requests.IncrementalAlterConfigsRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
@@ -223,38 +224,32 @@ final class AdminApiHandler {
      * returned for every requested topic, including topics that did not exist.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed DELETE_TOPICS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateDeleteTopicsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new DeleteTopicsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateDeleteTopicsResponse(final RequestHeader requestHeader, final DeleteTopicsRequest request) {
+        final var data = request.data();
 
-            final var topicResults = new DeleteTopicsResponseData.DeletableTopicResultCollection();
-            request.topics().stream()
-                .map(topic -> {
-                    final var name = topic.name();
-                    topicStore.deleteTopic(name);
-                    eventStore.deleteTopicData(name);
-                    log.info("Deleted topic: name={}", name);
-                    return new DeleteTopicsResponseData.DeletableTopicResult()
-                        .setName(name)
-                        .setTopicId(topic.topicId())
-                        .setErrorCode((short) 0)
-                        .setErrorMessage(null);
-                })
-                .forEach(topicResults::add);
+        final var topicResults = new DeleteTopicsResponseData.DeletableTopicResultCollection();
+        data.topics().stream()
+            .map(topic -> {
+                final var name = topic.name();
+                topicStore.deleteTopic(name);
+                eventStore.deleteTopicData(name);
+                log.info("Deleted topic: name={}", name);
+                return new DeleteTopicsResponseData.DeletableTopicResult()
+                    .setName(name)
+                    .setTopicId(topic.topicId())
+                    .setErrorCode((short) 0)
+                    .setErrorMessage(null);
+            })
+            .forEach(topicResults::add);
 
-            final var response = new DeleteTopicsResponseData()
-                .setThrottleTimeMs(0)
-                .setResponses(topicResults);
+        final var response = new DeleteTopicsResponseData()
+            .setThrottleTimeMs(0)
+            .setResponses(topicResults);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DELETE_TOPICS);
-        } catch (final Exception e) {
-            log.error("Error generating DeleteTopics response", e);
-            return null;
-        }
+        return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DELETE_TOPICS);
     }
 
     /**
@@ -266,27 +261,21 @@ final class AdminApiHandler {
      * non-existent topics produce an empty config list with a zero error code.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed DESCRIBE_CONFIGS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateDescribeConfigsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new DescribeConfigsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateDescribeConfigsResponse(final RequestHeader requestHeader, final DescribeConfigsRequest request) {
+        final var data = request.data();
 
-            final var results = request.resources().stream()
-                .map(this::describeResource)
-                .collect(toList());
+        final var results = data.resources().stream()
+            .map(this::describeResource)
+            .collect(toList());
 
-            final var response = new DescribeConfigsResponseData()
-                .setThrottleTimeMs(0)
-                .setResults(results);
+        final var response = new DescribeConfigsResponseData()
+            .setThrottleTimeMs(0)
+            .setResults(results);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DESCRIBE_CONFIGS);
-        } catch (final Exception e) {
-            log.error("Error generating DescribeConfigs response", e);
-            return null;
-        }
+        return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DESCRIBE_CONFIGS);
     }
 
     /**
@@ -369,62 +358,50 @@ final class AdminApiHandler {
      * through background processes.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed ALTER_CONFIGS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateAlterConfigsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new AlterConfigsRequestData(accessor, requestHeader.apiVersion());
-            final var responses = request.resources().stream()
-                .map(resource -> new AlterConfigsResponseData.AlterConfigsResourceResponse()
-                    .setResourceType(resource.resourceType())
-                    .setResourceName(resource.resourceName())
-                    .setErrorCode((short) 0)
-                    .setErrorMessage(null))
-                .collect(toList());
-            final var response = new AlterConfigsResponseData()
-                .setThrottleTimeMs(0)
-                .setResponses(responses);
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.ALTER_CONFIGS);
-        } catch (final Exception e) {
-            log.error("Error generating AlterConfigs response", e);
-            return null;
-        }
+    ByteBuffer generateAlterConfigsResponse(final RequestHeader requestHeader, final AlterConfigsRequest request) {
+        final var data = request.data();
+        final var responses = data.resources().stream()
+            .map(resource -> new AlterConfigsResponseData.AlterConfigsResourceResponse()
+                .setResourceType(resource.resourceType())
+                .setResourceName(resource.resourceName())
+                .setErrorCode((short) 0)
+                .setErrorMessage(null))
+            .collect(toList());
+        final var response = new AlterConfigsResponseData()
+            .setThrottleTimeMs(0)
+            .setResponses(responses);
+        return ResponseSerializer.serialize(requestHeader, response, ApiKeys.ALTER_CONFIGS);
     }
 
     /**
      * Generates a CREATE_PARTITIONS response after increasing partition counts.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed CREATE_PARTITIONS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateCreatePartitionsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new CreatePartitionsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateCreatePartitionsResponse(final RequestHeader requestHeader, final CreatePartitionsRequest request) {
+        final var data = request.data();
 
-            final var results = request.topics().stream()
-                .map(topic -> {
-                    final var updated = topicStore.updatePartitionCount(topic.name(), topic.count());
-                    log.info("CreatePartitions: topic={}, newCount={}, success={}", topic.name(), topic.count(), updated);
-                    return new CreatePartitionsResponseData.CreatePartitionsTopicResult()
-                        .setName(topic.name())
-                        .setErrorCode((short) 0)
-                        .setErrorMessage(null);
-                })
-                .collect(toList());
+        final var results = data.topics().stream()
+            .map(topic -> {
+                final var updated = topicStore.updatePartitionCount(topic.name(), topic.count());
+                log.info("CreatePartitions: topic={}, newCount={}, success={}", topic.name(), topic.count(), updated);
+                return new CreatePartitionsResponseData.CreatePartitionsTopicResult()
+                    .setName(topic.name())
+                    .setErrorCode((short) 0)
+                    .setErrorMessage(null);
+            })
+            .collect(toList());
 
-            final var response = new CreatePartitionsResponseData()
-                .setThrottleTimeMs(0)
-                .setResults(results);
+        final var response = new CreatePartitionsResponseData()
+            .setThrottleTimeMs(0)
+            .setResults(results);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.CREATE_PARTITIONS);
-        } catch (final Exception e) {
-            log.error("Error generating CreatePartitions response", e);
-            return null;
-        }
+        return ResponseSerializer.serialize(requestHeader, response, ApiKeys.CREATE_PARTITIONS);
     }
 
     /**
@@ -432,40 +409,34 @@ final class AdminApiHandler {
      * the requested partitions.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed DELETE_RECORDS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateDeleteRecordsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new DeleteRecordsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateDeleteRecordsResponse(final RequestHeader requestHeader, final DeleteRecordsRequest request) {
+        final var data = request.data();
 
-            final var topicResults = new DeleteRecordsResponseData.DeleteRecordsTopicResultCollection();
-            for (final var topic : request.topics()) {
-                final var partitionResults =
-                    new DeleteRecordsResponseData.DeleteRecordsPartitionResultCollection();
-                for (final var partition : topic.partitions()) {
-                    final long lowWatermark = eventStore.deleteRecordsBefore(
-                        topic.name(), partition.partitionIndex(), partition.offset());
-                    partitionResults.add(new DeleteRecordsResponseData.DeleteRecordsPartitionResult()
-                        .setPartitionIndex(partition.partitionIndex())
-                        .setLowWatermark(lowWatermark)
-                        .setErrorCode((short) 0));
-                }
-                topicResults.add(new DeleteRecordsResponseData.DeleteRecordsTopicResult()
-                    .setName(topic.name())
-                    .setPartitions(partitionResults));
+        final var topicResults = new DeleteRecordsResponseData.DeleteRecordsTopicResultCollection();
+        for (final var topic : data.topics()) {
+            final var partitionResults =
+                new DeleteRecordsResponseData.DeleteRecordsPartitionResultCollection();
+            for (final var partition : topic.partitions()) {
+                final long lowWatermark = eventStore.deleteRecordsBefore(
+                    topic.name(), partition.partitionIndex(), partition.offset());
+                partitionResults.add(new DeleteRecordsResponseData.DeleteRecordsPartitionResult()
+                    .setPartitionIndex(partition.partitionIndex())
+                    .setLowWatermark(lowWatermark)
+                    .setErrorCode((short) 0));
             }
-
-            final var response = new DeleteRecordsResponseData()
-                .setThrottleTimeMs(0)
-                .setTopics(topicResults);
-
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DELETE_RECORDS);
-        } catch (final Exception e) {
-            log.error("Error generating DeleteRecords response", e);
-            return null;
+            topicResults.add(new DeleteRecordsResponseData.DeleteRecordsTopicResult()
+                .setName(topic.name())
+                .setPartitions(partitionResults));
         }
+
+        final var response = new DeleteRecordsResponseData()
+            .setThrottleTimeMs(0)
+            .setTopics(topicResults);
+
+        return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DELETE_RECORDS);
     }
 
     /**
@@ -477,29 +448,23 @@ final class AdminApiHandler {
      * check interval before a test) do not fail.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed INCREMENTAL_ALTER_CONFIGS request
+     * @return the serialised response buffer
      */
     ByteBuffer generateIncrementalAlterConfigsResponse(
-            final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new IncrementalAlterConfigsRequestData(accessor, requestHeader.apiVersion());
-            final var responses = request.resources().stream()
-                .map(resource -> new IncrementalAlterConfigsResponseData.AlterConfigsResourceResponse()
-                    .setResourceType(resource.resourceType())
-                    .setResourceName(resource.resourceName())
-                    .setErrorCode((short) 0)
-                    .setErrorMessage(null))
-                .collect(toList());
-            final var response = new IncrementalAlterConfigsResponseData()
-                .setThrottleTimeMs(0)
-                .setResponses(responses);
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.INCREMENTAL_ALTER_CONFIGS);
-        } catch (final Exception e) {
-            log.error("Error generating IncrementalAlterConfigs response", e);
-            return null;
-        }
+            final RequestHeader requestHeader, final IncrementalAlterConfigsRequest request) {
+        final var data = request.data();
+        final var responses = data.resources().stream()
+            .map(resource -> new IncrementalAlterConfigsResponseData.AlterConfigsResourceResponse()
+                .setResourceType(resource.resourceType())
+                .setResourceName(resource.resourceName())
+                .setErrorCode((short) 0)
+                .setErrorMessage(null))
+            .collect(toList());
+        final var response = new IncrementalAlterConfigsResponseData()
+            .setThrottleTimeMs(0)
+            .setResponses(responses);
+        return ResponseSerializer.serialize(requestHeader, response, ApiKeys.INCREMENTAL_ALTER_CONFIGS);
     }
 
     /**
@@ -510,29 +475,22 @@ final class AdminApiHandler {
      * definition is retained (idempotent behaviour).</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed CREATE_TOPICS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateCreateTopicsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new CreateTopicsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateCreateTopicsResponse(final RequestHeader requestHeader, final CreateTopicsRequest request) {
+        final var data = request.data();
 
-            final var topicResults = new CreateTopicsResponseData.CreatableTopicResultCollection();
-            request.topics().stream()
-                .map(this::registerAndBuildTopicResult)
-                .forEach(topicResults::add);
+        final var topicResults = new CreateTopicsResponseData.CreatableTopicResultCollection();
+        data.topics().stream()
+            .map(this::registerAndBuildTopicResult)
+            .forEach(topicResults::add);
 
-            final var response = new CreateTopicsResponseData()
-                .setThrottleTimeMs(0)
-                .setTopics(topicResults);
+        final var response = new CreateTopicsResponseData()
+            .setThrottleTimeMs(0)
+            .setTopics(topicResults);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.CREATE_TOPICS);
-
-        } catch (final Exception e) {
-            log.error("Error generating CreateTopics response", e);
-            return null;
-        }
+        return ResponseSerializer.serialize(requestHeader, response, ApiKeys.CREATE_TOPICS);
     }
 
     /**
@@ -543,37 +501,31 @@ final class AdminApiHandler {
      * behaviour of a real single-replica Kafka broker.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed ELECT_LEADERS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateElectLeadersResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new ElectLeadersRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateElectLeadersResponse(final RequestHeader requestHeader, final ElectLeadersRequest request) {
+        final var data = request.data();
 
-            final var results = request.topicPartitions() == null
-                ? List.<ElectLeadersResponseData.ReplicaElectionResult>of()
-                : request.topicPartitions().stream()
-                    .map(tp -> new ElectLeadersResponseData.ReplicaElectionResult()
-                        .setTopic(tp.topic())
-                        .setPartitionResult(tp.partitions().stream()
-                            .map(p -> new ElectLeadersResponseData.PartitionResult()
-                                .setPartitionId(p)
-                                .setErrorCode(Errors.ELECTION_NOT_NEEDED.code())
-                                .setErrorMessage(Errors.ELECTION_NOT_NEEDED.message()))
-                            .collect(toList())))
-                    .collect(toList());
+        final var results = data.topicPartitions() == null
+            ? List.<ElectLeadersResponseData.ReplicaElectionResult>of()
+            : data.topicPartitions().stream()
+                .map(tp -> new ElectLeadersResponseData.ReplicaElectionResult()
+                    .setTopic(tp.topic())
+                    .setPartitionResult(tp.partitions().stream()
+                        .map(p -> new ElectLeadersResponseData.PartitionResult()
+                            .setPartitionId(p)
+                            .setErrorCode(Errors.ELECTION_NOT_NEEDED.code())
+                            .setErrorMessage(Errors.ELECTION_NOT_NEEDED.message()))
+                        .collect(toList())))
+                .collect(toList());
 
-            final var response = new ElectLeadersResponseData()
-                .setThrottleTimeMs(0)
-                .setErrorCode((short) 0)
-                .setReplicaElectionResults(results);
+        final var response = new ElectLeadersResponseData()
+            .setThrottleTimeMs(0)
+            .setErrorCode((short) 0)
+            .setReplicaElectionResults(results);
 
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.ELECT_LEADERS);
-        } catch (final Exception e) {
-            log.error("Error generating ElectLeaders response", e);
-            return null;
-        }
+        return ResponseSerializer.serialize(requestHeader, response, ApiKeys.ELECT_LEADERS);
     }
 
     /**
@@ -583,45 +535,39 @@ final class AdminApiHandler {
      * log directory containing all registered topics.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed DESCRIBE_LOG_DIRS request (currently unused; the
+     *                      mock has a single synthetic log directory containing every
+     *                      registered topic)
+     * @return the serialised response buffer
      */
-    ByteBuffer generateDescribeLogDirsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            new DescribeLogDirsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateDescribeLogDirsResponse(final RequestHeader requestHeader, final DescribeLogDirsRequest request) {
+        final var topics = topicStore.getTopics().stream()
+            .map(def -> {
+                final var partitions = java.util.stream.IntStream.range(0, def.numPartitions())
+                    .mapToObj(p -> new DescribeLogDirsResponseData.DescribeLogDirsPartition()
+                        .setPartitionIndex(p)
+                        .setPartitionSize(0L)
+                        .setOffsetLag(0L)
+                        .setIsFutureKey(false))
+                    .collect(toList());
+                return new DescribeLogDirsResponseData.DescribeLogDirsTopic()
+                    .setName(def.name())
+                    .setPartitions(partitions);
+            })
+            .collect(toList());
 
-            final var topics = topicStore.getTopics().stream()
-                .map(def -> {
-                    final var partitions = java.util.stream.IntStream.range(0, def.numPartitions())
-                        .mapToObj(p -> new DescribeLogDirsResponseData.DescribeLogDirsPartition()
-                            .setPartitionIndex(p)
-                            .setPartitionSize(0L)
-                            .setOffsetLag(0L)
-                            .setIsFutureKey(false))
-                        .collect(toList());
-                    return new DescribeLogDirsResponseData.DescribeLogDirsTopic()
-                        .setName(def.name())
-                        .setPartitions(partitions);
-                })
-                .collect(toList());
+        final var logDir = new DescribeLogDirsResponseData.DescribeLogDirsResult()
+            .setErrorCode((short) 0)
+            .setLogDir("/kafkaesque")
+            .setTopics(topics)
+            .setTotalBytes(-1L)
+            .setUsableBytes(-1L);
 
-            final var logDir = new DescribeLogDirsResponseData.DescribeLogDirsResult()
-                .setErrorCode((short) 0)
-                .setLogDir("/kafkaesque")
-                .setTopics(topics)
-                .setTotalBytes(-1L)
-                .setUsableBytes(-1L);
+        final var response = new DescribeLogDirsResponseData()
+            .setThrottleTimeMs(0)
+            .setResults(List.of(logDir));
 
-            final var response = new DescribeLogDirsResponseData()
-                .setThrottleTimeMs(0)
-                .setResults(List.of(logDir));
-
-            return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DESCRIBE_LOG_DIRS);
-        } catch (final Exception e) {
-            log.error("Error generating DescribeLogDirs response", e);
-            return null;
-        }
+        return ResponseSerializer.serialize(requestHeader, response, ApiKeys.DESCRIBE_LOG_DIRS);
     }
 
     /**
@@ -630,36 +576,30 @@ final class AdminApiHandler {
      * <p>Since Kafkaesque is in-memory with a single log directory, this is a no-op.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed ALTER_REPLICA_LOG_DIRS request
+     * @return the serialised response buffer
      */
     ByteBuffer generateAlterReplicaLogDirsResponse(
-            final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new AlterReplicaLogDirsRequestData(accessor, requestHeader.apiVersion());
+            final RequestHeader requestHeader, final AlterReplicaLogDirsRequest request) {
+        final var data = request.data();
 
-            final var results = request.dirs().stream()
-                .flatMap(dir -> dir.topics().stream()
-                    .map(topic -> new AlterReplicaLogDirsResponseData.AlterReplicaLogDirTopicResult()
-                        .setTopicName(topic.name())
-                        .setPartitions(topic.partitions().stream()
-                            .map(p -> new AlterReplicaLogDirsResponseData
-                                .AlterReplicaLogDirPartitionResult()
-                                .setPartitionIndex(p)
-                                .setErrorCode((short) 0))
-                            .collect(toList()))))
-                .collect(toList());
+        final var results = data.dirs().stream()
+            .flatMap(dir -> dir.topics().stream()
+                .map(topic -> new AlterReplicaLogDirsResponseData.AlterReplicaLogDirTopicResult()
+                    .setTopicName(topic.name())
+                    .setPartitions(topic.partitions().stream()
+                        .map(p -> new AlterReplicaLogDirsResponseData
+                            .AlterReplicaLogDirPartitionResult()
+                            .setPartitionIndex(p)
+                            .setErrorCode((short) 0))
+                        .collect(toList()))))
+            .collect(toList());
 
-            final var response = new AlterReplicaLogDirsResponseData()
-                .setThrottleTimeMs(0)
-                .setResults(results);
+        final var response = new AlterReplicaLogDirsResponseData()
+            .setThrottleTimeMs(0)
+            .setResults(results);
 
-            return ResponseSerializer.serialize(
-                requestHeader, response, ApiKeys.ALTER_REPLICA_LOG_DIRS);
-        } catch (final Exception e) {
-            log.error("Error generating AlterReplicaLogDirs response", e);
-            return null;
-        }
+        return ResponseSerializer.serialize(
+            requestHeader, response, ApiKeys.ALTER_REPLICA_LOG_DIRS);
     }
 }

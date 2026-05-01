@@ -338,6 +338,12 @@ public final class TransactionCoordinator {
     /**
      * Returns the producer ID and epoch for a given transactional ID.
      *
+     * <p>Returns {@link Optional#empty()} for transactional IDs the coordinator has never
+     * seen — most often because the producer has not yet sent {@code INIT_PRODUCER_ID}.
+     * Callers iterating the set returned by {@link #getTransactionalIds()} on the same
+     * thread can rely on a non-empty result for any ID in that set; outside that scope an
+     * empty result is always possible and must be handled.</p>
+     *
      * @param transactionalId the transactional producer ID
      * @return the producer ID and epoch, or {@link Optional#empty()} if unknown
      */

@@ -24,9 +24,11 @@ import org.apache.kafka.common.message.ElectLeadersResponseData;
 import org.apache.kafka.common.message.IncrementalAlterConfigsRequestData;
 import org.apache.kafka.common.message.IncrementalAlterConfigsResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -95,21 +97,6 @@ class AdminApiHandlerTest {
 
         final var responseData = parseCreateTopicsResponse(response);
         assertThat(responseData.topics()).hasSize(2);
-    }
-
-    @Test
-    void shouldReturnNullOnMalformedRequest() {
-        // Given – an empty buffer that cannot be parsed as a CreateTopicsRequest
-        final var header = new RequestHeader(ApiKeys.CREATE_TOPICS,
-            ApiKeys.CREATE_TOPICS.latestVersion(), "test-client", 1);
-        final var emptyBuffer = ByteBuffer.allocate(0);
-
-        // When – the following error log from AdminApiHandler is expected
-        log.info("Expecting an error log from AdminApiHandler due to malformed (empty) request buffer");
-        final var response = handler.generateCreateTopicsResponse(header, emptyBuffer);
-
-        // Then
-        assertThat(response).isNull();
     }
 
     @Test
@@ -188,14 +175,9 @@ class AdminApiHandlerTest {
     }
 
     private ByteBuffer invokeCreateTopicsRequest(final CreateTopicsRequestData requestData, final short apiVersion) {
-        final var cache = new ObjectSerializationCache();
-        final int bodySize = requestData.size(cache, apiVersion);
-        final var buffer = ByteBuffer.allocate(bodySize);
-        requestData.write(new ByteBufferAccessor(buffer), cache, apiVersion);
-        buffer.flip();
-
         final var header = new RequestHeader(ApiKeys.CREATE_TOPICS, apiVersion, "test-client", 1);
-        return handler.generateCreateTopicsResponse(header, buffer);
+        return handler.generateCreateTopicsResponse(header,
+            parseAs(ApiKeys.CREATE_TOPICS, apiVersion, requestData));
     }
 
     private ByteBuffer invokeDescribeConfigs(final byte resourceType, final String resourceName) {
@@ -206,21 +188,14 @@ class AdminApiHandlerTest {
                 .setResourceName(resourceName));
         final var requestData = new DescribeConfigsRequestData().setResources(resources);
 
-        final var cache = new ObjectSerializationCache();
-        final int bodySize = requestData.size(cache, apiVersion);
-        final var buffer = ByteBuffer.allocate(bodySize);
-        requestData.write(new ByteBufferAccessor(buffer), cache, apiVersion);
-        buffer.flip();
-
         final var header = new RequestHeader(ApiKeys.DESCRIBE_CONFIGS, apiVersion, "test-client", 1);
-        return handler.generateDescribeConfigsResponse(header, buffer);
+        return handler.generateDescribeConfigsResponse(header,
+            parseAs(ApiKeys.DESCRIBE_CONFIGS, apiVersion, requestData));
     }
 
     private DescribeConfigsResponseData parseDescribeConfigsResponse(final ByteBuffer buffer) {
         final short apiVersion = ApiKeys.DESCRIBE_CONFIGS.latestVersion();
-        final short headerVersion = ApiKeys.DESCRIBE_CONFIGS.responseHeaderVersion(apiVersion);
-        final int headerBytes = (headerVersion >= 1) ? 5 : 4;
-        buffer.position(buffer.position() + headerBytes);
+        skipResponseHeader(buffer, ApiKeys.DESCRIBE_CONFIGS, apiVersion);
         final var responseData = new DescribeConfigsResponseData();
         responseData.read(new ByteBufferAccessor(buffer), apiVersion);
         return responseData;
@@ -232,33 +207,22 @@ class AdminApiHandlerTest {
             new DeleteTopicsRequestData.DeleteTopicState().setName(name));
         final var requestData = new DeleteTopicsRequestData().setTopics(topics);
 
-        final var cache = new ObjectSerializationCache();
-        final int bodySize = requestData.size(cache, apiVersion);
-        final var buffer = ByteBuffer.allocate(bodySize);
-        requestData.write(new ByteBufferAccessor(buffer), cache, apiVersion);
-        buffer.flip();
-
         final var header = new RequestHeader(ApiKeys.DELETE_TOPICS, apiVersion, "test-client", 1);
-        return handler.generateDeleteTopicsResponse(header, buffer);
+        return handler.generateDeleteTopicsResponse(header,
+            parseAs(ApiKeys.DELETE_TOPICS, apiVersion, requestData));
     }
 
     private DeleteTopicsResponseData parseDeleteTopicsResponse(final ByteBuffer buffer) {
         final short apiVersion = ApiKeys.DELETE_TOPICS.latestVersion();
-        final short headerVersion = ApiKeys.DELETE_TOPICS.responseHeaderVersion(apiVersion);
-        final int headerBytes = (headerVersion >= 1) ? 5 : 4;
-        buffer.position(buffer.position() + headerBytes);
+        skipResponseHeader(buffer, ApiKeys.DELETE_TOPICS, apiVersion);
         final var responseData = new DeleteTopicsResponseData();
         responseData.read(new ByteBufferAccessor(buffer), apiVersion);
         return responseData;
     }
 
     private CreateTopicsResponseData parseCreateTopicsResponse(final ByteBuffer buffer) {
-        // Skip the response header (correlation id = 4 bytes for flexible encoding with tag buffer)
         final short apiVersion = ApiKeys.CREATE_TOPICS.latestVersion();
-        final short headerVersion = ApiKeys.CREATE_TOPICS.responseHeaderVersion(apiVersion);
-        // Flexible header has correlationId (4 bytes) + empty tag buffer (1 byte)
-        final int headerBytes = (headerVersion >= 1) ? 5 : 4;
-        buffer.position(buffer.position() + headerBytes);
+        skipResponseHeader(buffer, ApiKeys.CREATE_TOPICS, apiVersion);
         final var responseData = new CreateTopicsResponseData();
         responseData.read(new ByteBufferAccessor(buffer), apiVersion);
         return responseData;
@@ -381,10 +345,10 @@ class AdminApiHandlerTest {
             .setResourceType((byte) 2).setResourceName("topic-b"));
         final var requestData = new IncrementalAlterConfigsRequestData().setResources(resources);
 
-        final var buffer = serialize(requestData, apiVersion);
         final var header = new RequestHeader(
             ApiKeys.INCREMENTAL_ALTER_CONFIGS, apiVersion, "test-client", 1);
-        final var response = handler.generateIncrementalAlterConfigsResponse(header, buffer);
+        final var response = handler.generateIncrementalAlterConfigsResponse(header,
+            parseAs(ApiKeys.INCREMENTAL_ALTER_CONFIGS, apiVersion, requestData));
 
         // Then
         assertThat(response).isNotNull();
@@ -423,9 +387,9 @@ class AdminApiHandlerTest {
             .setTopicPartitions(null)
             .setElectionType((byte) 0);
 
-        final var buffer = serialize(requestData, apiVersion);
         final var header = new RequestHeader(ApiKeys.ELECT_LEADERS, apiVersion, "test-client", 1);
-        final var response = handler.generateElectLeadersResponse(header, buffer);
+        final var response = handler.generateElectLeadersResponse(header,
+            parseAs(ApiKeys.ELECT_LEADERS, apiVersion, requestData));
 
         // Then
         assertThat(response).isNotNull();
@@ -499,14 +463,19 @@ class AdminApiHandlerTest {
     // Additional helpers
     // =====================================================================
 
-    private static ByteBuffer serialize(
-            final org.apache.kafka.common.protocol.ApiMessage message, final short apiVersion) {
+    /**
+     * Serialises {@code data} and parses it back as the typed {@link AbstractRequest} the
+     * handler now expects, mirroring how {@code KafkaProtocolHandler.dispatchRequest}
+     * pre-parses the body before invoking a handler.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T extends AbstractRequest> T parseAs(
+            final ApiKeys apiKey, final short apiVersion, final ApiMessage data) {
         final var cache = new ObjectSerializationCache();
-        final int bodySize = message.size(cache, apiVersion);
-        final var buffer = ByteBuffer.allocate(bodySize);
-        message.write(new ByteBufferAccessor(buffer), cache, apiVersion);
+        final var buffer = ByteBuffer.allocate(data.size(cache, apiVersion));
+        data.write(new ByteBufferAccessor(buffer), cache, apiVersion);
         buffer.flip();
-        return buffer;
+        return (T) AbstractRequest.parseRequest(apiKey, apiVersion, buffer).request;
     }
 
     private static void skipResponseHeader(
@@ -523,9 +492,9 @@ class AdminApiHandlerTest {
             .setResourceType((byte) 2)
             .setResourceName(topicName));
         final var requestData = new AlterConfigsRequestData().setResources(resources);
-        final var buffer = serialize(requestData, apiVersion);
         final var header = new RequestHeader(ApiKeys.ALTER_CONFIGS, apiVersion, "test-client", 1);
-        return handler.generateAlterConfigsResponse(header, buffer);
+        return handler.generateAlterConfigsResponse(header,
+            parseAs(ApiKeys.ALTER_CONFIGS, apiVersion, requestData));
     }
 
     private AlterConfigsResponseData parseAlterConfigsResponse(final ByteBuffer buffer) {
@@ -543,10 +512,10 @@ class AdminApiHandlerTest {
             .setName(topicName)
             .setCount(count));
         final var requestData = new CreatePartitionsRequestData().setTopics(topics);
-        final var buffer = serialize(requestData, apiVersion);
         final var header = new RequestHeader(
             ApiKeys.CREATE_PARTITIONS, apiVersion, "test-client", 1);
-        return handler.generateCreatePartitionsResponse(header, buffer);
+        return handler.generateCreatePartitionsResponse(header,
+            parseAs(ApiKeys.CREATE_PARTITIONS, apiVersion, requestData));
     }
 
     private CreatePartitionsResponseData parseCreatePartitionsResponse(final ByteBuffer buffer) {
@@ -567,9 +536,9 @@ class AdminApiHandlerTest {
             .setName(topicName)
             .setPartitions(of(partitionEntry));
         final var requestData = new DeleteRecordsRequestData().setTopics(of(topicEntry));
-        final var buffer = serialize(requestData, apiVersion);
         final var header = new RequestHeader(ApiKeys.DELETE_RECORDS, apiVersion, "test-client", 1);
-        return handler.generateDeleteRecordsResponse(header, buffer);
+        return handler.generateDeleteRecordsResponse(header,
+            parseAs(ApiKeys.DELETE_RECORDS, apiVersion, requestData));
     }
 
     private DeleteRecordsResponseData parseDeleteRecordsResponse(final ByteBuffer buffer) {
@@ -587,10 +556,10 @@ class AdminApiHandlerTest {
             .setResourceType((byte) 2)
             .setResourceName(topicName));
         final var requestData = new IncrementalAlterConfigsRequestData().setResources(resources);
-        final var buffer = serialize(requestData, apiVersion);
         final var header = new RequestHeader(
             ApiKeys.INCREMENTAL_ALTER_CONFIGS, apiVersion, "test-client", 1);
-        return handler.generateIncrementalAlterConfigsResponse(header, buffer);
+        return handler.generateIncrementalAlterConfigsResponse(header,
+            parseAs(ApiKeys.INCREMENTAL_ALTER_CONFIGS, apiVersion, requestData));
     }
 
     private IncrementalAlterConfigsResponseData parseIncrementalAlterConfigsResponse(
@@ -611,9 +580,9 @@ class AdminApiHandlerTest {
         final var requestData = new ElectLeadersRequestData()
             .setTopicPartitions(tpCollection)
             .setElectionType((byte) 0);
-        final var buffer = serialize(requestData, apiVersion);
         final var header = new RequestHeader(ApiKeys.ELECT_LEADERS, apiVersion, "test-client", 1);
-        return handler.generateElectLeadersResponse(header, buffer);
+        return handler.generateElectLeadersResponse(header,
+            parseAs(ApiKeys.ELECT_LEADERS, apiVersion, requestData));
     }
 
     private ElectLeadersResponseData parseElectLeadersResponse(final ByteBuffer buffer) {
@@ -627,10 +596,10 @@ class AdminApiHandlerTest {
     private ByteBuffer invokeDescribeLogDirs() {
         final short apiVersion = ApiKeys.DESCRIBE_LOG_DIRS.latestVersion();
         final var requestData = new DescribeLogDirsRequestData();
-        final var buffer = serialize(requestData, apiVersion);
         final var header = new RequestHeader(
             ApiKeys.DESCRIBE_LOG_DIRS, apiVersion, "test-client", 1);
-        return handler.generateDescribeLogDirsResponse(header, buffer);
+        return handler.generateDescribeLogDirsResponse(header,
+            parseAs(ApiKeys.DESCRIBE_LOG_DIRS, apiVersion, requestData));
     }
 
     private DescribeLogDirsResponseData parseDescribeLogDirsResponse(final ByteBuffer buffer) {
@@ -654,10 +623,10 @@ class AdminApiHandlerTest {
             .setPath("/kafkaesque")
             .setTopics(topicCollection));
         final var requestData = new AlterReplicaLogDirsRequestData().setDirs(dirCollection);
-        final var buffer = serialize(requestData, apiVersion);
         final var header = new RequestHeader(
             ApiKeys.ALTER_REPLICA_LOG_DIRS, apiVersion, "test-client", 1);
-        return handler.generateAlterReplicaLogDirsResponse(header, buffer);
+        return handler.generateAlterReplicaLogDirsResponse(header,
+            parseAs(ApiKeys.ALTER_REPLICA_LOG_DIRS, apiVersion, requestData));
     }
 
     private AlterReplicaLogDirsResponseData parseAlterReplicaLogDirsResponse(

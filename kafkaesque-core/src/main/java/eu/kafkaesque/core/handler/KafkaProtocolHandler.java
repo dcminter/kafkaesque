@@ -9,8 +9,51 @@ import eu.kafkaesque.core.storage.TopicStore;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.compress.Compression;
+import org.apache.kafka.common.errors.UnsupportedVersionException;
+import org.apache.kafka.common.message.ResponseHeaderData;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.ByteBufferAccessor;
+import org.apache.kafka.common.protocol.Errors;
+import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.requests.AbstractRequest;
+import org.apache.kafka.common.requests.AddOffsetsToTxnRequest;
+import org.apache.kafka.common.requests.AddPartitionsToTxnRequest;
+import org.apache.kafka.common.requests.AlterConfigsRequest;
+import org.apache.kafka.common.requests.AlterReplicaLogDirsRequest;
+import org.apache.kafka.common.requests.ConsumerGroupDescribeRequest;
+import org.apache.kafka.common.requests.CreateAclsRequest;
+import org.apache.kafka.common.requests.CreatePartitionsRequest;
+import org.apache.kafka.common.requests.CreateTopicsRequest;
+import org.apache.kafka.common.requests.DeleteAclsRequest;
+import org.apache.kafka.common.requests.DeleteGroupsRequest;
+import org.apache.kafka.common.requests.DeleteRecordsRequest;
+import org.apache.kafka.common.requests.DeleteTopicsRequest;
+import org.apache.kafka.common.requests.DescribeAclsRequest;
+import org.apache.kafka.common.requests.DescribeConfigsRequest;
+import org.apache.kafka.common.requests.DescribeGroupsRequest;
+import org.apache.kafka.common.requests.DescribeLogDirsRequest;
+import org.apache.kafka.common.requests.DescribeTopicPartitionsRequest;
+import org.apache.kafka.common.requests.DescribeTransactionsRequest;
+import org.apache.kafka.common.requests.ElectLeadersRequest;
+import org.apache.kafka.common.requests.EndTxnRequest;
+import org.apache.kafka.common.requests.FetchRequest;
+import org.apache.kafka.common.requests.FindCoordinatorRequest;
+import org.apache.kafka.common.requests.HeartbeatRequest;
+import org.apache.kafka.common.requests.IncrementalAlterConfigsRequest;
+import org.apache.kafka.common.requests.InitProducerIdRequest;
+import org.apache.kafka.common.requests.JoinGroupRequest;
+import org.apache.kafka.common.requests.LeaveGroupRequest;
+import org.apache.kafka.common.requests.ListGroupsRequest;
+import org.apache.kafka.common.requests.ListOffsetsRequest;
+import org.apache.kafka.common.requests.ListTransactionsRequest;
+import org.apache.kafka.common.requests.MetadataRequest;
+import org.apache.kafka.common.requests.OffsetCommitRequest;
+import org.apache.kafka.common.requests.OffsetFetchRequest;
+import org.apache.kafka.common.requests.ProduceRequest;
 import org.apache.kafka.common.requests.RequestHeader;
+import org.apache.kafka.common.requests.SyncGroupRequest;
+import org.apache.kafka.common.requests.TxnOffsetCommitRequest;
+import org.apache.kafka.common.requests.WriteTxnMarkersRequest;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -33,6 +76,10 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li>Managing the read/write lifecycle for client connections</li>
  *   <li>Draining deferred responses (e.g. deferred JoinGroup responses) that are enqueued
  *       by background threads and must be flushed on the NIO event loop thread</li>
+ *   <li>Translating any failure during request handling — bad parse, unhandled API key,
+ *       or unchecked exception thrown out of a handler — into a properly-shaped Kafka
+ *       error response, so clients always receive a correctly-correlated reply rather
+ *       than timing out on silence.</li>
  * </ul>
  *
  * <p>The handler supports the following Kafka APIs:</p>
@@ -62,9 +109,13 @@ import java.util.concurrent.atomic.AtomicReference;
  *   <li>{@link ApiKeys#CREATE_ACLS} - Creates ACL bindings in the store</li>
  *   <li>{@link ApiKeys#DESCRIBE_ACLS} - Returns ACL bindings matching the request filter</li>
  *   <li>{@link ApiKeys#DELETE_ACLS} - Deletes ACL bindings matching the request filters</li>
- *   <li>{@link ApiKeys#GET_TELEMETRY_SUBSCRIPTIONS} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
- *   <li>{@link ApiKeys#PUSH_TELEMETRY} - Returns UNSUPPORTED_VERSION (telemetry not implemented)</li>
  * </ul>
+ *
+ * <p>API keys not in the registered set above (notably the telemetry APIs
+ * {@link ApiKeys#GET_TELEMETRY_SUBSCRIPTIONS} and {@link ApiKeys#PUSH_TELEMETRY})
+ * fall through to the unhandled-key path and receive an
+ * {@link Errors#UNSUPPORTED_VERSION} response built via the parsed request's
+ * {@link AbstractRequest#getErrorResponse(int, Throwable)}.</p>
  *
  * @see ClientConnection
  * @see GroupCoordinator
@@ -415,27 +466,118 @@ public final class KafkaProtocolHandler {
 
     /**
      * Routes a parsed request to its registered {@link ApiRequestHandler} via the dispatcher
-     * map. Returns {@code null} for unhandled keys and for handlers that defer their response.
+     * map.
+     *
+     * <p>The request body is parsed up front via
+     * {@link AbstractRequest#parseRequest(ApiKeys, short, ByteBuffer)} and threaded to the
+     * handler through {@link RequestContext}, so handlers do not need to re-parse the buffer
+     * and the dispatcher can build a properly-shaped error response (via the request's
+     * {@link AbstractRequest#getErrorResponse(int, Throwable)}) when:</p>
+     * <ul>
+     *   <li>no handler is registered for the API key (returns {@link Errors#UNSUPPORTED_VERSION})</li>
+     *   <li>the handler throws an unchecked exception (returns whatever {@code getErrorResponse}
+     *       maps the exception to, typically {@link Errors#UNKNOWN_SERVER_ERROR})</li>
+     * </ul>
+     *
+     * <p>If pre-parsing the body fails (genuinely malformed bytes), the dispatcher falls back
+     * to a header-only error response carrying {@link Errors#INVALID_REQUEST}; this is the only
+     * path that does not produce a fully-shaped response, since constructing one requires the
+     * library to know the request's schema.</p>
+     *
+     * <p>Package-private to allow unit tests to drive the dispatcher without a real socket.
+     * Production callers reach this method via {@link #processRequest}.</p>
      *
      * @param apiKey     the API key identifying the request type
      * @param header     the parsed request header
      * @param buffer     the request body buffer
-     * @param connection the client connection
-     * @param key        the selection key for this connection
-     * @return the serialised response buffer, or {@code null} if no response should be written
+     * @param connection the client connection ({@code null} acceptable in unit tests for
+     *                   handlers that do not defer their response)
+     * @param key        the selection key for this connection ({@code null} acceptable
+     *                   under the same conditions)
+     * @return the serialised response buffer, or {@code null} if a handler deferred its
+     *         response (e.g. JoinGroup waiting for the rebalance window to close)
      */
-    private ByteBuffer dispatchRequest(
+    ByteBuffer dispatchRequest(
             final ApiKeys apiKey,
             final RequestHeader header,
             final ByteBuffer buffer,
             final ClientConnection connection,
             final SelectionKey key) {
+
+        final AbstractRequest parsed;
+        try {
+            parsed = AbstractRequest.parseRequest(apiKey, header.apiVersion(), buffer).request;
+        } catch (final RuntimeException e) {
+            log.error("Failed to parse request body for {}: {}", apiKey, e.toString(), e);
+            return headerOnlyErrorResponse(header, Errors.INVALID_REQUEST);
+        }
+
         final var handler = handlers.get(apiKey);
         if (handler == null) {
             log.warn("Unhandled API key: {} (id={})", apiKey, apiKey.id);
-            return null;
+            return errorResponse(header, parsed, apiKey,
+                new UnsupportedVersionException("Kafkaesque does not implement " + apiKey));
         }
-        return handler.handle(new RequestContext(apiKey, header, buffer, connection, key));
+
+        try {
+            return handler.handle(new RequestContext(apiKey, header, parsed, connection, key));
+        } catch (final RuntimeException e) {
+            log.error("Handler for {} threw {}: {}", apiKey, e.getClass().getSimpleName(), e.getMessage(), e);
+            return errorResponse(header, parsed, apiKey, e);
+        }
+    }
+
+    /**
+     * Builds a properly-shaped error response by delegating to the parsed request's
+     * own {@link AbstractRequest#getErrorResponse(int, Throwable)}, then serialising the
+     * resulting response data.
+     *
+     * <p>Each {@link AbstractRequest} subclass knows the per-API response schema, including
+     * per-topic-partition error fields where applicable. Using its own
+     * {@code getErrorResponse} therefore avoids any hand-rolled per-API switching here.</p>
+     *
+     * @param header  the request header (provides correlationId and apiVersion)
+     * @param request the parsed request, used to obtain a typed error response
+     * @param apiKey  the API key (used to determine the response header version)
+     * @param cause   the throwable describing the failure
+     * @return the serialised error response buffer
+     */
+    private static ByteBuffer errorResponse(
+            final RequestHeader header,
+            final AbstractRequest request,
+            final ApiKeys apiKey,
+            final Throwable cause) {
+        final var response = request.getErrorResponse(0, cause);
+        return ResponseSerializer.serialize(header, response.data(), apiKey);
+    }
+
+    /**
+     * Builds a header-only error response for the rare case where the request body could not
+     * be parsed at all and we therefore have no typed {@link AbstractRequest} from which to
+     * build a per-API error response.
+     *
+     * <p>Real Kafka clients tolerate a response that contains only a correlation id and a
+     * top-level error code for unknown shapes; the alternative (writing nothing) leaves the
+     * client in a request timeout. This is invoked only on genuinely malformed bytes.</p>
+     *
+     * @param header the request header (provides correlationId)
+     * @param error  the error code to report
+     * @return the serialised header-only response buffer
+     */
+    private static ByteBuffer headerOnlyErrorResponse(final RequestHeader header, final Errors error) {
+        final var cache = new ObjectSerializationCache();
+        final var responseHeaderData = new ResponseHeaderData()
+            .setCorrelationId(header.correlationId());
+        // INVALID_REQUEST predates flexible versions, so pin the header to v0 (no tagged fields)
+        // because we do not have an apiKey-derived header version to consult.
+        final short headerVersion = 0;
+        final var headerSize = responseHeaderData.size(cache, headerVersion);
+        final var buffer = ByteBuffer.allocate(headerSize + Short.BYTES);
+        final var accessor = new ByteBufferAccessor(buffer);
+        responseHeaderData.write(accessor, cache, headerVersion);
+        buffer.putShort(error.code());
+        buffer.flip();
+        return buffer;
     }
 
     /**
@@ -454,7 +596,6 @@ public final class KafkaProtocolHandler {
         registerAdminHandlers(map);
         registerAclHandlers(map);
         registerTransactionHandlers(map);
-        registerTelemetryHandlers(map);
         return Collections.unmodifiableMap(map);
     }
 
@@ -468,13 +609,16 @@ public final class KafkaProtocolHandler {
         map.put(ApiKeys.API_VERSIONS,
             ctx -> clusterApiHandler.generateApiVersionsResponse(ctx.header()));
         map.put(ApiKeys.METADATA,
-            ctx -> clusterApiHandler.generateMetadataResponse(ctx.header(), ctx.buffer()));
+            ctx -> clusterApiHandler.generateMetadataResponse(
+                ctx.header(), (MetadataRequest) ctx.request()));
         map.put(ApiKeys.DESCRIBE_CLUSTER,
             ctx -> clusterApiHandler.generateDescribeClusterResponse(ctx.header()));
         map.put(ApiKeys.FIND_COORDINATOR,
-            ctx -> clusterApiHandler.generateFindCoordinatorResponse(ctx.header(), ctx.buffer()));
+            ctx -> clusterApiHandler.generateFindCoordinatorResponse(
+                ctx.header(), (FindCoordinatorRequest) ctx.request()));
         map.put(ApiKeys.DESCRIBE_TOPIC_PARTITIONS,
-            ctx -> clusterApiHandler.generateDescribeTopicPartitionsResponse(ctx.header(), ctx.buffer()));
+            ctx -> clusterApiHandler.generateDescribeTopicPartitionsResponse(
+                ctx.header(), (DescribeTopicPartitionsRequest) ctx.request()));
     }
 
     /**
@@ -484,7 +628,8 @@ public final class KafkaProtocolHandler {
      */
     private void registerProducerHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
         map.put(ApiKeys.PRODUCE,
-            ctx -> producerApiHandler.generateProduceResponse(ctx.header(), ctx.buffer()));
+            ctx -> producerApiHandler.generateProduceResponse(
+                ctx.header(), (ProduceRequest) ctx.request()));
     }
 
     /**
@@ -497,22 +642,28 @@ public final class KafkaProtocolHandler {
     private void registerConsumerGroupHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
         map.put(ApiKeys.JOIN_GROUP,
             ctx -> consumerGroupApiHandler.generateJoinGroupResponse(
-                ctx.header(), ctx.buffer(), ctx.connection(), ctx.key()));
+                ctx.header(), (JoinGroupRequest) ctx.request(), ctx.connection(), ctx.key()));
         map.put(ApiKeys.SYNC_GROUP,
             ctx -> consumerGroupApiHandler.generateSyncGroupResponse(
-                ctx.header(), ctx.buffer(), ctx.connection(), ctx.key()));
+                ctx.header(), (SyncGroupRequest) ctx.request(), ctx.connection(), ctx.key()));
         map.put(ApiKeys.HEARTBEAT,
-            ctx -> consumerGroupApiHandler.generateHeartbeatResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerGroupApiHandler.generateHeartbeatResponse(
+                ctx.header(), (HeartbeatRequest) ctx.request()));
         map.put(ApiKeys.LEAVE_GROUP,
-            ctx -> consumerGroupApiHandler.generateLeaveGroupResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerGroupApiHandler.generateLeaveGroupResponse(
+                ctx.header(), (LeaveGroupRequest) ctx.request()));
         map.put(ApiKeys.LIST_GROUPS,
-            ctx -> consumerGroupApiHandler.generateListGroupsResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerGroupApiHandler.generateListGroupsResponse(
+                ctx.header(), (ListGroupsRequest) ctx.request()));
         map.put(ApiKeys.CONSUMER_GROUP_DESCRIBE,
-            ctx -> consumerGroupApiHandler.generateConsumerGroupDescribeResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerGroupApiHandler.generateConsumerGroupDescribeResponse(
+                ctx.header(), (ConsumerGroupDescribeRequest) ctx.request()));
         map.put(ApiKeys.DELETE_GROUPS,
-            ctx -> consumerGroupApiHandler.generateDeleteGroupsResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerGroupApiHandler.generateDeleteGroupsResponse(
+                ctx.header(), (DeleteGroupsRequest) ctx.request()));
         map.put(ApiKeys.DESCRIBE_GROUPS,
-            ctx -> consumerGroupApiHandler.generateDescribeGroupsResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerGroupApiHandler.generateDescribeGroupsResponse(
+                ctx.header(), (DescribeGroupsRequest) ctx.request()));
     }
 
     /**
@@ -522,13 +673,17 @@ public final class KafkaProtocolHandler {
      */
     private void registerConsumerDataHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
         map.put(ApiKeys.OFFSET_FETCH,
-            ctx -> consumerDataApiHandler.generateOffsetFetchResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerDataApiHandler.generateOffsetFetchResponse(
+                ctx.header(), (OffsetFetchRequest) ctx.request()));
         map.put(ApiKeys.OFFSET_COMMIT,
-            ctx -> consumerDataApiHandler.generateOffsetCommitResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerDataApiHandler.generateOffsetCommitResponse(
+                ctx.header(), (OffsetCommitRequest) ctx.request()));
         map.put(ApiKeys.LIST_OFFSETS,
-            ctx -> consumerDataApiHandler.generateListOffsetsResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerDataApiHandler.generateListOffsetsResponse(
+                ctx.header(), (ListOffsetsRequest) ctx.request()));
         map.put(ApiKeys.FETCH,
-            ctx -> consumerDataApiHandler.generateFetchResponse(ctx.header(), ctx.buffer()));
+            ctx -> consumerDataApiHandler.generateFetchResponse(
+                ctx.header(), (FetchRequest) ctx.request()));
     }
 
     /**
@@ -538,25 +693,35 @@ public final class KafkaProtocolHandler {
      */
     private void registerAdminHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
         map.put(ApiKeys.CREATE_TOPICS,
-            ctx -> adminApiHandler.generateCreateTopicsResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateCreateTopicsResponse(
+                ctx.header(), (CreateTopicsRequest) ctx.request()));
         map.put(ApiKeys.DELETE_TOPICS,
-            ctx -> adminApiHandler.generateDeleteTopicsResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateDeleteTopicsResponse(
+                ctx.header(), (DeleteTopicsRequest) ctx.request()));
         map.put(ApiKeys.DESCRIBE_CONFIGS,
-            ctx -> adminApiHandler.generateDescribeConfigsResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateDescribeConfigsResponse(
+                ctx.header(), (DescribeConfigsRequest) ctx.request()));
         map.put(ApiKeys.ALTER_CONFIGS,
-            ctx -> adminApiHandler.generateAlterConfigsResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateAlterConfigsResponse(
+                ctx.header(), (AlterConfigsRequest) ctx.request()));
         map.put(ApiKeys.CREATE_PARTITIONS,
-            ctx -> adminApiHandler.generateCreatePartitionsResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateCreatePartitionsResponse(
+                ctx.header(), (CreatePartitionsRequest) ctx.request()));
         map.put(ApiKeys.DELETE_RECORDS,
-            ctx -> adminApiHandler.generateDeleteRecordsResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateDeleteRecordsResponse(
+                ctx.header(), (DeleteRecordsRequest) ctx.request()));
         map.put(ApiKeys.INCREMENTAL_ALTER_CONFIGS,
-            ctx -> adminApiHandler.generateIncrementalAlterConfigsResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateIncrementalAlterConfigsResponse(
+                ctx.header(), (IncrementalAlterConfigsRequest) ctx.request()));
         map.put(ApiKeys.ELECT_LEADERS,
-            ctx -> adminApiHandler.generateElectLeadersResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateElectLeadersResponse(
+                ctx.header(), (ElectLeadersRequest) ctx.request()));
         map.put(ApiKeys.DESCRIBE_LOG_DIRS,
-            ctx -> adminApiHandler.generateDescribeLogDirsResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateDescribeLogDirsResponse(
+                ctx.header(), (DescribeLogDirsRequest) ctx.request()));
         map.put(ApiKeys.ALTER_REPLICA_LOG_DIRS,
-            ctx -> adminApiHandler.generateAlterReplicaLogDirsResponse(ctx.header(), ctx.buffer()));
+            ctx -> adminApiHandler.generateAlterReplicaLogDirsResponse(
+                ctx.header(), (AlterReplicaLogDirsRequest) ctx.request()));
     }
 
     /**
@@ -566,11 +731,14 @@ public final class KafkaProtocolHandler {
      */
     private void registerAclHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
         map.put(ApiKeys.CREATE_ACLS,
-            ctx -> aclApiHandler.generateCreateAclsResponse(ctx.header(), ctx.buffer()));
+            ctx -> aclApiHandler.generateCreateAclsResponse(
+                ctx.header(), (CreateAclsRequest) ctx.request()));
         map.put(ApiKeys.DESCRIBE_ACLS,
-            ctx -> aclApiHandler.generateDescribeAclsResponse(ctx.header(), ctx.buffer()));
+            ctx -> aclApiHandler.generateDescribeAclsResponse(
+                ctx.header(), (DescribeAclsRequest) ctx.request()));
         map.put(ApiKeys.DELETE_ACLS,
-            ctx -> aclApiHandler.generateDeleteAclsResponse(ctx.header(), ctx.buffer()));
+            ctx -> aclApiHandler.generateDeleteAclsResponse(
+                ctx.header(), (DeleteAclsRequest) ctx.request()));
     }
 
     /**
@@ -580,36 +748,29 @@ public final class KafkaProtocolHandler {
      */
     private void registerTransactionHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
         map.put(ApiKeys.INIT_PRODUCER_ID,
-            ctx -> transactionApiHandler.generateInitProducerIdResponse(ctx.header(), ctx.buffer()));
+            ctx -> transactionApiHandler.generateInitProducerIdResponse(
+                ctx.header(), (InitProducerIdRequest) ctx.request()));
         map.put(ApiKeys.ADD_PARTITIONS_TO_TXN,
-            ctx -> transactionApiHandler.generateAddPartitionsToTxnResponse(ctx.header(), ctx.buffer()));
+            ctx -> transactionApiHandler.generateAddPartitionsToTxnResponse(
+                ctx.header(), (AddPartitionsToTxnRequest) ctx.request()));
         map.put(ApiKeys.ADD_OFFSETS_TO_TXN,
-            ctx -> transactionApiHandler.generateAddOffsetsToTxnResponse(ctx.header(), ctx.buffer()));
+            ctx -> transactionApiHandler.generateAddOffsetsToTxnResponse(
+                ctx.header(), (AddOffsetsToTxnRequest) ctx.request()));
         map.put(ApiKeys.END_TXN,
-            ctx -> transactionApiHandler.generateEndTxnResponse(ctx.header(), ctx.buffer()));
+            ctx -> transactionApiHandler.generateEndTxnResponse(
+                ctx.header(), (EndTxnRequest) ctx.request()));
         map.put(ApiKeys.WRITE_TXN_MARKERS,
-            ctx -> transactionApiHandler.generateWriteTxnMarkersResponse(ctx.header(), ctx.buffer()));
+            ctx -> transactionApiHandler.generateWriteTxnMarkersResponse(
+                ctx.header(), (WriteTxnMarkersRequest) ctx.request()));
         map.put(ApiKeys.TXN_OFFSET_COMMIT,
-            ctx -> transactionApiHandler.generateTxnOffsetCommitResponse(ctx.header(), ctx.buffer()));
+            ctx -> transactionApiHandler.generateTxnOffsetCommitResponse(
+                ctx.header(), (TxnOffsetCommitRequest) ctx.request()));
         map.put(ApiKeys.LIST_TRANSACTIONS,
-            ctx -> transactionApiHandler.generateListTransactionsResponse(ctx.header(), ctx.buffer()));
+            ctx -> transactionApiHandler.generateListTransactionsResponse(
+                ctx.header(), (ListTransactionsRequest) ctx.request()));
         map.put(ApiKeys.DESCRIBE_TRANSACTIONS,
-            ctx -> transactionApiHandler.generateDescribeTransactionsResponse(ctx.header(), ctx.buffer()));
-    }
-
-    /**
-     * Registers the telemetry API handlers, which return an {@code UNSUPPORTED_VERSION} response
-     * because telemetry collection is not implemented.
-     *
-     * @param map the mutable dispatcher map to populate
-     */
-    private void registerTelemetryHandlers(final Map<ApiKeys, ApiRequestHandler> map) {
-        final ApiRequestHandler telemetry = ctx -> {
-            log.debug("Telemetry API not supported: {}", ctx.apiKey());
-            return clusterApiHandler.generateUnsupportedResponse(ctx.header(), ctx.apiKey());
-        };
-        map.put(ApiKeys.GET_TELEMETRY_SUBSCRIPTIONS, telemetry);
-        map.put(ApiKeys.PUSH_TELEMETRY, telemetry);
+            ctx -> transactionApiHandler.generateDescribeTransactionsResponse(
+                ctx.header(), (DescribeTransactionsRequest) ctx.request()));
     }
 
     /**

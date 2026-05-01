@@ -8,8 +8,12 @@ import org.apache.kafka.common.message.FindCoordinatorResponseData;
 import org.apache.kafka.common.message.MetadataRequestData;
 import org.apache.kafka.common.message.MetadataResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.requests.AbstractRequest;
+import org.apache.kafka.common.requests.FindCoordinatorRequest;
+import org.apache.kafka.common.requests.MetadataRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,7 +88,8 @@ class ClusterApiHandlerTest {
         final var requestData = new MetadataRequestData();
         final var header = new RequestHeader(ApiKeys.METADATA, apiVersion, "test-client", 3);
 
-        final var response = handler.generateMetadataResponse(header, serializeRequest(requestData, apiVersion));
+        final MetadataRequest request = parseAs(ApiKeys.METADATA, apiVersion, requestData);
+        final var response = handler.generateMetadataResponse(header, request);
 
         assertThat(response).isNotNull().satisfies(buf -> assertThat(buf.remaining()).isPositive());
     }
@@ -99,7 +104,8 @@ class ClusterApiHandlerTest {
             .setTopics(of(topicRequest));
         final var header = new RequestHeader(ApiKeys.METADATA, apiVersion, "test-client", 3);
 
-        final var response = handler.generateMetadataResponse(header, serializeRequest(requestData, apiVersion));
+        final MetadataRequest request = parseAs(ApiKeys.METADATA, apiVersion, requestData);
+        final var response = handler.generateMetadataResponse(header, request);
 
         final var responseData = parseMetadataResponse(response, apiVersion);
         assertThat(responseData.topics().stream().map(MetadataResponseData.MetadataResponseTopic::name))
@@ -114,8 +120,8 @@ class ClusterApiHandlerTest {
             .setCoordinatorKeys(of("my-group"));
         final var header = new RequestHeader(ApiKeys.FIND_COORDINATOR, apiVersion, "test-client", 4);
 
-        final var response = handler.generateFindCoordinatorResponse(
-            header, serializeRequest(requestData, apiVersion));
+        final FindCoordinatorRequest request = parseAs(ApiKeys.FIND_COORDINATOR, apiVersion, requestData);
+        final var response = handler.generateFindCoordinatorResponse(header, request);
 
         assertThat(response).isNotNull().satisfies(buf -> assertThat(buf.remaining()).isPositive());
     }
@@ -128,8 +134,8 @@ class ClusterApiHandlerTest {
             .setCoordinatorKeys(of("my-group"));
         final var header = new RequestHeader(ApiKeys.FIND_COORDINATOR, apiVersion, "test-client", 4);
 
-        final var response = handler.generateFindCoordinatorResponse(
-            header, serializeRequest(requestData, apiVersion));
+        final FindCoordinatorRequest request = parseAs(ApiKeys.FIND_COORDINATOR, apiVersion, requestData);
+        final var response = handler.generateFindCoordinatorResponse(header, request);
 
         final var responseData = parseFindCoordinatorResponse(response, apiVersion);
         // For version >= 4, error code is on each coordinator entry
@@ -139,13 +145,19 @@ class ClusterApiHandlerTest {
 
     // --- helpers ---
 
-    private static ByteBuffer serializeRequest(
-            final org.apache.kafka.common.protocol.Message requestData, final short apiVersion) {
+    /**
+     * Serialises {@code data} and parses it back as the typed {@link AbstractRequest} the
+     * handler now expects, mirroring how {@code KafkaProtocolHandler.dispatchRequest}
+     * pre-parses the body before invoking a handler.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T extends AbstractRequest> T parseAs(
+            final ApiKeys apiKey, final short apiVersion, final ApiMessage data) {
         final var cache = new ObjectSerializationCache();
-        final var buffer = ByteBuffer.allocate(requestData.size(cache, apiVersion));
-        requestData.write(new ByteBufferAccessor(buffer), cache, apiVersion);
+        final var buffer = ByteBuffer.allocate(data.size(cache, apiVersion));
+        data.write(new ByteBufferAccessor(buffer), cache, apiVersion);
         buffer.flip();
-        return buffer;
+        return (T) AbstractRequest.parseRequest(apiKey, apiVersion, buffer).request;
     }
 
     private static ApiVersionsResponseData parseApiVersionsResponse(

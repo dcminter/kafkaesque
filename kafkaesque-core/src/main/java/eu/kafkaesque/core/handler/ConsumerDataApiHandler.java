@@ -13,17 +13,18 @@ import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.message.FetchRequestData;
 import org.apache.kafka.common.message.FetchResponseData;
-import org.apache.kafka.common.message.ListOffsetsRequestData;
 import org.apache.kafka.common.message.ListOffsetsResponseData;
-import org.apache.kafka.common.message.OffsetCommitRequestData;
 import org.apache.kafka.common.message.OffsetCommitResponseData;
 import org.apache.kafka.common.message.OffsetFetchRequestData;
 import org.apache.kafka.common.message.OffsetFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
-import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.TimestampType;
+import org.apache.kafka.common.requests.FetchRequest;
+import org.apache.kafka.common.requests.ListOffsetsRequest;
+import org.apache.kafka.common.requests.OffsetCommitRequest;
+import org.apache.kafka.common.requests.OffsetFetchRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
@@ -74,39 +75,32 @@ final class ConsumerDataApiHandler {
      * high-watermark for {@code LATEST} ({@code -1}) and specific timestamps.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed LIST_OFFSETS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateListOffsetsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new ListOffsetsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateListOffsetsResponse(final RequestHeader requestHeader, final ListOffsetsRequest request) {
+        final var data = request.data();
 
-            final var topicResponses = request.topics().stream()
-                .map(topic -> new ListOffsetsResponseData.ListOffsetsTopicResponse()
-                    .setName(topic.name())
-                    .setPartitions(topic.partitions().stream()
-                        .map(partition -> {
-                            final long offset = resolveListOffset(
-                                topic.name(), partition.partitionIndex(), partition.timestamp());
-                            return new ListOffsetsResponseData.ListOffsetsPartitionResponse()
-                                .setPartitionIndex(partition.partitionIndex())
-                                .setErrorCode((short) 0)
-                                .setTimestamp(partition.timestamp() >= 0 ? partition.timestamp() : -1L)
-                                .setOffset(offset)
-                                .setLeaderEpoch(-1);
-                        })
-                        .collect(toList())))
-                .collect(toList());
+        final var topicResponses = data.topics().stream()
+            .map(topic -> new ListOffsetsResponseData.ListOffsetsTopicResponse()
+                .setName(topic.name())
+                .setPartitions(topic.partitions().stream()
+                    .map(partition -> {
+                        final long offset = resolveListOffset(
+                            topic.name(), partition.partitionIndex(), partition.timestamp());
+                        return new ListOffsetsResponseData.ListOffsetsPartitionResponse()
+                            .setPartitionIndex(partition.partitionIndex())
+                            .setErrorCode((short) 0)
+                            .setTimestamp(partition.timestamp() >= 0 ? partition.timestamp() : -1L)
+                            .setOffset(offset)
+                            .setLeaderEpoch(-1);
+                    })
+                    .collect(toList())))
+            .collect(toList());
 
-            return serialize(requestHeader,
-                new ListOffsetsResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
-                ApiKeys.LIST_OFFSETS);
-
-        } catch (final Exception e) {
-            log.error("Error generating ListOffsets response", e);
-            return null;
-        }
+        return serialize(requestHeader,
+            new ListOffsetsResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
+            ApiKeys.LIST_OFFSETS);
     }
 
     /**
@@ -116,68 +110,54 @@ final class ConsumerDataApiHandler {
      * apply its configured {@code auto.offset.reset} policy (earliest in the tests).</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed OFFSET_FETCH request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateOffsetFetchResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new OffsetFetchRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateOffsetFetchResponse(final RequestHeader requestHeader, final OffsetFetchRequest request) {
+        final var requestData = request.data();
 
-            final var data = new OffsetFetchResponseData().setThrottleTimeMs(0);
+        final var data = new OffsetFetchResponseData().setThrottleTimeMs(0);
 
-            if (requestHeader.apiVersion() >= 8) {
-                final var groupResponses = request.groups().stream()
-                    .map(group -> buildOffsetFetchGroupResponse(group.groupId(), group.topics()))
-                    .collect(toList());
-                data.setGroups(groupResponses);
-            } else {
-                data.setTopics(buildOffsetFetchTopicResponses(request.groupId(), request.topics()));
-            }
-
-            return serialize(requestHeader, data, ApiKeys.OFFSET_FETCH);
-
-        } catch (final Exception e) {
-            log.error("Error generating OffsetFetch response", e);
-            return null;
+        if (requestHeader.apiVersion() >= 8) {
+            final var groupResponses = requestData.groups().stream()
+                .map(group -> buildOffsetFetchGroupResponse(group.groupId(), group.topics()))
+                .collect(toList());
+            data.setGroups(groupResponses);
+        } else {
+            data.setTopics(buildOffsetFetchTopicResponses(requestData.groupId(), requestData.topics()));
         }
+
+        return serialize(requestHeader, data, ApiKeys.OFFSET_FETCH);
     }
 
     /**
      * Generates an OFFSET_COMMIT response, persisting the committed offsets.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed OFFSET_COMMIT request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateOffsetCommitResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new OffsetCommitRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateOffsetCommitResponse(final RequestHeader requestHeader, final OffsetCommitRequest request) {
+        final var data = request.data();
 
-            final var topicResponses = request.topics().stream()
-                .map(topic -> new OffsetCommitResponseData.OffsetCommitResponseTopic()
-                    .setName(topic.name())
-                    .setPartitions(topic.partitions().stream()
-                        .map(partition -> {
-                            groupCoordinator.commitOffset(
-                                request.groupId(), topic.name(),
-                                partition.partitionIndex(), partition.committedOffset());
-                            return new OffsetCommitResponseData.OffsetCommitResponsePartition()
-                                .setPartitionIndex(partition.partitionIndex())
-                                .setErrorCode((short) 0);
-                        })
-                        .collect(toList())))
-                .collect(toList());
+        final var topicResponses = data.topics().stream()
+            .map(topic -> new OffsetCommitResponseData.OffsetCommitResponseTopic()
+                .setName(topic.name())
+                .setPartitions(topic.partitions().stream()
+                    .map(partition -> {
+                        groupCoordinator.commitOffset(
+                            data.groupId(), topic.name(),
+                            partition.partitionIndex(), partition.committedOffset());
+                        return new OffsetCommitResponseData.OffsetCommitResponsePartition()
+                            .setPartitionIndex(partition.partitionIndex())
+                            .setErrorCode((short) 0);
+                    })
+                    .collect(toList())))
+            .collect(toList());
 
-            return serialize(requestHeader,
-                new OffsetCommitResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
-                ApiKeys.OFFSET_COMMIT);
-
-        } catch (final Exception e) {
-            log.error("Error generating OffsetCommit response", e);
-            return null;
-        }
+        return serialize(requestHeader,
+            new OffsetCommitResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
+            ApiKeys.OFFSET_COMMIT);
     }
 
     /**
@@ -205,30 +185,23 @@ final class ConsumerDataApiHandler {
      * </ul>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed FETCH request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateFetchResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new FetchRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateFetchResponse(final RequestHeader requestHeader, final FetchRequest request) {
+        final var data = request.data();
 
-            final int sessionId = request.sessionId();
-            final int epoch = request.sessionEpoch();
+        final int sessionId = data.sessionId();
+        final int epoch = data.sessionEpoch();
 
-            if (sessionId == 0 && epoch == INITIAL_EPOCH) {
-                return generateFullFetchResponse(requestHeader, request, true);
-            } else if (sessionId == 0) {
-                return generateFullFetchResponse(requestHeader, request, false);
-            } else if (epoch == FINAL_EPOCH) {
-                return generateSessionCloseFetchResponse(requestHeader, request);
-            } else {
-                return generateIncrementalFetchResponse(requestHeader, request, sessionId, epoch);
-            }
-
-        } catch (final Exception e) {
-            log.error("Error generating Fetch response", e);
-            return null;
+        if (sessionId == 0 && epoch == INITIAL_EPOCH) {
+            return generateFullFetchResponse(requestHeader, data, true);
+        } else if (sessionId == 0) {
+            return generateFullFetchResponse(requestHeader, data, false);
+        } else if (epoch == FINAL_EPOCH) {
+            return generateSessionCloseFetchResponse(requestHeader, data);
+        } else {
+            return generateIncrementalFetchResponse(requestHeader, data, sessionId, epoch);
         }
     }
 

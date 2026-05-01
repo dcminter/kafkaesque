@@ -8,10 +8,11 @@ import org.apache.kafka.common.message.CreateAclsRequestData;
 import org.apache.kafka.common.message.CreateAclsResponseData;
 import org.apache.kafka.common.message.DeleteAclsRequestData;
 import org.apache.kafka.common.message.DeleteAclsResponseData;
-import org.apache.kafka.common.message.DescribeAclsRequestData;
 import org.apache.kafka.common.message.DescribeAclsResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
-import org.apache.kafka.common.protocol.ByteBufferAccessor;
+import org.apache.kafka.common.requests.CreateAclsRequest;
+import org.apache.kafka.common.requests.DeleteAclsRequest;
+import org.apache.kafka.common.requests.DescribeAclsRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
@@ -30,6 +31,10 @@ import static eu.kafkaesque.core.handler.ResponseSerializer.serialize;
  * {@link AclStore}, and builds the corresponding response messages. No access
  * control enforcement is performed; the handler only manages ACL binding CRUD.</p>
  *
+ * <p>Errors that escape these methods propagate to {@link KafkaProtocolHandler}, which
+ * turns them into a properly-shaped Kafka error response via the request's own
+ * {@code getErrorResponse}.</p>
+ *
  * @see AclStore
  * @see KafkaProtocolHandler
  */
@@ -47,27 +52,21 @@ final class AclApiHandler {
      * (error code 0) is returned.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or {@code null} on error
+     * @param request       the parsed CREATE_ACLS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateCreateAclsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new CreateAclsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateCreateAclsResponse(final RequestHeader requestHeader, final CreateAclsRequest request) {
+        final var data = request.data();
 
-            final var results = request.creations().stream()
-                .map(this::createAndBuildResult)
-                .collect(toList());
+        final var results = data.creations().stream()
+            .map(this::createAndBuildResult)
+            .collect(toList());
 
-            final var response = new CreateAclsResponseData()
-                .setThrottleTimeMs(0)
-                .setResults(results);
+        final var response = new CreateAclsResponseData()
+            .setThrottleTimeMs(0)
+            .setResults(results);
 
-            return serialize(requestHeader, response, ApiKeys.CREATE_ACLS);
-        } catch (final Exception e) {
-            log.error("Error generating CreateAcls response", e);
-            return null;
-        }
+        return serialize(requestHeader, response, ApiKeys.CREATE_ACLS);
     }
 
     /**
@@ -77,32 +76,26 @@ final class AclApiHandler {
      * into {@link DescribeAclsResponseData.DescribeAclsResource} entries.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or {@code null} on error
+     * @param request       the parsed DESCRIBE_ACLS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateDescribeAclsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new DescribeAclsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateDescribeAclsResponse(final RequestHeader requestHeader, final DescribeAclsRequest request) {
+        final var data = request.data();
 
-            final var matched = aclStore.findMatchingBindings(
-                request.resourceTypeFilter(), request.resourceNameFilter(),
-                request.patternTypeFilter(), request.principalFilter(),
-                request.hostFilter(), request.operation(), request.permissionType());
+        final var matched = aclStore.findMatchingBindings(
+            data.resourceTypeFilter(), data.resourceNameFilter(),
+            data.patternTypeFilter(), data.principalFilter(),
+            data.hostFilter(), data.operation(), data.permissionType());
 
-            final var resources = groupBindingsIntoResources(matched);
+        final var resources = groupBindingsIntoResources(matched);
 
-            final var response = new DescribeAclsResponseData()
-                .setThrottleTimeMs(0)
-                .setErrorCode((short) 0)
-                .setErrorMessage(null)
-                .setResources(resources);
+        final var response = new DescribeAclsResponseData()
+            .setThrottleTimeMs(0)
+            .setErrorCode((short) 0)
+            .setErrorMessage(null)
+            .setResources(resources);
 
-            return serialize(requestHeader, response, ApiKeys.DESCRIBE_ACLS);
-        } catch (final Exception e) {
-            log.error("Error generating DescribeAcls response", e);
-            return null;
-        }
+        return serialize(requestHeader, response, ApiKeys.DESCRIBE_ACLS);
     }
 
     /**
@@ -113,27 +106,21 @@ final class AclApiHandler {
      * each filter, listing the bindings that were removed.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or {@code null} on error
+     * @param request       the parsed DELETE_ACLS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateDeleteAclsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new DeleteAclsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateDeleteAclsResponse(final RequestHeader requestHeader, final DeleteAclsRequest request) {
+        final var data = request.data();
 
-            final var filterResults = request.filters().stream()
-                .map(this::deleteAndBuildFilterResult)
-                .collect(toList());
+        final var filterResults = data.filters().stream()
+            .map(this::deleteAndBuildFilterResult)
+            .collect(toList());
 
-            final var response = new DeleteAclsResponseData()
-                .setThrottleTimeMs(0)
-                .setFilterResults(filterResults);
+        final var response = new DeleteAclsResponseData()
+            .setThrottleTimeMs(0)
+            .setFilterResults(filterResults);
 
-            return serialize(requestHeader, response, ApiKeys.DELETE_ACLS);
-        } catch (final Exception e) {
-            log.error("Error generating DeleteAcls response", e);
-            return null;
-        }
+        return serialize(requestHeader, response, ApiKeys.DELETE_ACLS);
     }
 
     /**

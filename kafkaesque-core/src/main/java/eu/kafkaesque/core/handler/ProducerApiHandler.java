@@ -11,10 +11,10 @@ import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.message.ProduceRequestData;
 import org.apache.kafka.common.message.ProduceResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
-import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.RecordBatch;
+import org.apache.kafka.common.requests.ProduceRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.nio.ByteBuffer;
@@ -84,35 +84,28 @@ final class ProducerApiHandler {
      * Generates a PRODUCE response after storing all published records.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed PRODUCE request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateProduceResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var produceRequest = new ProduceRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateProduceResponse(final RequestHeader requestHeader, final ProduceRequest request) {
+        final var produceRequest = request.data();
 
-            final var transactionalId = produceRequest.transactionalId();
-            final var isTransactional = transactionalId != null && !transactionalId.isBlank();
+        final var transactionalId = produceRequest.transactionalId();
+        final var isTransactional = transactionalId != null && !transactionalId.isBlank();
 
-            log.info("Received PRODUCE request: transactionalId={}, acks={}, timeoutMs={}",
-                transactionalId, produceRequest.acks(), produceRequest.timeoutMs());
+        log.info("Received PRODUCE request: transactionalId={}, acks={}, timeoutMs={}",
+            transactionalId, produceRequest.acks(), produceRequest.timeoutMs());
 
-            final var topicResponses = new ProduceResponseData.TopicProduceResponseCollection();
-            produceRequest.topicData().stream()
-                .map(topicData -> buildTopicResponse(topicData, transactionalId, isTransactional))
-                .forEach(topicResponses::add);
+        final var topicResponses = new ProduceResponseData.TopicProduceResponseCollection();
+        produceRequest.topicData().stream()
+            .map(topicData -> buildTopicResponse(topicData, transactionalId, isTransactional))
+            .forEach(topicResponses::add);
 
-            final var response = new ProduceResponseData()
-                .setThrottleTimeMs(0)
-                .setResponses(topicResponses);
+        final var response = new ProduceResponseData()
+            .setThrottleTimeMs(0)
+            .setResponses(topicResponses);
 
-            return serialize(requestHeader, response, ApiKeys.PRODUCE);
-
-        } catch (final Exception e) {
-            log.error("Error generating Produce response", e);
-            return null;
-        }
+        return serialize(requestHeader, response, ApiKeys.PRODUCE);
     }
 
     /**

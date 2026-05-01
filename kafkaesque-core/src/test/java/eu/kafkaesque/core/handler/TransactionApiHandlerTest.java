@@ -10,9 +10,11 @@ import org.apache.kafka.common.message.InitProducerIdResponseData;
 import org.apache.kafka.common.message.ListTransactionsRequestData;
 import org.apache.kafka.common.message.ListTransactionsResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Message;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,7 +50,8 @@ class TransactionApiHandlerTest {
             .setTransactionTimeoutMs(60000);
         final var header = new RequestHeader(ApiKeys.INIT_PRODUCER_ID, apiVersion, "test-client", 1);
 
-        final var response = handler.generateInitProducerIdResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateInitProducerIdResponse(header,
+            parseAs(ApiKeys.INIT_PRODUCER_ID, apiVersion, requestData));
 
         assertThat(response).isNotNull().satisfies(buf -> assertThat(buf.remaining()).isPositive());
     }
@@ -61,7 +64,8 @@ class TransactionApiHandlerTest {
             .setTransactionTimeoutMs(60000);
         final var header = new RequestHeader(ApiKeys.INIT_PRODUCER_ID, apiVersion, "test-client", 1);
 
-        final var response = handler.generateInitProducerIdResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateInitProducerIdResponse(header,
+            parseAs(ApiKeys.INIT_PRODUCER_ID, apiVersion, requestData));
 
         final var responseData = parseInitProducerIdResponse(response, apiVersion);
         assertThat(responseData.errorCode()).isZero();
@@ -78,8 +82,10 @@ class TransactionApiHandlerTest {
         final var header1 = new RequestHeader(ApiKeys.INIT_PRODUCER_ID, apiVersion, "test-client", 1);
         final var header2 = new RequestHeader(ApiKeys.INIT_PRODUCER_ID, apiVersion, "test-client", 2);
 
-        final var response1 = handler.generateInitProducerIdResponse(header1, serialize(requestData, apiVersion));
-        final var response2 = handler.generateInitProducerIdResponse(header2, serialize(requestData, apiVersion));
+        final var response1 = handler.generateInitProducerIdResponse(header1,
+            parseAs(ApiKeys.INIT_PRODUCER_ID, apiVersion, requestData));
+        final var response2 = handler.generateInitProducerIdResponse(header2,
+            parseAs(ApiKeys.INIT_PRODUCER_ID, apiVersion, requestData));
 
         final var data1 = parseInitProducerIdResponse(response1, apiVersion);
         final var data2 = parseInitProducerIdResponse(response2, apiVersion);
@@ -97,7 +103,8 @@ class TransactionApiHandlerTest {
             .setCommitted(true);
         final var header = new RequestHeader(ApiKeys.END_TXN, apiVersion, "test-client", 3);
 
-        final var response = handler.generateEndTxnResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateEndTxnResponse(header,
+            parseAs(ApiKeys.END_TXN, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseEndTxnResponse(response, apiVersion);
@@ -114,21 +121,12 @@ class TransactionApiHandlerTest {
             .setCommitted(false);
         final var header = new RequestHeader(ApiKeys.END_TXN, apiVersion, "test-client", 4);
 
-        final var response = handler.generateEndTxnResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateEndTxnResponse(header,
+            parseAs(ApiKeys.END_TXN, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseEndTxnResponse(response, apiVersion);
         assertThat(responseData.errorCode()).isZero();
-    }
-
-    @Test
-    void generateInitProducerIdResponse_withMalformedBuffer_shouldReturnNull() {
-        final var header = new RequestHeader(ApiKeys.INIT_PRODUCER_ID,
-            ApiKeys.INIT_PRODUCER_ID.latestVersion(), "test-client", 1);
-
-        final var response = handler.generateInitProducerIdResponse(header, ByteBuffer.allocate(0));
-
-        assertThat(response).isNull();
     }
 
     @Test
@@ -139,14 +137,16 @@ class TransactionApiHandlerTest {
             .setTransactionalId("txn-A")
             .setTransactionTimeoutMs(60000);
         final var initHeader = new RequestHeader(ApiKeys.INIT_PRODUCER_ID, initVersion, "test-client", 1);
-        handler.generateInitProducerIdResponse(initHeader, serialize(initRequest, initVersion));
+        handler.generateInitProducerIdResponse(initHeader,
+            parseAs(ApiKeys.INIT_PRODUCER_ID, initVersion, initRequest));
 
         // List transactions
         final var apiVersion = ApiKeys.LIST_TRANSACTIONS.latestVersion();
         final var requestData = new ListTransactionsRequestData();
         final var header = new RequestHeader(ApiKeys.LIST_TRANSACTIONS, apiVersion, "test-client", 10);
 
-        final var response = handler.generateListTransactionsResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateListTransactionsResponse(header,
+            parseAs(ApiKeys.LIST_TRANSACTIONS, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseListTransactionsResponse(response, apiVersion);
@@ -165,7 +165,8 @@ class TransactionApiHandlerTest {
             .setTransactionalId("txn-X")
             .setTransactionTimeoutMs(60000);
         final var initHeader = new RequestHeader(ApiKeys.INIT_PRODUCER_ID, initVersion, "test-client", 1);
-        handler.generateInitProducerIdResponse(initHeader, serialize(initRequest, initVersion));
+        handler.generateInitProducerIdResponse(initHeader,
+            parseAs(ApiKeys.INIT_PRODUCER_ID, initVersion, initRequest));
 
         // Describe transactions
         final var apiVersion = ApiKeys.DESCRIBE_TRANSACTIONS.latestVersion();
@@ -175,7 +176,7 @@ class TransactionApiHandlerTest {
             ApiKeys.DESCRIBE_TRANSACTIONS, apiVersion, "test-client", 11);
 
         final var response = handler.generateDescribeTransactionsResponse(
-            header, serialize(requestData, apiVersion));
+            header, parseAs(ApiKeys.DESCRIBE_TRANSACTIONS, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseDescribeTransactionsResponse(response, apiVersion);
@@ -203,6 +204,17 @@ class TransactionApiHandlerTest {
         requestData.write(new ByteBufferAccessor(buffer), cache, apiVersion);
         buffer.flip();
         return buffer;
+    }
+
+    /**
+     * Serialises {@code data} and parses it back as the typed {@link AbstractRequest} the
+     * handler now expects, mirroring how {@code KafkaProtocolHandler.dispatchRequest}
+     * pre-parses the body before invoking a handler.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T extends AbstractRequest> T parseAs(
+            final ApiKeys apiKey, final short apiVersion, final ApiMessage data) {
+        return (T) AbstractRequest.parseRequest(apiKey, apiVersion, serialize((Message) data, apiVersion)).request;
     }
 
     private static InitProducerIdResponseData parseInitProducerIdResponse(

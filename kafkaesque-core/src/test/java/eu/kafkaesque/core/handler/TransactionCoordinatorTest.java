@@ -121,6 +121,41 @@ class TransactionCoordinatorTest {
     }
 
     @Test
+    void getProducerIdAndEpoch_forUnknownTransactionalId_shouldReturnEmpty() {
+        // Codifies the contract documented on TransactionCoordinator.getProducerIdAndEpoch:
+        // unknown transactional IDs yield Optional.empty() rather than throwing.
+        // (See BUGS.md item 3.)
+        assertThat(coordinator.getProducerIdAndEpoch("never-seen-this-id")).isEmpty();
+    }
+
+    @Test
+    void getProducerIdAndEpoch_afterInit_shouldReturnAssignedValues() {
+        final var assigned = coordinator.initProducerId("known-txn");
+
+        final var lookup = coordinator.getProducerIdAndEpoch("known-txn");
+
+        assertThat(lookup).hasValueSatisfying(idAndEpoch -> {
+            assertThat(idAndEpoch.producerId()).isEqualTo(assigned.producerId());
+            assertThat(idAndEpoch.epoch()).isEqualTo(assigned.epoch());
+        });
+    }
+
+    @Test
+    void getProducerIdAndEpoch_forEveryIdReturnedByGetTransactionalIds_shouldNeverBeEmpty() {
+        // Documents the call-site invariant relied on by
+        // TransactionApiHandler.generateListTransactionsResponse: any ID returned by
+        // getTransactionalIds() must resolve via getProducerIdAndEpoch on the same thread.
+        coordinator.initProducerId("txn-a");
+        coordinator.initProducerId("txn-b");
+
+        for (final var id : coordinator.getTransactionalIds()) {
+            assertThat(coordinator.getProducerIdAndEpoch(id))
+                .as("getTransactionalIds() returned %s, but getProducerIdAndEpoch found nothing", id)
+                .isPresent();
+        }
+    }
+
+    @Test
     void clear_shouldRemoveAllProducerState() {
         coordinator.initProducerId("txn-1");
         coordinator.addPendingOffsetCommit("txn-1", "group-1", "topic-a", 0, 1L);
