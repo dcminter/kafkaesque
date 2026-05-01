@@ -15,9 +15,11 @@ import org.apache.kafka.common.message.ListGroupsResponseData;
 import org.apache.kafka.common.message.SyncGroupRequestData;
 import org.apache.kafka.common.message.SyncGroupResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Message;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,7 +63,7 @@ class ConsumerGroupApiHandlerTest {
         final var header = new RequestHeader(ApiKeys.JOIN_GROUP, apiVersion, "test-client", 1);
 
         final var immediate = handler.generateJoinGroupResponse(
-            header, serialize(requestData, apiVersion), null, validKey());
+            header, parseAs(ApiKeys.JOIN_GROUP, apiVersion, requestData), null, validKey());
 
         assertThat(immediate).isNull();
 
@@ -82,7 +84,7 @@ class ConsumerGroupApiHandlerTest {
         final var header = new RequestHeader(ApiKeys.JOIN_GROUP, apiVersion, "test-client", 1);
 
         handler.generateJoinGroupResponse(
-            header, serialize(requestData, apiVersion), null, validKey());
+            header, parseAs(ApiKeys.JOIN_GROUP, apiVersion, requestData), null, validKey());
 
         assertThat(groupCoordinator.getGenerationId("test-group")).isEqualTo(1);
     }
@@ -95,12 +97,12 @@ class ConsumerGroupApiHandlerTest {
 
         handler.generateJoinGroupResponse(
             headerA,
-            serialize(buildJoinGroupRequest("shared-group", ""), apiVersion),
+            parseAs(ApiKeys.JOIN_GROUP, apiVersion, buildJoinGroupRequest("shared-group", "")),
             null,
             validKey());
         handler.generateJoinGroupResponse(
             headerB,
-            serialize(buildJoinGroupRequest("shared-group", ""), apiVersion),
+            parseAs(ApiKeys.JOIN_GROUP, apiVersion, buildJoinGroupRequest("shared-group", "")),
             null,
             validKey());
 
@@ -138,7 +140,7 @@ class ConsumerGroupApiHandlerTest {
         final var joinHeader = new RequestHeader(ApiKeys.JOIN_GROUP, joinApiVersion, "client", 1);
         handler.generateJoinGroupResponse(
             joinHeader,
-            serialize(buildJoinGroupRequest("group-1", ""), joinApiVersion),
+            parseAs(ApiKeys.JOIN_GROUP, joinApiVersion, buildJoinGroupRequest("group-1", "")),
             null,
             validKey());
 
@@ -152,7 +154,7 @@ class ConsumerGroupApiHandlerTest {
         final var syncHeader = new RequestHeader(ApiKeys.SYNC_GROUP, syncApiVersion, "client", 2);
 
         final var response = handler.generateSyncGroupResponse(
-            syncHeader, serialize(syncRequestData, syncApiVersion), null, validKey());
+            syncHeader, parseAs(ApiKeys.SYNC_GROUP, syncApiVersion, syncRequestData), null, validKey());
 
         assertThat(response).isNotNull();
         final var responseData = parseSyncGroupResponse(response, syncApiVersion);
@@ -166,7 +168,8 @@ class ConsumerGroupApiHandlerTest {
             .setGroupId("my-group").setGenerationId(1).setMemberId("member-1");
         final var header = new RequestHeader(ApiKeys.HEARTBEAT, apiVersion, "test-client", 3);
 
-        final var response = handler.generateHeartbeatResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateHeartbeatResponse(header,
+            parseAs(ApiKeys.HEARTBEAT, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseHeartbeatResponse(response, apiVersion);
@@ -181,7 +184,8 @@ class ConsumerGroupApiHandlerTest {
             .setMembers(of(new LeaveGroupRequestData.MemberIdentity().setMemberId("member-1")));
         final var header = new RequestHeader(ApiKeys.LEAVE_GROUP, apiVersion, "test-client", 4);
 
-        final var response = handler.generateLeaveGroupResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateLeaveGroupResponse(header,
+            parseAs(ApiKeys.LEAVE_GROUP, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseLeaveGroupResponse(response, apiVersion);
@@ -197,7 +201,8 @@ class ConsumerGroupApiHandlerTest {
         final var requestData = new ListGroupsRequestData();
         final var header = new RequestHeader(ApiKeys.LIST_GROUPS, apiVersion, "test-client", 10);
 
-        final var response = handler.generateListGroupsResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateListGroupsResponse(header,
+            parseAs(ApiKeys.LIST_GROUPS, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseListGroupsResponse(response, apiVersion);
@@ -219,7 +224,7 @@ class ConsumerGroupApiHandlerTest {
             ApiKeys.CONSUMER_GROUP_DESCRIBE, apiVersion, "test-client", 11);
 
         final var response = handler.generateConsumerGroupDescribeResponse(
-            header, serialize(requestData, apiVersion));
+            header, parseAs(ApiKeys.CONSUMER_GROUP_DESCRIBE, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseConsumerGroupDescribeResponse(response, apiVersion);
@@ -240,7 +245,8 @@ class ConsumerGroupApiHandlerTest {
             .setGroupsNames(of("doomed-group"));
         final var header = new RequestHeader(ApiKeys.DELETE_GROUPS, apiVersion, "test-client", 12);
 
-        final var response = handler.generateDeleteGroupsResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateDeleteGroupsResponse(header,
+            parseAs(ApiKeys.DELETE_GROUPS, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseDeleteGroupsResponse(response, apiVersion);
@@ -271,6 +277,17 @@ class ConsumerGroupApiHandlerTest {
         requestData.write(new ByteBufferAccessor(buffer), cache, apiVersion);
         buffer.flip();
         return buffer;
+    }
+
+    /**
+     * Serialises {@code data} and parses it back as the typed {@link AbstractRequest} the
+     * handler now expects, mirroring how {@code KafkaProtocolHandler.dispatchRequest}
+     * pre-parses the body before invoking a handler.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T extends AbstractRequest> T parseAs(
+            final ApiKeys apiKey, final short apiVersion, final ApiMessage data) {
+        return (T) AbstractRequest.parseRequest(apiKey, apiVersion, serialize((Message) data, apiVersion)).request;
     }
 
     private static JoinGroupResponseData parseJoinGroupResponse(

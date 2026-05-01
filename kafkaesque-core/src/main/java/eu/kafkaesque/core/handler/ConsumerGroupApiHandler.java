@@ -5,25 +5,25 @@ import lombok.EqualsAndHashCode;
 import lombok.RequiredArgsConstructor;
 import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.common.message.ConsumerGroupDescribeRequestData;
 import org.apache.kafka.common.message.ConsumerGroupDescribeResponseData;
-import org.apache.kafka.common.message.DeleteGroupsRequestData;
 import org.apache.kafka.common.message.DeleteGroupsResponseData;
-import org.apache.kafka.common.message.DescribeGroupsRequestData;
 import org.apache.kafka.common.message.DescribeGroupsResponseData;
-import org.apache.kafka.common.message.HeartbeatRequestData;
 import org.apache.kafka.common.message.HeartbeatResponseData;
-import org.apache.kafka.common.message.JoinGroupRequestData;
 import org.apache.kafka.common.message.JoinGroupResponseData;
-import org.apache.kafka.common.message.LeaveGroupRequestData;
 import org.apache.kafka.common.message.LeaveGroupResponseData;
-import org.apache.kafka.common.message.ListGroupsRequestData;
 import org.apache.kafka.common.message.ListGroupsResponseData;
 import org.apache.kafka.common.message.SyncGroupRequestData;
 import org.apache.kafka.common.message.SyncGroupResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
-import org.apache.kafka.common.protocol.ByteBufferAccessor;
+import org.apache.kafka.common.requests.ConsumerGroupDescribeRequest;
+import org.apache.kafka.common.requests.DeleteGroupsRequest;
+import org.apache.kafka.common.requests.DescribeGroupsRequest;
+import org.apache.kafka.common.requests.HeartbeatRequest;
+import org.apache.kafka.common.requests.JoinGroupRequest;
+import org.apache.kafka.common.requests.LeaveGroupRequest;
+import org.apache.kafka.common.requests.ListGroupsRequest;
 import org.apache.kafka.common.requests.RequestHeader;
+import org.apache.kafka.common.requests.SyncGroupRequest;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -306,43 +306,38 @@ final class ConsumerGroupApiHandler {
      * members in the same group have joined (or the window expires).</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
+     * @param request       the parsed JOIN_GROUP request
      * @param connection    the client connection for this member
      * @param selectionKey  the NIO selection key for this connection
      * @return always {@code null} — response is deferred
      */
     ByteBuffer generateJoinGroupResponse(
             final RequestHeader requestHeader,
-            final ByteBuffer buffer,
+            final JoinGroupRequest request,
             final ClientConnection connection,
             final SelectionKey selectionKey) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new JoinGroupRequestData(accessor, requestHeader.apiVersion());
+        final var data = request.data();
 
-            final var protocol = request.protocols().iterator().next();
-            final var memberId = groupCoordinator.joinGroup(
-                request.groupId(), request.memberId(), protocol.metadata());
+        final var protocol = data.protocols().iterator().next();
+        final var memberId = groupCoordinator.joinGroup(
+            data.groupId(), data.memberId(), protocol.metadata());
 
-            final var pending = new PendingJoin(
-                memberId,
-                protocol.metadata(),
-                protocol.name(),
-                requestHeader,
-                connection,
-                selectionKey);
+        final var pending = new PendingJoin(
+            memberId,
+            protocol.metadata(),
+            protocol.name(),
+            requestHeader,
+            connection,
+            selectionKey);
 
-            pendingJoins.computeIfAbsent(request.groupId(), k -> new ArrayList<>()).add(pending);
+        pendingJoins.computeIfAbsent(data.groupId(), k -> new ArrayList<>()).add(pending);
 
-            // Schedule the rebalance-completion timer only once per group rebalance window.
-            rebalanceTimers.computeIfAbsent(request.groupId(), gid ->
-                scheduler.schedule(() -> completeRebalance(gid), REBALANCE_WINDOW_MS, TimeUnit.MILLISECONDS));
+        // Schedule the rebalance-completion timer only once per group rebalance window.
+        rebalanceTimers.computeIfAbsent(data.groupId(), gid ->
+            scheduler.schedule(() -> completeRebalance(gid), REBALANCE_WINDOW_MS, TimeUnit.MILLISECONDS));
 
-            log.debug("JoinGroup deferred: group={}, member={}", request.groupId(), memberId);
+        log.debug("JoinGroup deferred: group={}, member={}", data.groupId(), memberId);
 
-        } catch (final Exception e) {
-            log.error("Error processing JoinGroup request", e);
-        }
         return null;
     }
 
@@ -435,57 +430,50 @@ final class ConsumerGroupApiHandler {
      * response is deferred until the leader syncs or a timeout expires.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
+     * @param request       the parsed SYNC_GROUP request
      * @param connection    the client connection for this member
      * @param selectionKey  the NIO selection key for this connection
      * @return the serialised response buffer, or null when the response is deferred
      */
     ByteBuffer generateSyncGroupResponse(
-            final RequestHeader requestHeader, final ByteBuffer buffer,
+            final RequestHeader requestHeader, final SyncGroupRequest request,
             final ClientConnection connection, final SelectionKey selectionKey) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new SyncGroupRequestData(accessor, requestHeader.apiVersion());
-            final var protocolName = request.protocolName() != null ? request.protocolName() : "range";
+        final var data = request.data();
+        final var protocolName = data.protocolName() != null ? data.protocolName() : "range";
 
-            if (!request.assignments().isEmpty()) {
-                final var assignments = request.assignments().stream()
-                    .collect(Collectors.toMap(
-                        SyncGroupRequestData.SyncGroupRequestAssignment::memberId,
-                        SyncGroupRequestData.SyncGroupRequestAssignment::assignment));
-                groupCoordinator.syncGroup(request.groupId(), assignments);
-                completePendingSyncs(request.groupId());
-            }
+        if (!data.assignments().isEmpty()) {
+            final var assignments = data.assignments().stream()
+                .collect(Collectors.toMap(
+                    SyncGroupRequestData.SyncGroupRequestAssignment::memberId,
+                    SyncGroupRequestData.SyncGroupRequestAssignment::assignment));
+            groupCoordinator.syncGroup(data.groupId(), assignments);
+            completePendingSyncs(data.groupId());
+        }
 
-            final var assignment = groupCoordinator.getMemberAssignment(
-                request.groupId(), request.memberId());
+        final var assignment = groupCoordinator.getMemberAssignment(
+            data.groupId(), data.memberId());
 
-            final var isKnownFollower = assignment.length == 0
-                && groupCoordinator.hasGroup(request.groupId())
-                && groupCoordinator.getMemberCount(request.groupId()) > 1
-                && !request.memberId().equals(groupCoordinator.getLeader(request.groupId()));
-            if (isKnownFollower && selectionKey != null) {
-                // Follower arrived before leader — defer until leader syncs or timeout
-                pendingSyncs.computeIfAbsent(request.groupId(), k -> new ArrayList<>())
-                    .add(new PendingSync(
-                        request.groupId(), request.memberId(), protocolName,
-                        requestHeader, connection, selectionKey));
-                scheduler.schedule(
-                    () -> completePendingSyncs(request.groupId()),
-                    SYNC_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-                log.debug("SyncGroup deferred: group={}, member={}", request.groupId(), request.memberId());
-                return null;
-            }
-
-            log.debug("SyncGroup: group={}, member={}, assignmentBytes={}",
-                request.groupId(), request.memberId(), assignment.length);
-
-            return buildSyncGroupResponse(requestHeader, protocolName, assignment);
-
-        } catch (final Exception e) {
-            log.error("Error generating SyncGroup response", e);
+        final var isKnownFollower = assignment.length == 0
+            && groupCoordinator.hasGroup(data.groupId())
+            && groupCoordinator.getMemberCount(data.groupId()) > 1
+            && !data.memberId().equals(groupCoordinator.getLeader(data.groupId()));
+        if (isKnownFollower && selectionKey != null) {
+            // Follower arrived before leader — defer until leader syncs or timeout
+            pendingSyncs.computeIfAbsent(data.groupId(), k -> new ArrayList<>())
+                .add(new PendingSync(
+                    data.groupId(), data.memberId(), protocolName,
+                    requestHeader, connection, selectionKey));
+            scheduler.schedule(
+                () -> completePendingSyncs(data.groupId()),
+                SYNC_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            log.debug("SyncGroup deferred: group={}, member={}", data.groupId(), data.memberId());
             return null;
         }
+
+        log.debug("SyncGroup: group={}, member={}, assignmentBytes={}",
+            data.groupId(), data.memberId(), assignment.length);
+
+        return buildSyncGroupResponse(requestHeader, protocolName, assignment);
     }
 
     /**
@@ -535,23 +523,16 @@ final class ConsumerGroupApiHandler {
      * Generates a HEARTBEAT response acknowledging consumer liveness.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed HEARTBEAT request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateHeartbeatResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new HeartbeatRequestData(accessor, requestHeader.apiVersion());
-            log.debug("Heartbeat: group={}, member={}", request.groupId(), request.memberId());
+    ByteBuffer generateHeartbeatResponse(final RequestHeader requestHeader, final HeartbeatRequest request) {
+        final var data = request.data();
+        log.debug("Heartbeat: group={}, member={}", data.groupId(), data.memberId());
 
-            return serialize(requestHeader,
-                new HeartbeatResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
-                ApiKeys.HEARTBEAT);
-
-        } catch (final Exception e) {
-            log.error("Error generating Heartbeat response", e);
-            return null;
-        }
+        return serialize(requestHeader,
+            new HeartbeatResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
+            ApiKeys.HEARTBEAT);
     }
 
     /**
@@ -559,60 +540,49 @@ final class ConsumerGroupApiHandler {
      * the departing members from the group.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed LEAVE_GROUP request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateLeaveGroupResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new LeaveGroupRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateLeaveGroupResponse(final RequestHeader requestHeader, final LeaveGroupRequest request) {
+        final var data = request.data();
 
-            for (final var member : request.members()) {
-                groupCoordinator.removeMember(request.groupId(), member.memberId());
-            }
-
-            log.debug("LeaveGroup: group={}", request.groupId());
-
-            return serialize(requestHeader,
-                new LeaveGroupResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
-                ApiKeys.LEAVE_GROUP);
-
-        } catch (final Exception e) {
-            log.error("Error generating LeaveGroup response", e);
-            return null;
+        for (final var member : data.members()) {
+            groupCoordinator.removeMember(data.groupId(), member.memberId());
         }
+
+        log.debug("LeaveGroup: group={}", data.groupId());
+
+        return serialize(requestHeader,
+            new LeaveGroupResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
+            ApiKeys.LEAVE_GROUP);
     }
 
     /**
      * Generates a LIST_GROUPS response listing all known consumer groups.
      *
+     * <p>The {@code request} parameter is part of the dispatcher contract but the listing is
+     * unfiltered; all known groups are returned regardless of the request's optional state
+     * filters.</p>
+     *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed LIST_GROUPS request (currently unused)
+     * @return the serialised response buffer
      */
-    ByteBuffer generateListGroupsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            new ListGroupsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateListGroupsResponse(final RequestHeader requestHeader, final ListGroupsRequest request) {
+        final var groups = groupCoordinator.getGroupIds().stream()
+            .map(gid -> new ListGroupsResponseData.ListedGroup()
+                .setGroupId(gid)
+                .setProtocolType("consumer")
+                .setGroupState("Stable")
+                .setGroupType("consumer"))
+            .collect(Collectors.toList());
 
-            final var groups = groupCoordinator.getGroupIds().stream()
-                .map(gid -> new ListGroupsResponseData.ListedGroup()
-                    .setGroupId(gid)
-                    .setProtocolType("consumer")
-                    .setGroupState("Stable")
-                    .setGroupType("consumer"))
-                .collect(Collectors.toList());
+        final var response = new ListGroupsResponseData()
+            .setThrottleTimeMs(0)
+            .setErrorCode((short) 0)
+            .setGroups(groups);
 
-            final var response = new ListGroupsResponseData()
-                .setThrottleTimeMs(0)
-                .setErrorCode((short) 0)
-                .setGroups(groups);
-
-            return serialize(requestHeader, response, ApiKeys.LIST_GROUPS);
-        } catch (final Exception e) {
-            log.error("Error generating ListGroups response", e);
-            return null;
-        }
+        return serialize(requestHeader, response, ApiKeys.LIST_GROUPS);
     }
 
     /**
@@ -620,79 +590,67 @@ final class ConsumerGroupApiHandler {
      * requested consumer groups.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed CONSUMER_GROUP_DESCRIBE request
+     * @return the serialised response buffer
      */
     ByteBuffer generateConsumerGroupDescribeResponse(
-            final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new ConsumerGroupDescribeRequestData(accessor, requestHeader.apiVersion());
+            final RequestHeader requestHeader, final ConsumerGroupDescribeRequest request) {
+        final var data = request.data();
 
-            final var groups = request.groupIds().stream()
-                .map(gid -> {
-                    final var members = groupCoordinator.getMembers(gid).keySet().stream()
-                        .map(s -> new ConsumerGroupDescribeResponseData.Member()
-                                .setMemberId(s)
-                                .setClientId("")
-                                .setClientHost(""))
-                        .collect(Collectors.toList());
-                    return new ConsumerGroupDescribeResponseData.DescribedGroup()
-                        .setGroupId(gid)
-                        .setErrorCode((short) 0)
-                        .setGroupState("Stable")
-                        .setGroupEpoch(groupCoordinator.getGenerationId(gid))
-                        .setAssignmentEpoch(groupCoordinator.getGenerationId(gid))
-                        .setAssignorName("range")
-                        .setMembers(members)
-                        .setAuthorizedOperations(-2147483648);
-                })
-                .collect(Collectors.toList());
+        final var groups = data.groupIds().stream()
+            .map(gid -> {
+                final var members = groupCoordinator.getMembers(gid).keySet().stream()
+                    .map(s -> new ConsumerGroupDescribeResponseData.Member()
+                            .setMemberId(s)
+                            .setClientId("")
+                            .setClientHost(""))
+                    .collect(Collectors.toList());
+                return new ConsumerGroupDescribeResponseData.DescribedGroup()
+                    .setGroupId(gid)
+                    .setErrorCode((short) 0)
+                    .setGroupState("Stable")
+                    .setGroupEpoch(groupCoordinator.getGenerationId(gid))
+                    .setAssignmentEpoch(groupCoordinator.getGenerationId(gid))
+                    .setAssignorName("range")
+                    .setMembers(members)
+                    .setAuthorizedOperations(-2147483648);
+            })
+            .collect(Collectors.toList());
 
-            final var response = new ConsumerGroupDescribeResponseData()
-                .setThrottleTimeMs(0)
-                .setGroups(groups);
+        final var response = new ConsumerGroupDescribeResponseData()
+            .setThrottleTimeMs(0)
+            .setGroups(groups);
 
-            return serialize(
-                requestHeader, response, ApiKeys.CONSUMER_GROUP_DESCRIBE);
-        } catch (final Exception e) {
-            log.error("Error generating ConsumerGroupDescribe response", e);
-            return null;
-        }
+        return serialize(
+            requestHeader, response, ApiKeys.CONSUMER_GROUP_DESCRIBE);
     }
 
     /**
      * Generates a DELETE_GROUPS response after removing the requested consumer groups.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed DELETE_GROUPS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateDeleteGroupsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new DeleteGroupsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateDeleteGroupsResponse(final RequestHeader requestHeader, final DeleteGroupsRequest request) {
+        final var data = request.data();
 
-            final var results = new DeleteGroupsResponseData.DeletableGroupResultCollection();
-            request.groupsNames().stream()
-                .map(gid -> {
-                    groupCoordinator.deleteGroup(gid);
-                    log.info("Deleted consumer group: {}", gid);
-                    return new DeleteGroupsResponseData.DeletableGroupResult()
-                        .setGroupId(gid)
-                        .setErrorCode((short) 0);
-                })
-                .forEach(results::add);
+        final var results = new DeleteGroupsResponseData.DeletableGroupResultCollection();
+        data.groupsNames().stream()
+            .map(gid -> {
+                groupCoordinator.deleteGroup(gid);
+                log.info("Deleted consumer group: {}", gid);
+                return new DeleteGroupsResponseData.DeletableGroupResult()
+                    .setGroupId(gid)
+                    .setErrorCode((short) 0);
+            })
+            .forEach(results::add);
 
-            final var response = new DeleteGroupsResponseData()
-                .setThrottleTimeMs(0)
-                .setResults(results);
+        final var response = new DeleteGroupsResponseData()
+            .setThrottleTimeMs(0)
+            .setResults(results);
 
-            return serialize(requestHeader, response, ApiKeys.DELETE_GROUPS);
-        } catch (final Exception e) {
-            log.error("Error generating DeleteGroups response", e);
-            return null;
-        }
+        return serialize(requestHeader, response, ApiKeys.DELETE_GROUPS);
     }
 
     /**
@@ -703,28 +661,22 @@ final class ConsumerGroupApiHandler {
      * {@link ApiKeys#CONSUMER_GROUP_DESCRIBE} (key 69) was introduced.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed DESCRIBE_GROUPS request
+     * @return the serialised response buffer
      */
     ByteBuffer generateDescribeGroupsResponse(
-            final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new DescribeGroupsRequestData(accessor, requestHeader.apiVersion());
+            final RequestHeader requestHeader, final DescribeGroupsRequest request) {
+        final var data = request.data();
 
-            final var groups = request.groups().stream()
-                .map(this::describeGroup)
-                .collect(Collectors.toList());
+        final var groups = data.groups().stream()
+            .map(this::describeGroup)
+            .collect(Collectors.toList());
 
-            final var response = new DescribeGroupsResponseData()
-                .setThrottleTimeMs(0)
-                .setGroups(groups);
+        final var response = new DescribeGroupsResponseData()
+            .setThrottleTimeMs(0)
+            .setGroups(groups);
 
-            return serialize(requestHeader, response, ApiKeys.DESCRIBE_GROUPS);
-        } catch (final Exception e) {
-            log.error("Error generating DescribeGroups response", e);
-            return null;
-        }
+        return serialize(requestHeader, response, ApiKeys.DESCRIBE_GROUPS);
     }
 
     /**

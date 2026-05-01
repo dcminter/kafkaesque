@@ -12,6 +12,10 @@ import org.apache.kafka.common.message.DescribeAclsResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.requests.AbstractRequest;
+import org.apache.kafka.common.requests.CreateAclsRequest;
+import org.apache.kafka.common.requests.DeleteAclsRequest;
+import org.apache.kafka.common.requests.DescribeAclsRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -71,21 +75,6 @@ class AclApiHandlerTest {
         assertThat(responseData.results()).hasSize(2);
         assertThat(responseData.results()).allSatisfy(
             r -> assertThat(r.errorCode()).isEqualTo((short) 0));
-    }
-
-    @Test
-    void shouldReturnNullOnMalformedCreateAclsRequest() {
-        // Given
-        final var header = new RequestHeader(
-            ApiKeys.CREATE_ACLS, ApiKeys.CREATE_ACLS.latestVersion(), "test-client", 1);
-        final var emptyBuffer = ByteBuffer.allocate(0);
-
-        // When
-        log.info("Expecting an error log from AclApiHandler due to malformed (empty) request buffer");
-        final var response = handler.generateCreateAclsResponse(header, emptyBuffer);
-
-        // Then
-        assertThat(response).isNull();
     }
 
     @Test
@@ -203,8 +192,10 @@ class AclApiHandlerTest {
         final short apiVersion = ApiKeys.CREATE_ACLS.latestVersion();
         final var requestData = new CreateAclsRequestData().setCreations(of(creations));
         final var buffer = serialize(requestData, apiVersion);
+        final var request = (CreateAclsRequest) AbstractRequest.parseRequest(
+            ApiKeys.CREATE_ACLS, apiVersion, buffer).request;
         final var header = new RequestHeader(ApiKeys.CREATE_ACLS, apiVersion, "test-client", 1);
-        return handler.generateCreateAclsResponse(header, buffer);
+        return handler.generateCreateAclsResponse(header, request);
     }
 
     private ByteBuffer invokeDescribeAcls(
@@ -221,8 +212,10 @@ class AclApiHandlerTest {
             .setOperation(operation)
             .setPermissionType(permissionType);
         final var buffer = serialize(requestData, apiVersion);
+        final var request = (DescribeAclsRequest) AbstractRequest.parseRequest(
+            ApiKeys.DESCRIBE_ACLS, apiVersion, buffer).request;
         final var header = new RequestHeader(ApiKeys.DESCRIBE_ACLS, apiVersion, "test-client", 1);
-        return handler.generateDescribeAclsResponse(header, buffer);
+        return handler.generateDescribeAclsResponse(header, request);
     }
 
     private ByteBuffer invokeDeleteAcls(
@@ -240,8 +233,10 @@ class AclApiHandlerTest {
             .setPermissionType(permissionType);
         final var requestData = new DeleteAclsRequestData().setFilters(of(filter));
         final var buffer = serialize(requestData, apiVersion);
+        final var request = (DeleteAclsRequest) AbstractRequest.parseRequest(
+            ApiKeys.DELETE_ACLS, apiVersion, buffer).request;
         final var header = new RequestHeader(ApiKeys.DELETE_ACLS, apiVersion, "test-client", 1);
-        return handler.generateDeleteAclsResponse(header, buffer);
+        return handler.generateDeleteAclsResponse(header, request);
     }
 
     private static ByteBuffer serialize(

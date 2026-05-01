@@ -17,6 +17,12 @@ import static org.assertj.core.api.Assertions.assertThat;
  * contributor adds a new {@code generate*Response} method on a collaborator without registering
  * it in {@link KafkaProtocolHandler}, or registers a key the project did not intend to support,
  * this test fails.</p>
+ *
+ * <p>Note: API keys that Kafkaesque does <em>not</em> implement (notably the telemetry APIs
+ * {@code GET_TELEMETRY_SUBSCRIPTIONS} and {@code PUSH_TELEMETRY}) are deliberately absent
+ * from this set. They flow through the dispatcher's unhandled-key path, which now returns a
+ * properly-shaped {@code UNSUPPORTED_VERSION} response built via the parsed request's
+ * {@code getErrorResponse}.</p>
  */
 class KafkaProtocolHandlerDispatchTest {
 
@@ -65,9 +71,7 @@ class KafkaProtocolHandlerDispatchTest {
         ApiKeys.WRITE_TXN_MARKERS,
         ApiKeys.TXN_OFFSET_COMMIT,
         ApiKeys.LIST_TRANSACTIONS,
-        ApiKeys.DESCRIBE_TRANSACTIONS,
-        ApiKeys.GET_TELEMETRY_SUBSCRIPTIONS,
-        ApiKeys.PUSH_TELEMETRY
+        ApiKeys.DESCRIBE_TRANSACTIONS
     );
 
     /**

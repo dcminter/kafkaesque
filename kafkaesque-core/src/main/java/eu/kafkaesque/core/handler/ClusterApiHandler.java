@@ -7,19 +7,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.common.Uuid;
 import org.apache.kafka.common.message.ApiVersionsResponseData;
 import org.apache.kafka.common.message.DescribeClusterResponseData;
-import org.apache.kafka.common.message.DescribeTopicPartitionsRequestData;
 import org.apache.kafka.common.message.DescribeTopicPartitionsResponseData;
-import org.apache.kafka.common.message.FindCoordinatorRequestData;
 import org.apache.kafka.common.message.FindCoordinatorResponseData;
-import org.apache.kafka.common.message.GetTelemetrySubscriptionsResponseData;
-import org.apache.kafka.common.message.MetadataRequestData;
 import org.apache.kafka.common.message.MetadataResponseData;
-import org.apache.kafka.common.message.PushTelemetryResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
-import org.apache.kafka.common.protocol.Message;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.requests.DescribeTopicPartitionsRequest;
+import org.apache.kafka.common.requests.FindCoordinatorRequest;
+import org.apache.kafka.common.requests.MetadataRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 
 import java.io.IOException;
@@ -74,29 +71,27 @@ final class ClusterApiHandler {
     /**
      * Generates an API_VERSIONS response listing all supported Kafka APIs.
      *
+     * <p>This response is special-cased because the Kafka clients send {@code API_VERSIONS}
+     * before they know which version of the API to speak; the response must therefore be
+     * serialised manually rather than through the regular response-header machinery.</p>
+     *
      * @param requestHeader the request header
-     * @return the serialised response buffer, or null on error
+     * @return the serialised response buffer
      */
     ByteBuffer generateApiVersionsResponse(final RequestHeader requestHeader) {
-        try {
-            final var data = new ApiVersionsResponseData()
-                .setErrorCode((short) 0)
-                .setThrottleTimeMs(0)
-                .setApiKeys(buildSupportedApiVersions());
+        final var data = new ApiVersionsResponseData()
+            .setErrorCode((short) 0)
+            .setThrottleTimeMs(0)
+            .setApiKeys(buildSupportedApiVersions());
 
-            final var buffer = ByteBuffer.allocate(8192);
-            buffer.putInt(requestHeader.correlationId());
+        final var buffer = ByteBuffer.allocate(8192);
+        buffer.putInt(requestHeader.correlationId());
 
-            final var cache = new ObjectSerializationCache();
-            data.write(new ByteBufferAccessor(buffer), cache, requestHeader.apiVersion());
+        final var cache = new ObjectSerializationCache();
+        data.write(new ByteBufferAccessor(buffer), cache, requestHeader.apiVersion());
 
-            buffer.flip();
-            return buffer;
-
-        } catch (final Exception e) {
-            log.error("Error generating ApiVersions response", e);
-            return null;
-        }
+        buffer.flip();
+        return buffer;
     }
 
     /**
@@ -110,72 +105,59 @@ final class ClusterApiHandler {
      * admin API (e.g. auto-created by a producer).</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed METADATA request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateMetadataResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var metadataRequest = new MetadataRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateMetadataResponse(final RequestHeader requestHeader, final MetadataRequest request) {
+        final var metadataRequest = request.data();
 
-            final var data = new MetadataResponseData();
+        final var data = new MetadataResponseData();
 
-            final var brokers = new MetadataResponseData.MetadataResponseBrokerCollection();
-            brokers.add(createMetadataBroker());
-            data.setBrokers(brokers);
-            data.setClusterId(CLUSTER_ID);
-            data.setControllerId(1);
+        final var brokers = new MetadataResponseData.MetadataResponseBrokerCollection();
+        brokers.add(createMetadataBroker());
+        data.setBrokers(brokers);
+        data.setClusterId(CLUSTER_ID);
+        data.setControllerId(1);
 
-            final var topics = new MetadataResponseData.MetadataResponseTopicCollection();
-            final var requestedTopics = metadataRequest.topics();
+        final var topics = new MetadataResponseData.MetadataResponseTopicCollection();
+        final var requestedTopics = metadataRequest.topics();
 
-            if (requestedTopics == null) {
-                // null means "list all topics"
-                if (topicStore != null) {
-                    topicStore.getTopics().stream()
-                        .map(topic -> buildMetadataTopicResponse(topic.name(), topic.numPartitions()))
-                        .forEach(topics::add);
-                }
-            } else if (!requestedTopics.isEmpty()) {
-                requestedTopics.stream()
-                    .filter(t -> t.name() != null && !t.name().isEmpty())
-                    .map(t -> autoCreateTopicsEnabled || (topicStore != null && topicStore.hasTopic(t.name()))
-                        ? buildMetadataTopicResponse(t.name(), resolvePartitionCount(t.name()))
-                        : buildMetadataTopicErrorResponse(t.name()))
+        if (requestedTopics == null) {
+            // null means "list all topics"
+            if (topicStore != null) {
+                topicStore.getTopics().stream()
+                    .map(topic -> buildMetadataTopicResponse(topic.name(), topic.numPartitions()))
                     .forEach(topics::add);
             }
-
-            data.setTopics(topics);
-            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.METADATA);
-
-        } catch (final Exception e) {
-            log.error("Error generating Metadata response", e);
-            return null;
+        } else if (!requestedTopics.isEmpty()) {
+            requestedTopics.stream()
+                .filter(t -> t.name() != null && !t.name().isEmpty())
+                .map(t -> autoCreateTopicsEnabled || (topicStore != null && topicStore.hasTopic(t.name()))
+                    ? buildMetadataTopicResponse(t.name(), resolvePartitionCount(t.name()))
+                    : buildMetadataTopicErrorResponse(t.name()))
+                .forEach(topics::add);
         }
+
+        data.setTopics(topics);
+        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.METADATA);
     }
 
     /**
      * Generates a DESCRIBE_CLUSTER response.
      *
      * @param requestHeader the request header
-     * @return the serialised response buffer, or null on error
+     * @return the serialised response buffer
      */
     ByteBuffer generateDescribeClusterResponse(final RequestHeader requestHeader) {
-        try {
-            final var brokers = new DescribeClusterResponseData.DescribeClusterBrokerCollection();
-            brokers.add(createDescribeClusterBroker());
+        final var brokers = new DescribeClusterResponseData.DescribeClusterBrokerCollection();
+        brokers.add(createDescribeClusterBroker());
 
-            final var data = new DescribeClusterResponseData()
-                .setClusterId(CLUSTER_ID)
-                .setControllerId(1)
-                .setBrokers(brokers);
+        final var data = new DescribeClusterResponseData()
+            .setClusterId(CLUSTER_ID)
+            .setControllerId(1)
+            .setBrokers(brokers);
 
-            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.DESCRIBE_CLUSTER);
-
-        } catch (final Exception e) {
-            log.error("Error generating DescribeCluster response", e);
-            return null;
-        }
+        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.DESCRIBE_CLUSTER);
     }
 
     /**
@@ -185,39 +167,32 @@ final class ClusterApiHandler {
      * a single set of top-level fields.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed FIND_COORDINATOR request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateFindCoordinatorResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new FindCoordinatorRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateFindCoordinatorResponse(final RequestHeader requestHeader, final FindCoordinatorRequest request) {
+        final var requestData = request.data();
 
-            final var data = new FindCoordinatorResponseData().setThrottleTimeMs(0);
+        final var data = new FindCoordinatorResponseData().setThrottleTimeMs(0);
 
-            if (requestHeader.apiVersion() >= 4) {
-                final var coordinators = request.coordinatorKeys().stream()
-                    .map(key -> new FindCoordinatorResponseData.Coordinator()
-                        .setKey(key)
-                        .setNodeId(1)
-                        .setHost(getServerHost())
-                        .setPort(getServerPort())
-                        .setErrorCode((short) 0))
-                    .collect(toList());
-                data.setCoordinators(coordinators);
-            } else {
-                data.setErrorCode((short) 0)
+        if (requestHeader.apiVersion() >= 4) {
+            final var coordinators = requestData.coordinatorKeys().stream()
+                .map(key -> new FindCoordinatorResponseData.Coordinator()
+                    .setKey(key)
                     .setNodeId(1)
                     .setHost(getServerHost())
-                    .setPort(getServerPort());
-            }
-
-            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.FIND_COORDINATOR);
-
-        } catch (final Exception e) {
-            log.error("Error generating FindCoordinator response", e);
-            return null;
+                    .setPort(getServerPort())
+                    .setErrorCode((short) 0))
+                .collect(toList());
+            data.setCoordinators(coordinators);
+        } else {
+            data.setErrorCode((short) 0)
+                .setNodeId(1)
+                .setHost(getServerHost())
+                .setPort(getServerPort());
         }
+
+        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.FIND_COORDINATOR);
     }
 
     /**
@@ -230,68 +205,25 @@ final class ClusterApiHandler {
      * null in the response.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed DESCRIBE_TOPIC_PARTITIONS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateDescribeTopicPartitionsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new DescribeTopicPartitionsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateDescribeTopicPartitionsResponse(
+            final RequestHeader requestHeader, final DescribeTopicPartitionsRequest request) {
+        final var requestData = request.data();
 
-            final var responseTopics = new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopicCollection();
+        final var responseTopics = new DescribeTopicPartitionsResponseData.DescribeTopicPartitionsResponseTopicCollection();
 
-            request.topics().stream()
-                .map(topicRequest -> buildDescribeTopicPartitionsTopicResponse(topicRequest.name()))
-                .forEach(responseTopics::add);
+        requestData.topics().stream()
+            .map(topicRequest -> buildDescribeTopicPartitionsTopicResponse(topicRequest.name()))
+            .forEach(responseTopics::add);
 
-            final var data = new DescribeTopicPartitionsResponseData()
-                .setThrottleTimeMs(0)
-                .setTopics(responseTopics)
-                .setNextCursor(null);
+        final var data = new DescribeTopicPartitionsResponseData()
+            .setThrottleTimeMs(0)
+            .setTopics(responseTopics)
+            .setNextCursor(null);
 
-            return ResponseSerializer.serialize(requestHeader, data, ApiKeys.DESCRIBE_TOPIC_PARTITIONS);
-
-        } catch (final Exception e) {
-            log.error("Error generating DescribeTopicPartitions response", e);
-            return null;
-        }
-    }
-
-    /**
-     * Generates an {@link Errors#UNSUPPORTED_VERSION} response for APIs that this mock
-     * does not support, ensuring the client receives a valid (correctly-correlated)
-     * response and does not treat the silence as a protocol error.
-     *
-     * @param requestHeader the request header (provides correlationId and apiVersion)
-     * @param apiKey        the unsupported API key
-     * @return the serialised response buffer, or null on error
-     */
-    ByteBuffer generateUnsupportedResponse(final RequestHeader requestHeader, final ApiKeys apiKey) {
-        try {
-            final var errorCode = Errors.UNSUPPORTED_VERSION.code();
-            final Message data;
-            switch (apiKey) {
-                case GET_TELEMETRY_SUBSCRIPTIONS:
-                    data = new GetTelemetrySubscriptionsResponseData()
-                        .setErrorCode(errorCode);
-                    break;
-                case PUSH_TELEMETRY:
-                    data = new PushTelemetryResponseData()
-                        .setErrorCode(errorCode);
-                    break;
-                default:
-                    log.warn("generateUnsupportedResponse called for unexpected API: {}", apiKey);
-                    data = null;
-                    break;
-            }
-            if (data == null) {
-                return null;
-            }
-            return ResponseSerializer.serialize(requestHeader, data, apiKey);
-        } catch (final Exception e) {
-            log.error("Error generating unsupported response for {}", apiKey, e);
-            return null;
-        }
+        return ResponseSerializer.serialize(requestHeader, data, ApiKeys.DESCRIBE_TOPIC_PARTITIONS);
     }
 
     /**

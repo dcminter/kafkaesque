@@ -11,10 +11,12 @@ import org.apache.kafka.common.message.OffsetCommitResponseData;
 import org.apache.kafka.common.message.OffsetFetchRequestData;
 import org.apache.kafka.common.message.OffsetFetchResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.protocol.ApiMessage;
 import org.apache.kafka.common.protocol.ByteBufferAccessor;
 import org.apache.kafka.common.protocol.Errors;
 import org.apache.kafka.common.protocol.Message;
 import org.apache.kafka.common.protocol.ObjectSerializationCache;
+import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -57,7 +59,8 @@ class ConsumerDataApiHandlerTest {
             .setTopics(of(topicRequest));
         final var header = new RequestHeader(ApiKeys.LIST_OFFSETS, apiVersion, "test-client", 1);
 
-        final var response = handler.generateListOffsetsResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateListOffsetsResponse(header,
+            parseAs(ApiKeys.LIST_OFFSETS, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseListOffsetsResponse(response, apiVersion);
@@ -77,7 +80,8 @@ class ConsumerDataApiHandlerTest {
             .setTopics(of(topicRequest));
         final var header = new RequestHeader(ApiKeys.OFFSET_FETCH, apiVersion, "test-client", 2);
 
-        final var response = handler.generateOffsetFetchResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateOffsetFetchResponse(header,
+            parseAs(ApiKeys.OFFSET_FETCH, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseOffsetFetchResponse(response, apiVersion);
@@ -98,7 +102,8 @@ class ConsumerDataApiHandlerTest {
             .setTopics(of(topic));
         final var header = new RequestHeader(ApiKeys.OFFSET_COMMIT, apiVersion, "test-client", 3);
 
-        final var response = handler.generateOffsetCommitResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateOffsetCommitResponse(header,
+            parseAs(ApiKeys.OFFSET_COMMIT, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseOffsetCommitResponse(response, apiVersion);
@@ -130,7 +135,8 @@ class ConsumerDataApiHandlerTest {
             .setTopics(of(topicRequest));
         final var header = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 4);
 
-        final var response = handler.generateFetchResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateFetchResponse(header,
+            parseAs(ApiKeys.FETCH, apiVersion, requestData));
 
         assertThat(response).isNotNull().satisfies(buf -> assertThat(buf.remaining()).isPositive());
     }
@@ -143,7 +149,8 @@ class ConsumerDataApiHandlerTest {
         final var requestData = buildFetchRequest("my-topic", 0, 0L, 0, 0);
         final var header = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 5);
 
-        final var response = handler.generateFetchResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateFetchResponse(header,
+            parseAs(ApiKeys.FETCH, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseFetchResponse(response, apiVersion);
@@ -160,7 +167,8 @@ class ConsumerDataApiHandlerTest {
         final var requestData = buildFetchRequest("my-topic", 0, 0L, 0, -1);
         final var header = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 6);
 
-        final var response = handler.generateFetchResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateFetchResponse(header,
+            parseAs(ApiKeys.FETCH, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseFetchResponse(response, apiVersion);
@@ -175,7 +183,7 @@ class ConsumerDataApiHandlerTest {
         final var fullFetchData = buildFetchRequest("my-topic", 0, 0L, 0, 0);
         final var fullFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 7);
         final var fullFetchResponse = handler.generateFetchResponse(
-            fullFetchHeader, serialize(fullFetchData, apiVersion));
+            fullFetchHeader, parseAs(ApiKeys.FETCH, apiVersion, fullFetchData));
         final int sessionId = parseFetchResponse(fullFetchResponse, apiVersion).sessionId();
 
         // Now store a record so the incremental fetch has something to return
@@ -185,7 +193,7 @@ class ConsumerDataApiHandlerTest {
         final var incFetchData = buildFetchRequest("my-topic", 0, 0L, sessionId, 1);
         final var incFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 8);
         final var incFetchResponse = handler.generateFetchResponse(
-            incFetchHeader, serialize(incFetchData, apiVersion));
+            incFetchHeader, parseAs(ApiKeys.FETCH, apiVersion, incFetchData));
 
         assertThat(incFetchResponse).isNotNull();
         final var responseData = parseFetchResponse(incFetchResponse, apiVersion);
@@ -201,14 +209,14 @@ class ConsumerDataApiHandlerTest {
         final var fullFetchData = buildFetchRequest("my-topic", 0, 0L, 0, 0);
         final var fullFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 9);
         final var fullFetchResponse = handler.generateFetchResponse(
-            fullFetchHeader, serialize(fullFetchData, apiVersion));
+            fullFetchHeader, parseAs(ApiKeys.FETCH, apiVersion, fullFetchData));
         final int sessionId = parseFetchResponse(fullFetchResponse, apiVersion).sessionId();
 
         // Incremental fetch with no new records: expect empty responses list
         final var incFetchData = buildFetchRequest("my-topic", 0, 0L, sessionId, 1);
         final var incFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 10);
         final var incFetchResponse = handler.generateFetchResponse(
-            incFetchHeader, serialize(incFetchData, apiVersion));
+            incFetchHeader, parseAs(ApiKeys.FETCH, apiVersion, incFetchData));
 
         assertThat(incFetchResponse).isNotNull();
         final var responseData = parseFetchResponse(incFetchResponse, apiVersion);
@@ -223,7 +231,8 @@ class ConsumerDataApiHandlerTest {
         final var requestData = buildFetchRequest("my-topic", 0, 0L, unknownSessionId, 1);
         final var header = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 11);
 
-        final var response = handler.generateFetchResponse(header, serialize(requestData, apiVersion));
+        final var response = handler.generateFetchResponse(header,
+            parseAs(ApiKeys.FETCH, apiVersion, requestData));
 
         assertThat(response).isNotNull();
         final var responseData = parseFetchResponse(response, apiVersion);
@@ -238,7 +247,7 @@ class ConsumerDataApiHandlerTest {
         final var fullFetchData = buildFetchRequest("my-topic", 0, 0L, 0, 0);
         final var fullFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 12);
         final var fullFetchResponse = handler.generateFetchResponse(
-            fullFetchHeader, serialize(fullFetchData, apiVersion));
+            fullFetchHeader, parseAs(ApiKeys.FETCH, apiVersion, fullFetchData));
         final int sessionId = parseFetchResponse(fullFetchResponse, apiVersion).sessionId();
 
         // Send wrong epoch (should be 1, but sending 5)
@@ -246,7 +255,7 @@ class ConsumerDataApiHandlerTest {
         final var badEpochHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 13);
 
         final var response = handler.generateFetchResponse(
-            badEpochHeader, serialize(badEpochData, apiVersion));
+            badEpochHeader, parseAs(ApiKeys.FETCH, apiVersion, badEpochData));
 
         assertThat(response).isNotNull();
         final var responseData = parseFetchResponse(response, apiVersion);
@@ -261,7 +270,7 @@ class ConsumerDataApiHandlerTest {
         final var fullFetchData = buildFetchRequest("my-topic", 0, 0L, 0, 0);
         final var fullFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 14);
         final var fullFetchResponse = handler.generateFetchResponse(
-            fullFetchHeader, serialize(fullFetchData, apiVersion));
+            fullFetchHeader, parseAs(ApiKeys.FETCH, apiVersion, fullFetchData));
         final int sessionId = parseFetchResponse(fullFetchResponse, apiVersion).sessionId();
         assertThat(sessionId).isPositive();
 
@@ -269,7 +278,8 @@ class ConsumerDataApiHandlerTest {
         final var closeData = buildFetchRequest("my-topic", 0, 0L, sessionId, -1);
         final var closeHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 15);
 
-        final var response = handler.generateFetchResponse(closeHeader, serialize(closeData, apiVersion));
+        final var response = handler.generateFetchResponse(closeHeader,
+            parseAs(ApiKeys.FETCH, apiVersion, closeData));
 
         assertThat(response).isNotNull();
         final var responseData = parseFetchResponse(response, apiVersion);
@@ -283,16 +293,17 @@ class ConsumerDataApiHandlerTest {
         final var fullFetchData = buildFetchRequest("my-topic", 0, 0L, 0, 0);
         final var fullFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 16);
         final var fullFetchResponse = handler.generateFetchResponse(
-            fullFetchHeader, serialize(fullFetchData, apiVersion));
+            fullFetchHeader, parseAs(ApiKeys.FETCH, apiVersion, fullFetchData));
         final int sessionId = parseFetchResponse(fullFetchResponse, apiVersion).sessionId();
 
         final var closeData = buildFetchRequest("my-topic", 0, 0L, sessionId, -1);
         final var closeHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 17);
-        handler.generateFetchResponse(closeHeader, serialize(closeData, apiVersion));
+        handler.generateFetchResponse(closeHeader, parseAs(ApiKeys.FETCH, apiVersion, closeData));
 
         final var incFetchData = buildFetchRequest("my-topic", 0, 0L, sessionId, 1);
         final var incFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 18);
-        final var response = handler.generateFetchResponse(incFetchHeader, serialize(incFetchData, apiVersion));
+        final var response = handler.generateFetchResponse(incFetchHeader,
+            parseAs(ApiKeys.FETCH, apiVersion, incFetchData));
 
         assertThat(response).isNotNull();
         assertThat(parseFetchResponse(response, apiVersion).errorCode())
@@ -305,26 +316,26 @@ class ConsumerDataApiHandlerTest {
         final var fullFetchData = buildFetchRequest("my-topic", 0, 0L, 0, 0);
         final var fullFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 19);
         final var fullFetchResponse = handler.generateFetchResponse(
-            fullFetchHeader, serialize(fullFetchData, apiVersion));
+            fullFetchHeader, parseAs(ApiKeys.FETCH, apiVersion, fullFetchData));
         final int sessionId = parseFetchResponse(fullFetchResponse, apiVersion).sessionId();
 
         final var inc1Data = buildFetchRequest("my-topic", 0, 0L, sessionId, 1);
         final var inc1Header = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 20);
         assertThat(parseFetchResponse(
-            handler.generateFetchResponse(inc1Header, serialize(inc1Data, apiVersion)), apiVersion)
+            handler.generateFetchResponse(inc1Header, parseAs(ApiKeys.FETCH, apiVersion, inc1Data)), apiVersion)
             .errorCode()).isZero();
 
         final var inc2Data = buildFetchRequest("my-topic", 0, 0L, sessionId, 2);
         final var inc2Header = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 21);
         assertThat(parseFetchResponse(
-            handler.generateFetchResponse(inc2Header, serialize(inc2Data, apiVersion)), apiVersion)
+            handler.generateFetchResponse(inc2Header, parseAs(ApiKeys.FETCH, apiVersion, inc2Data)), apiVersion)
             .errorCode()).isZero();
 
         // Sending stale epoch should now fail
         final var staleData = buildFetchRequest("my-topic", 0, 0L, sessionId, 2);
         final var staleHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 22);
         assertThat(parseFetchResponse(
-            handler.generateFetchResponse(staleHeader, serialize(staleData, apiVersion)), apiVersion)
+            handler.generateFetchResponse(staleHeader, parseAs(ApiKeys.FETCH, apiVersion, staleData)), apiVersion)
             .errorCode()).isEqualTo(Errors.INVALID_FETCH_SESSION_EPOCH.code());
     }
 
@@ -337,7 +348,8 @@ class ConsumerDataApiHandlerTest {
         final var fullFetchHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 30);
         final int sessionId = parseFetchResponse(
             handler.generateFetchResponse(
-                fullFetchHeader, serialize(buildFetchRequest("my-topic", 0, 0L, 0, 0), apiVersion)),
+                fullFetchHeader,
+                parseAs(ApiKeys.FETCH, apiVersion, buildFetchRequest("my-topic", 0, 0L, 0, 0))),
             apiVersion).sessionId();
         assertThat(sessionId).isPositive();
 
@@ -345,7 +357,8 @@ class ConsumerDataApiHandlerTest {
         final var closeHeader = new RequestHeader(ApiKeys.FETCH, apiVersion, "test-client", 31);
         final var responseData = parseFetchResponse(
             handler.generateFetchResponse(
-                closeHeader, serialize(buildFetchRequest("my-topic", 0, 0L, sessionId, -1), apiVersion)),
+                closeHeader,
+                parseAs(ApiKeys.FETCH, apiVersion, buildFetchRequest("my-topic", 0, 0L, sessionId, -1))),
             apiVersion);
 
         // Then – per KIP-227 responses must be empty; sessionId must be 0
@@ -365,7 +378,8 @@ class ConsumerDataApiHandlerTest {
         // When – attempt to close it (epoch=-1 signals close)
         final var responseData = parseFetchResponse(
             handler.generateFetchResponse(
-                closeHeader, serialize(buildFetchRequest("my-topic", 0, 0L, 99999, -1), apiVersion)),
+                closeHeader,
+                parseAs(ApiKeys.FETCH, apiVersion, buildFetchRequest("my-topic", 0, 0L, 99999, -1))),
             apiVersion);
 
         // Then – per KIP-227 must return FETCH_SESSION_ID_NOT_FOUND
@@ -383,7 +397,7 @@ class ConsumerDataApiHandlerTest {
         final int sessionId = parseFetchResponse(
             handler.generateFetchResponse(
                 fullFetchHeader,
-                serialize(buildTwoPartitionFetchRequest("my-topic", 0, 0), apiVersion)),
+                parseAs(ApiKeys.FETCH, apiVersion, buildTwoPartitionFetchRequest("my-topic", 0, 0))),
             apiVersion).sessionId();
         assertThat(sessionId).isPositive();
 
@@ -397,8 +411,8 @@ class ConsumerDataApiHandlerTest {
         final var responseData = parseFetchResponse(
             handler.generateFetchResponse(
                 incFetchHeader,
-                serialize(buildFetchRequestWithForgottenTopics(
-                    "my-topic", 1, 0L, sessionId, 1, of(forgotten)), apiVersion)),
+                parseAs(ApiKeys.FETCH, apiVersion, buildFetchRequestWithForgottenTopics(
+                    "my-topic", 1, 0L, sessionId, 1, of(forgotten)))),
             apiVersion);
 
         // Then – partition 1 present; forgotten partition 0 absent
@@ -416,6 +430,18 @@ class ConsumerDataApiHandlerTest {
     }
 
     // --- helpers ---
+
+    /**
+     * Serialises {@code data} and parses it back as the typed {@link AbstractRequest} the
+     * handler now expects, mirroring how {@code KafkaProtocolHandler.dispatchRequest}
+     * pre-parses the body before invoking a handler.
+     */
+    @SuppressWarnings("unchecked")
+    private static <T extends AbstractRequest> T parseAs(
+            final ApiKeys apiKey, final short apiVersion, final ApiMessage data) {
+        final var buffer = serialize((Message) data, apiVersion);
+        return (T) AbstractRequest.parseRequest(apiKey, apiVersion, buffer).request;
+    }
 
     private static ByteBuffer serialize(final Message requestData, final short apiVersion) {
         final var cache = new ObjectSerializationCache();

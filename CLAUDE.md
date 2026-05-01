@@ -39,7 +39,7 @@ all reported violations before considering the task complete. This will enforce 
     * i.e. prefer `private final Map<String,String> foo = ConcreteHashMap<>()` to `private final ConcreteHashMap<String,String> foo = ConcreteHashMap<>()`
     * But for local variables prefer `var`, i.e. `let var foo = ConcreteHashMap<String,String>()` form
   * `Optional` is reserved for **method return types**. It is not permitted as a parameter or as a field (both flagged by Checkstyle), and `Optional.get()` is not used anywhere in production code — even guarded by `isPresent()`. Use `orElse` / `orElseGet` / `orElseThrow` / `ifPresent` / `ifPresentOrElse` / `map` / `flatMap` / `filter` instead. Where a call site can't be expressed cleanly with these, extract a small helper rather than reaching for `.get()`. Raw `null` is still preferred where it carries protocol or `Map`-API semantics (e.g. `Map.compute` callbacks, ACL filter wildcards, `setErrorMessage(null)` on Kafka response builders).
-  * Bugs and contract inconsistencies discovered along the way that aren't in scope for the current task should be appended to `BUGS.md` at the project root.
+  * Bugs and contract inconsistencies discovered along the way that aren't in scope for the current task should be appended to `docs/BUGS.md`.
   * Lean towards using static imports in order to keep things terse
   * Lombok annotations are encouraged to keep boilerplate "noise" to a minimum
   * Where "external" infrastructure is needed to support integration tests then `testcontainers` should be used to support this

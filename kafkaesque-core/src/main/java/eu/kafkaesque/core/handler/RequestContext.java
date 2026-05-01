@@ -4,15 +4,22 @@ import eu.kafkaesque.core.connection.ClientConnection;
 import lombok.EqualsAndHashCode;
 import lombok.ToString;
 import org.apache.kafka.common.protocol.ApiKeys;
+import org.apache.kafka.common.requests.AbstractRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 
-import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 
 /**
  * Carries everything an {@link ApiRequestHandler} may need to produce a response for a single
- * Kafka request: the parsed API key and header, the request body buffer, and the originating
+ * Kafka request: the parsed API key and header, the parsed request body, and the originating
  * client connection and selection key.
+ *
+ * <p>The request body is exposed as a typed {@link AbstractRequest} (parsed once at the
+ * dispatch layer via {@link AbstractRequest#parseRequest(ApiKeys, short, java.nio.ByteBuffer)})
+ * so that handlers can read fields directly via {@link AbstractRequest#data()} without
+ * re-parsing the buffer, and so that the dispatcher can use
+ * {@link AbstractRequest#getErrorResponse(int, Throwable)} to build a properly-shaped error
+ * response if the handler fails.</p>
  *
  * <p>A single context shape lets every handler share the signature
  * {@code ByteBuffer handle(RequestContext)}, even though most handlers ignore
@@ -30,8 +37,8 @@ final class RequestContext {
     /** The parsed Kafka request header. */
     private final RequestHeader header;
 
-    /** The request body buffer, positioned immediately after the header. */
-    private final ByteBuffer buffer;
+    /** The parsed Kafka request body. */
+    private final AbstractRequest request;
 
     /** The originating client connection; used by handlers that defer responses. */
     private final ClientConnection connection;
@@ -44,19 +51,19 @@ final class RequestContext {
      *
      * @param apiKey     the API key identifying the request type
      * @param header     the parsed Kafka request header
-     * @param buffer     the request body buffer, positioned immediately after the header
+     * @param request    the parsed Kafka request body
      * @param connection the originating client connection
      * @param key        the selection key for the connection
      */
     RequestContext(
             final ApiKeys apiKey,
             final RequestHeader header,
-            final ByteBuffer buffer,
+            final AbstractRequest request,
             final ClientConnection connection,
             final SelectionKey key) {
         this.apiKey = apiKey;
         this.header = header;
-        this.buffer = buffer;
+        this.request = request;
         this.connection = connection;
         this.key = key;
     }
@@ -80,12 +87,12 @@ final class RequestContext {
     }
 
     /**
-     * Returns the request body buffer.
+     * Returns the parsed Kafka request body.
      *
-     * @return the buffer positioned immediately after the request header
+     * @return the parsed request
      */
-    ByteBuffer buffer() {
-        return buffer;
+    AbstractRequest request() {
+        return request;
     }
 
     /**

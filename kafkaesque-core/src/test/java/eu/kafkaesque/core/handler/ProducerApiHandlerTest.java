@@ -12,6 +12,8 @@ import org.apache.kafka.common.compress.Compression;
 import org.apache.kafka.common.record.MemoryRecords;
 import org.apache.kafka.common.record.RecordBatch;
 import org.apache.kafka.common.record.TimestampType;
+import org.apache.kafka.common.requests.AbstractRequest;
+import org.apache.kafka.common.requests.ProduceRequest;
 import org.apache.kafka.common.requests.RequestHeader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -89,16 +91,6 @@ class ProducerApiHandlerTest {
         assertThat(eventStore.getTransactionState(topic, 0, 0L)).hasValue(TransactionState.PENDING);
         assertThat(eventStore.getRecords(topic, 0, (byte) 1)).isEmpty();
         assertThat(eventStore.getRecords(topic, 0, (byte) 0)).hasSize(1);
-    }
-
-    @Test
-    void generateProduceResponse_withMalformedBuffer_shouldReturnNull() {
-        final var header = new RequestHeader(ApiKeys.PRODUCE, ApiKeys.PRODUCE.latestVersion(), "test", 1);
-        final var emptyBuffer = ByteBuffer.allocate(0);
-
-        final var response = handler.generateProduceResponse(header, emptyBuffer);
-
-        assertThat(response).isNull();
     }
 
     @Test
@@ -254,8 +246,10 @@ class ProducerApiHandlerTest {
         requestData.write(new ByteBufferAccessor(buffer), cache, apiVersion);
         buffer.flip();
 
+        final var produceRequest = (ProduceRequest) AbstractRequest.parseRequest(
+            ApiKeys.PRODUCE, apiVersion, buffer).request;
         final var header = new RequestHeader(ApiKeys.PRODUCE, apiVersion, "test-client", 1);
-        return producerHandler.generateProduceResponse(header, buffer);
+        return producerHandler.generateProduceResponse(header, produceRequest);
     }
 
     private static MemoryRecords buildIdempotentMemoryRecords(

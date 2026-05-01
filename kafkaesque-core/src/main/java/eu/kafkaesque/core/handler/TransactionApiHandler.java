@@ -2,25 +2,26 @@ package eu.kafkaesque.core.handler;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.kafka.common.message.AddOffsetsToTxnRequestData;
 import org.apache.kafka.common.message.AddOffsetsToTxnResponseData;
 import org.apache.kafka.common.message.AddPartitionsToTxnRequestData;
 import org.apache.kafka.common.message.AddPartitionsToTxnResponseData;
-import org.apache.kafka.common.message.DescribeTransactionsRequestData;
 import org.apache.kafka.common.message.DescribeTransactionsResponseData;
-import org.apache.kafka.common.message.EndTxnRequestData;
 import org.apache.kafka.common.message.EndTxnResponseData;
-import org.apache.kafka.common.message.InitProducerIdRequestData;
 import org.apache.kafka.common.message.InitProducerIdResponseData;
-import org.apache.kafka.common.message.ListTransactionsRequestData;
 import org.apache.kafka.common.message.ListTransactionsResponseData;
-import org.apache.kafka.common.message.TxnOffsetCommitRequestData;
 import org.apache.kafka.common.message.TxnOffsetCommitResponseData;
 import org.apache.kafka.common.message.WriteTxnMarkersRequestData;
 import org.apache.kafka.common.message.WriteTxnMarkersResponseData;
 import org.apache.kafka.common.protocol.ApiKeys;
-import org.apache.kafka.common.protocol.ByteBufferAccessor;
+import org.apache.kafka.common.requests.AddOffsetsToTxnRequest;
+import org.apache.kafka.common.requests.AddPartitionsToTxnRequest;
+import org.apache.kafka.common.requests.DescribeTransactionsRequest;
+import org.apache.kafka.common.requests.EndTxnRequest;
+import org.apache.kafka.common.requests.InitProducerIdRequest;
+import org.apache.kafka.common.requests.ListTransactionsRequest;
 import org.apache.kafka.common.requests.RequestHeader;
+import org.apache.kafka.common.requests.TxnOffsetCommitRequest;
+import org.apache.kafka.common.requests.WriteTxnMarkersRequest;
 
 import java.nio.ByteBuffer;
 
@@ -56,33 +57,26 @@ final class TransactionApiHandler {
      * Generates an INIT_PRODUCER_ID response, assigning (or bumping) a producer ID and epoch.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed INIT_PRODUCER_ID request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateInitProducerIdResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new InitProducerIdRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateInitProducerIdResponse(final RequestHeader requestHeader, final InitProducerIdRequest request) {
+        final var data = request.data();
 
-            final var result = transactionCoordinator.initProducerId(
-                request.transactionalId(), request.producerId(), request.producerEpoch());
+        final var result = transactionCoordinator.initProducerId(
+            data.transactionalId(), data.producerId(), data.producerEpoch());
 
-            log.info("INIT_PRODUCER_ID: transactionalId={}, requestProducerId={}, requestEpoch={} → producerId={}, epoch={}",
-                request.transactionalId(), request.producerId(), request.producerEpoch(),
-                result.producerId(), result.epoch());
+        log.info("INIT_PRODUCER_ID: transactionalId={}, requestProducerId={}, requestEpoch={} → producerId={}, epoch={}",
+            data.transactionalId(), data.producerId(), data.producerEpoch(),
+            result.producerId(), result.epoch());
 
-            final var response = new InitProducerIdResponseData()
-                .setThrottleTimeMs(0)
-                .setErrorCode((short) 0)
-                .setProducerId(result.producerId())
-                .setProducerEpoch(result.epoch());
+        final var response = new InitProducerIdResponseData()
+            .setThrottleTimeMs(0)
+            .setErrorCode((short) 0)
+            .setProducerId(result.producerId())
+            .setProducerEpoch(result.epoch());
 
-            return serialize(requestHeader, response, ApiKeys.INIT_PRODUCER_ID);
-
-        } catch (final Exception e) {
-            log.error("Error generating InitProducerId response", e);
-            return null;
-        }
+        return serialize(requestHeader, response, ApiKeys.INIT_PRODUCER_ID);
     }
 
     /**
@@ -97,53 +91,39 @@ final class TransactionApiHandler {
      * that use {@code transactions} / {@code resultsByTransaction}.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed ADD_PARTITIONS_TO_TXN request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateAddPartitionsToTxnResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new AddPartitionsToTxnRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateAddPartitionsToTxnResponse(final RequestHeader requestHeader, final AddPartitionsToTxnRequest request) {
+        final var data = request.data();
 
-            final var response = new AddPartitionsToTxnResponseData().setThrottleTimeMs(0);
+        final var response = new AddPartitionsToTxnResponseData().setThrottleTimeMs(0);
 
-            if (requestHeader.apiVersion() >= 4) {
-                response.setResultsByTransaction(buildResultsByTransaction(request));
-            } else {
-                response.setResultsByTopicV3AndBelow(buildResultsByTopicV3AndBelow(request));
-            }
-
-            return serialize(requestHeader, response, ApiKeys.ADD_PARTITIONS_TO_TXN);
-
-        } catch (final Exception e) {
-            log.error("Error generating AddPartitionsToTxn response", e);
-            return null;
+        if (requestHeader.apiVersion() >= 4) {
+            response.setResultsByTransaction(buildResultsByTransaction(data));
+        } else {
+            response.setResultsByTopicV3AndBelow(buildResultsByTopicV3AndBelow(data));
         }
+
+        return serialize(requestHeader, response, ApiKeys.ADD_PARTITIONS_TO_TXN);
     }
 
     /**
      * Generates an ADD_OFFSETS_TO_TXN response (acknowledged with success).
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed ADD_OFFSETS_TO_TXN request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateAddOffsetsToTxnResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new AddOffsetsToTxnRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateAddOffsetsToTxnResponse(final RequestHeader requestHeader, final AddOffsetsToTxnRequest request) {
+        final var data = request.data();
 
-            log.debug("ADD_OFFSETS_TO_TXN: transactionalId={}, groupId={}",
-                request.transactionalId(), request.groupId());
+        log.debug("ADD_OFFSETS_TO_TXN: transactionalId={}, groupId={}",
+            data.transactionalId(), data.groupId());
 
-            return serialize(requestHeader,
-                new AddOffsetsToTxnResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
-                ApiKeys.ADD_OFFSETS_TO_TXN);
-
-        } catch (final Exception e) {
-            log.error("Error generating AddOffsetsToTxn response", e);
-            return null;
-        }
+        return serialize(requestHeader,
+            new AddOffsetsToTxnResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
+            ApiKeys.ADD_OFFSETS_TO_TXN);
     }
 
     /**
@@ -154,39 +134,32 @@ final class TransactionApiHandler {
      * where transactional offset commits are only made visible on transaction commit.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed END_TXN request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateEndTxnResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new EndTxnRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateEndTxnResponse(final RequestHeader requestHeader, final EndTxnRequest request) {
+        final var data = request.data();
 
-            log.debug("END_TXN: transactionalId={}, committed={}",
-                request.transactionalId(), request.committed());
+        log.debug("END_TXN: transactionalId={}, committed={}",
+            data.transactionalId(), data.committed());
 
-            transactionCoordinator.endTransaction(request.transactionalId(), request.committed());
+        transactionCoordinator.endTransaction(data.transactionalId(), data.committed());
 
-            final var pendingCommits =
-                transactionCoordinator.drainPendingOffsetCommits(request.transactionalId());
-            if (request.committed()) {
-                pendingCommits.forEach(c ->
-                    groupCoordinator.commitOffset(c.groupId(), c.topic(), c.partitionIndex(), c.offset()));
-                log.debug("Applied {} buffered TxnOffsetCommit(s) for transactionalId={}",
-                    pendingCommits.size(), request.transactionalId());
-            } else {
-                log.debug("Discarded {} buffered TxnOffsetCommit(s) for transactionalId={}",
-                    pendingCommits.size(), request.transactionalId());
-            }
-
-            return serialize(requestHeader,
-                new EndTxnResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
-                ApiKeys.END_TXN);
-
-        } catch (final Exception e) {
-            log.error("Error generating EndTxn response", e);
-            return null;
+        final var pendingCommits =
+            transactionCoordinator.drainPendingOffsetCommits(data.transactionalId());
+        if (data.committed()) {
+            pendingCommits.forEach(c ->
+                groupCoordinator.commitOffset(c.groupId(), c.topic(), c.partitionIndex(), c.offset()));
+            log.debug("Applied {} buffered TxnOffsetCommit(s) for transactionalId={}",
+                pendingCommits.size(), data.transactionalId());
+        } else {
+            log.debug("Discarded {} buffered TxnOffsetCommit(s) for transactionalId={}",
+                pendingCommits.size(), data.transactionalId());
         }
+
+        return serialize(requestHeader,
+            new EndTxnResponseData().setThrottleTimeMs(0).setErrorCode((short) 0),
+            ApiKeys.END_TXN);
     }
 
     /**
@@ -196,26 +169,19 @@ final class TransactionApiHandler {
      * This handler exists to satisfy the protocol when the broker sends the request to itself.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed WRITE_TXN_MARKERS request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateWriteTxnMarkersResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new WriteTxnMarkersRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateWriteTxnMarkersResponse(final RequestHeader requestHeader, final WriteTxnMarkersRequest request) {
+        final var data = request.data();
 
-            final var markerResults = request.markers().stream()
-                .map(this::buildWriteTxnMarkerResult)
-                .collect(toList());
+        final var markerResults = data.markers().stream()
+            .map(this::buildWriteTxnMarkerResult)
+            .collect(toList());
 
-            return serialize(requestHeader,
-                new WriteTxnMarkersResponseData().setMarkers(markerResults),
-                ApiKeys.WRITE_TXN_MARKERS);
-
-        } catch (final Exception e) {
-            log.error("Error generating WriteTxnMarkers response", e);
-            return null;
-        }
+        return serialize(requestHeader,
+            new WriteTxnMarkersResponseData().setMarkers(markerResults),
+            ApiKeys.WRITE_TXN_MARKERS);
     }
 
     /**
@@ -227,37 +193,30 @@ final class TransactionApiHandler {
      * become visible once the owning transaction commits.</p>
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed TXN_OFFSET_COMMIT request
+     * @return the serialised response buffer
      */
-    ByteBuffer generateTxnOffsetCommitResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new TxnOffsetCommitRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateTxnOffsetCommitResponse(final RequestHeader requestHeader, final TxnOffsetCommitRequest request) {
+        final var data = request.data();
 
-            final var topicResponses = request.topics().stream()
-                .map(topic -> new TxnOffsetCommitResponseData.TxnOffsetCommitResponseTopic()
-                    .setName(topic.name())
-                    .setPartitions(topic.partitions().stream()
-                        .map(partition -> {
-                            transactionCoordinator.addPendingOffsetCommit(
-                                request.transactionalId(), request.groupId(), topic.name(),
-                                partition.partitionIndex(), partition.committedOffset());
-                            return new TxnOffsetCommitResponseData.TxnOffsetCommitResponsePartition()
-                                .setPartitionIndex(partition.partitionIndex())
-                                .setErrorCode((short) 0);
-                        })
-                        .collect(toList())))
-                .collect(toList());
+        final var topicResponses = data.topics().stream()
+            .map(topic -> new TxnOffsetCommitResponseData.TxnOffsetCommitResponseTopic()
+                .setName(topic.name())
+                .setPartitions(topic.partitions().stream()
+                    .map(partition -> {
+                        transactionCoordinator.addPendingOffsetCommit(
+                            data.transactionalId(), data.groupId(), topic.name(),
+                            partition.partitionIndex(), partition.committedOffset());
+                        return new TxnOffsetCommitResponseData.TxnOffsetCommitResponsePartition()
+                            .setPartitionIndex(partition.partitionIndex())
+                            .setErrorCode((short) 0);
+                    })
+                    .collect(toList())))
+            .collect(toList());
 
-            return serialize(requestHeader,
-                new TxnOffsetCommitResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
-                ApiKeys.TXN_OFFSET_COMMIT);
-
-        } catch (final Exception e) {
-            log.error("Error generating TxnOffsetCommit response", e);
-            return null;
-        }
+        return serialize(requestHeader,
+            new TxnOffsetCommitResponseData().setThrottleTimeMs(0).setTopics(topicResponses),
+            ApiKeys.TXN_OFFSET_COMMIT);
     }
 
     /**
@@ -338,31 +297,32 @@ final class TransactionApiHandler {
     /**
      * Generates a LIST_TRANSACTIONS response listing all known transactional producers.
      *
+     * <p>The {@code request} parameter is part of the dispatcher contract; the listing is
+     * unfiltered. The optional state and producer-id filters carried by newer versions of the
+     * request are not honoured by the mock — every known transactional producer is returned
+     * with state "Ongoing".</p>
+     *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed LIST_TRANSACTIONS request (currently unused)
+     * @return the serialised response buffer
      */
-    ByteBuffer generateListTransactionsResponse(final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            new ListTransactionsRequestData(accessor, requestHeader.apiVersion());
+    ByteBuffer generateListTransactionsResponse(
+            final RequestHeader requestHeader, final ListTransactionsRequest request) {
+        final var states = transactionCoordinator.getTransactionalIds().stream()
+            .map(txnId -> new ListTransactionsResponseData.TransactionState()
+                .setTransactionalId(txnId)
+                .setProducerId(transactionCoordinator.getProducerIdAndEpoch(txnId)
+                    .orElseThrow(() -> new IllegalStateException(
+                        "Producer state missing for known transactional ID: " + txnId))
+                    .producerId())
+                .setTransactionState("Ongoing"))
+            .collect(toList());
 
-            final var states = transactionCoordinator.getTransactionalIds().stream()
-                .map(txnId -> new ListTransactionsResponseData.TransactionState()
-                    .setTransactionalId(txnId)
-                    .setProducerId(transactionCoordinator.getProducerIdAndEpoch(txnId).orElseThrow().producerId())
-                    .setTransactionState("Ongoing"))
-                .collect(toList());
+        final var response = new ListTransactionsResponseData()
+            .setErrorCode((short) 0)
+            .setTransactionStates(states);
 
-            final var response = new ListTransactionsResponseData()
-                .setErrorCode((short) 0)
-                .setTransactionStates(states);
-
-            return serialize(requestHeader, response, ApiKeys.LIST_TRANSACTIONS);
-        } catch (final Exception e) {
-            log.error("Error generating ListTransactions response", e);
-            return null;
-        }
+        return serialize(requestHeader, response, ApiKeys.LIST_TRANSACTIONS);
     }
 
     /**
@@ -370,30 +330,24 @@ final class TransactionApiHandler {
      * transactional producers.
      *
      * @param requestHeader the request header
-     * @param buffer        the buffer containing the request body
-     * @return the serialised response buffer, or null on error
+     * @param request       the parsed DESCRIBE_TRANSACTIONS request
+     * @return the serialised response buffer
      */
     ByteBuffer generateDescribeTransactionsResponse(
-            final RequestHeader requestHeader, final ByteBuffer buffer) {
-        try {
-            final var accessor = new ByteBufferAccessor(buffer);
-            final var request = new DescribeTransactionsRequestData(accessor, requestHeader.apiVersion());
+            final RequestHeader requestHeader, final DescribeTransactionsRequest request) {
+        final var data = request.data();
 
-            final var states = request.transactionalIds().stream()
-                .map(txnId -> transactionCoordinator.getProducerIdAndEpoch(txnId)
-                    .map(idAndEpoch -> ongoingTransactionState(txnId, idAndEpoch))
-                    .orElseGet(() -> unknownTransactionState(txnId)))
-                .collect(toList());
+        final var states = data.transactionalIds().stream()
+            .map(txnId -> transactionCoordinator.getProducerIdAndEpoch(txnId)
+                .map(idAndEpoch -> ongoingTransactionState(txnId, idAndEpoch))
+                .orElseGet(() -> unknownTransactionState(txnId)))
+            .collect(toList());
 
-            final var response = new DescribeTransactionsResponseData()
-                .setTransactionStates(states);
+        final var response = new DescribeTransactionsResponseData()
+            .setTransactionStates(states);
 
-            return serialize(
-                requestHeader, response, ApiKeys.DESCRIBE_TRANSACTIONS);
-        } catch (final Exception e) {
-            log.error("Error generating DescribeTransactions response", e);
-            return null;
-        }
+        return serialize(
+            requestHeader, response, ApiKeys.DESCRIBE_TRANSACTIONS);
     }
 
     /**
