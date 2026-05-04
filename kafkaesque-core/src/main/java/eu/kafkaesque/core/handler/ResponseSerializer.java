@@ -36,19 +36,20 @@ final class ResponseSerializer {
             final ApiKeys apiKey) {
 
         final var cache = new ObjectSerializationCache();
+        final var apiVersion = requestHeader.apiVersion();
 
         final var responseHeaderData = new ResponseHeaderData()
             .setCorrelationId(requestHeader.correlationId());
-        final var headerVersion = apiKey.responseHeaderVersion(requestHeader.apiVersion());
+        final var headerVersion = apiKey.responseHeaderVersion(apiVersion);
 
         final var headerSize = responseHeaderData.size(cache, headerVersion);
-        final var bodySize = data.size(cache, requestHeader.apiVersion());
+        final var bodySize = data.size(cache, apiVersion);
 
         final var buffer = ByteBuffer.allocate(headerSize + bodySize);
         final var accessor = new ByteBufferAccessor(buffer);
 
         responseHeaderData.write(accessor, cache, headerVersion);
-        data.write(accessor, cache, requestHeader.apiVersion());
+        data.write(accessor, cache, apiVersion);
 
         buffer.flip();
         return buffer;

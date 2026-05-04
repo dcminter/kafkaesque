@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.storage;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import eu.kafkaesque.core.listener.ListenerRegistry;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
@@ -206,6 +207,11 @@ public final class EventStore {
      *
      * @param listenerRegistry the registry whose listeners are notified on store operations
      */
+    @SuppressFBWarnings(
+        value = "EI_EXPOSE_REP2",
+        justification = "ListenerRegistry is a shared collaborator deliberately held by reference: "
+                      + "the same registry must be shared with TopicStore and the protocol handler "
+                      + "so listeners installed by one component are visible to the others.")
     public EventStore(final ListenerRegistry listenerRegistry) {
         this.listenerRegistry = listenerRegistry;
     }
@@ -369,7 +375,7 @@ public final class EventStore {
         if (ps == null) {
             return 0L;
         }
-        return ps.getFirstPendingOffset().orElse(ps.getNextOffset());
+        return ps.getFirstPendingOffset().orElseGet(ps::getNextOffset);
     }
 
     /**
@@ -437,7 +443,7 @@ public final class EventStore {
         // signalled by an empty Optional, are always visible).
         return ps.getTransactionState(offset)
             .map(state -> state != TransactionState.ABORTED && state != TransactionState.PENDING)
-            .orElse(true);
+            .orElse(Boolean.TRUE);
     }
 
     /**

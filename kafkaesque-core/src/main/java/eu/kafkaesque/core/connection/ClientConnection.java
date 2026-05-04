@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.connection;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import lombok.Getter;
 
 import java.io.IOException;
@@ -41,6 +42,11 @@ public final class ClientConnection {
      *
      * @param channel the socket channel for this connection
      */
+    @SuppressFBWarnings(
+        value = "EI_EXPOSE_REP2",
+        justification = "ClientConnection deliberately holds the caller's SocketChannel; "
+                      + "a NIO SocketChannel is a unique I/O resource owned by the connection "
+                      + "and cannot be defensively copied.")
     public ClientConnection(final SocketChannel channel) {
         this.channel = channel;
         this.readBuffer = allocate(8192);

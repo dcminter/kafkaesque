@@ -81,7 +81,7 @@ final class AdminApiHandler {
         topicStore.createTopic(name, config);
         final var topicId = topicStore.getTopic(name)
             .map(TopicStore.TopicDefinition::topicId)
-            .orElse(Uuid.randomUuid());
+            .orElseGet(Uuid::randomUuid);
         log.info("Created topic: name={}, partitions={}, replicationFactor={}, policy={}",
             name, config.numPartitions(), config.replicationFactor(), config.cleanupPolicy());
         return new CreateTopicsResponseData.CreatableTopicResult()

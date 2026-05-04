@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs filter for the Kafkaesque project.
+
+  Excludes any class/method/constructor that Lombok has marked with
+  @lombok.Generated (enabled in lombok.config via
+  `lombok.addLombokGeneratedAnnotation = true`). Hand-written code in
+  Lombok-annotated classes remains in scope for analysis.
+-->
+<FindBugsFilter
+    xmlns="https://github.com/spotbugs/filter/3.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="https://github.com/spotbugs/filter/3.0.0
+                        https://raw.githubusercontent.com/spotbugs/spotbugs/master/spotbugs/etc/findbugsfilter.xsd">
+    <Match>
+        <Annotation name="lombok.Generated"/>
+    </Match>
+
+    <!--
+      fb-contrib OCP_OVERLY_CONCRETE_COLLECTION_PARAMETER:
+      The codebase deliberately uses List throughout because record / offset /
+      partition / config ordering is semantically meaningful. Widening to
+      Collection (or Iterable) would obscure that intent at API boundaries
+      even when the implementation only iterates.
+    -->
+    <Match>
+        <Bug pattern="OCP_OVERLY_CONCRETE_COLLECTION_PARAMETER"/>
+    </Match>
+
+    <!--
+      fb-contrib CE_CLASS_ENVY:
+      Builder / mapper methods that translate between Kafka protocol data
+      classes and Kafkaesque domain types necessarily access many fields
+      of the source object. That is the nature of data-mapping code, not
+      a design smell.
+    -->
+    <Match>
+        <Bug pattern="CE_CLASS_ENVY"/>
+    </Match>
+
+    <!--
+      fb-contrib ITC_INHERITANCE_TYPE_CHECKING:
+      The project targets Java 11, which lacks sealed classes and pattern
+      matching for instanceof. Visitor-style dispatch over a closed family
+      of subtypes (e.g. ListenerNotification, IdempotentProducerRegistry
+      .CheckResult) is therefore expressed via instanceof chains. This is
+      the idiomatic Java 11 approach to the problem.
+    -->
+    <Match>
+        <Bug pattern="ITC_INHERITANCE_TYPE_CHECKING"/>
+    </Match>
+
+    <!--
+      fb-contrib IMC_IMMATURE_CLASS_NO_TOSTRING and IMC_IMMATURE_CLASS_WRONG_FIELD_ORDER:
+      Stylistic detectors. The project uses Lombok's @ToString on DTOs and
+      records-of-data; service / handler / coordinator classes deliberately
+      omit toString as they hold transient broker state, not values. Field
+      ordering is left to checkstyle, not enforced here.
+    -->
+    <Match>
+        <Bug pattern="IMC_IMMATURE_CLASS_NO_TOSTRING,IMC_IMMATURE_CLASS_WRONG_FIELD_ORDER"/>
+    </Match>
+
+    <!--
+      fb-contrib OPM_OVERLY_PERMISSIVE_METHOD:
+      Designed for application code where unused-public is dead weight.
+      Inappropriate for a library: this project's public methods on
+      KafkaesqueServer, KafkaProtocolHandler, and the JUnit support classes
+      are the published API surface, called from user test code that the
+      detector cannot see.
+    -->
+    <Match>
+        <Bug pattern="OPM_OVERLY_PERMISSIVE_METHOD"/>
+    </Match>
+
+    <!--
+      fb-contrib WEM_WEAK_EXCEPTION_MESSAGING:
+      Static exception messages are appropriate for invariant violations
+      (e.g. "Server not started", "Server already running") where the
+      condition itself is the diagnostic information. Dynamic messages add
+      no value for these.
+    -->
+    <Match>
+        <Bug pattern="WEM_WEAK_EXCEPTION_MESSAGING"/>
+    </Match>
+
+    <!--
+      fb-contrib UVA_USE_VAR_ARGS:
+      Helper signatures that take a Header[] mirror the underlying Kafka
+      protocol API; converting to varargs would diverge from that shape
+      without functional benefit.
+    -->
+    <Match>
+        <Bug pattern="UVA_USE_VAR_ARGS"/>
+    </Match>
+
+    <!--
+      Integration-test scaffolding (kafkaesque-it module, eu.kafkaesque.it
+      package): suppress fb-contrib patterns that fire pervasively on test
+      code without indicating real bugs. Production code (kafkaesque-core,
+      kafkaesque-junit4, kafkaesque-junit5, kafkaesque-standalone) remains
+      subject to all these checks — the IPU pattern in particular caught
+      genuine bugs in the JUnit support classes.
+
+      IPU_IMPROPER_PROPERTIES_USE: Kafka client APIs accept Properties
+        whose values are not Strings (they iterate entrySet rather than
+        calling getProperty). Test code routinely does
+        props.put(RETRIES_CONFIG, 0) and similar; converting all such
+        sites adds churn with no functional benefit in tests.
+      FII_USE_FUNCTION_IDENTITY: e -> e is acceptable in test code where
+        clarity of inline streams matters more than detector cleanliness.
+      PSC_PRESIZE_COLLECTIONS: collection-presizing micro-optimisation
+        is irrelevant in test setup paths.
+      CC_CYCLOMATIC_COMPLEXITY: DropAckProxy is a chaos-testing proxy
+        whose complexity is inherent to the scenarios it injects.
+      MDM_PROMISCUOUS_SERVERSOCKET: DropAckProxy intentionally binds an
+        ephemeral local socket for the test client to connect through.
+      EXS_EXCEPTION_SOFTENING_NO_CONSTRAINTS: KafkaCompat softens checked
+        exceptions across Kafka client API versions where the variants
+        differ only in their throws clauses.
+    -->
+    <Match>
+        <Class name="~eu\.kafkaesque\.it\..*"/>
+        <Bug pattern="IPU_IMPROPER_PROPERTIES_USE,FII_USE_FUNCTION_IDENTITY,PSC_PRESIZE_COLLECTIONS,CC_CYCLOMATIC_COMPLEXITY,MDM_PROMISCUOUS_SERVERSOCKET,EXS_EXCEPTION_SOFTENING_NO_CONSTRAINTS"/>
+    </Match>
+</FindBugsFilter>

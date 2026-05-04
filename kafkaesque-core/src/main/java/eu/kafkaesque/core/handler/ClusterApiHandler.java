@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.handler;
 
+import edu.umd.cs.findbugs.annotations.Nullable;
 import eu.kafkaesque.core.ServerInfo;
 import eu.kafkaesque.core.storage.TopicStore;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +53,7 @@ final class ClusterApiHandler {
      */
     private static final short FETCH_MAX_VERSION = 12;
 
+    @Nullable
     private final ServerInfo serverInfo;
     private final TopicStore topicStore;
     private final boolean autoCreateTopicsEnabled;
@@ -64,7 +66,7 @@ final class ClusterApiHandler {
      *                   may be {@code null} to use built-in defaults
      * @param topicStore the topic registry consulted when building metadata responses
      */
-    ClusterApiHandler(final ServerInfo serverInfo, final TopicStore topicStore) {
+    ClusterApiHandler(@Nullable final ServerInfo serverInfo, final TopicStore topicStore) {
         this(serverInfo, topicStore, true);
     }
 

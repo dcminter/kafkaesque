@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.handler;
 
+import edu.umd.cs.findbugs.annotations.Nullable;
 import eu.kafkaesque.core.connection.ClientConnection;
 import lombok.EqualsAndHashCode;
 import lombok.RequiredArgsConstructor;
@@ -311,6 +312,7 @@ final class ConsumerGroupApiHandler {
      * @param selectionKey  the NIO selection key for this connection
      * @return always {@code null} — response is deferred
      */
+    @Nullable
     ByteBuffer generateJoinGroupResponse(
             final RequestHeader requestHeader,
             final JoinGroupRequest request,
@@ -435,6 +437,7 @@ final class ConsumerGroupApiHandler {
      * @param selectionKey  the NIO selection key for this connection
      * @return the serialised response buffer, or null when the response is deferred
      */
+    @Nullable
     ByteBuffer generateSyncGroupResponse(
             final RequestHeader requestHeader, final SyncGroupRequest request,
             final ClientConnection connection, final SelectionKey selectionKey) {

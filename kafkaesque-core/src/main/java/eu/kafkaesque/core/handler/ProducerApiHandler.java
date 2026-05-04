@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.handler;
 
+import edu.umd.cs.findbugs.annotations.Nullable;
 import eu.kafkaesque.core.storage.EventStore;
 import eu.kafkaesque.core.storage.RecordData;
 import eu.kafkaesque.core.storage.RecordHeader;
@@ -52,6 +53,7 @@ import static java.util.stream.Collectors.toList;
 final class ProducerApiHandler {
 
     private final EventStore eventStore;
+    @Nullable
     private final TopicStore topicStore;
     private final boolean autoCreateTopicsEnabled;
     private final IdempotentProducerRegistry idempotentProducerRegistry;
@@ -75,7 +77,7 @@ final class ProducerApiHandler {
      */
     ProducerApiHandler(
             final EventStore eventStore,
-            final TopicStore topicStore,
+            @Nullable final TopicStore topicStore,
             final boolean autoCreateTopicsEnabled) {
         this(eventStore, topicStore, autoCreateTopicsEnabled, new IdempotentProducerRegistry());
     }
@@ -266,7 +268,9 @@ final class ProducerApiHandler {
             return count;
         }
         var n = 0;
-        for (final var ignored : batch) {
+        final var iterator = batch.iterator();
+        while (iterator.hasNext()) {
+            iterator.next();
             n++;
         }
         return n;
@@ -313,7 +317,8 @@ final class ProducerApiHandler {
      * @param size the number of bytes to read
      * @return the decoded string, or null if {@code buf} is null
      */
-    private static String readBufferToString(final ByteBuffer buf, final int size) {
+    @Nullable
+    private static String readBufferToString(@Nullable final ByteBuffer buf, final int size) {
         if (buf == null) {
             return null;
         }

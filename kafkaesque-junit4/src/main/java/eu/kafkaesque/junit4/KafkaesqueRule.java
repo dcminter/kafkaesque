@@ -1,5 +1,6 @@
 package eu.kafkaesque.junit4;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import eu.kafkaesque.core.KafkaesqueServer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -155,6 +156,10 @@ public final class KafkaesqueRule extends ExternalResource {
      * @return the server instance
      * @throws IllegalStateException if the server has not been started
      */
+    @SuppressFBWarnings(
+        value = "EI_EXPOSE_REP",
+        justification = "Tests need access to the live, running KafkaesqueServer; it is a unique "
+                      + "stateful resource bound to a port and cannot be defensively copied.")
     public KafkaesqueServer getServer() {
         if (server == null) {
             throw new IllegalStateException(
@@ -287,7 +292,7 @@ public final class KafkaesqueRule extends ExternalResource {
         final var props = new Properties();
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, getBootstrapServers());
         props.put(ProducerConfig.ACKS_CONFIG, "all");
-        props.put(ProducerConfig.RETRIES_CONFIG, 0);
+        props.put(ProducerConfig.RETRIES_CONFIG, "0");
         return props;
     }
 

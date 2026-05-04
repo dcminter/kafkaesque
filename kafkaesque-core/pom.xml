@@ -48,6 +48,13 @@
             <artifactId>lombok</artifactId>
         </dependency>
 
+        <!-- SpotBugs annotations: compile-only, carries @SuppressFBWarnings. -->
+        <dependency>
+            <groupId>com.github.spotbugs</groupId>
+            <artifactId>spotbugs-annotations</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
@@ -142,6 +149,20 @@
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <configuration>
+                    <!--
+                      kafkaesque-core implements the Kafka wire protocol and is the
+                      module where Low-priority detectors (BIT_AND_ZZ, ICAST_*,
+                      sign-extension on byte->int reads, INT_VACUOUS_COMPARISON,
+                      DM_DEFAULT_ENCODING, etc.) earn their keep. Other modules are
+                      thin wrappers and stay at the inherited Medium threshold.
+                    -->
+                    <threshold>Low</threshold>
+                </configuration>
             </plugin>
         </plugins>
     </build>

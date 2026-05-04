@@ -1,5 +1,6 @@
 package eu.kafkaesque.junit5;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import eu.kafkaesque.core.KafkaesqueServer;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -185,6 +186,10 @@ public final class KafkaesqueExtension
      * @throws IllegalStateException        if a {@link KafkaesqueServer} is requested but none is found
      */
     @Override
+    @SuppressFBWarnings(
+        value = "URV_INHERITED_METHOD_WITH_RELATED_TYPES",
+        justification = "Return type is fixed by the JUnit 5 ParameterResolver SPI (Object); "
+            + "the related concrete types returned cannot be expressed in the override signature.")
     public Object resolveParameter(final ParameterContext paramCtx, final ExtensionContext extCtx) {
         try {
             if (isAnnotatedProducer(paramCtx)) {
@@ -357,13 +362,13 @@ public final class KafkaesqueExtension
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, annotation.keySerializer().getName());
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, annotation.valueSerializer().getName());
         props.put(ProducerConfig.ACKS_CONFIG, annotation.acks());
-        props.put(ProducerConfig.RETRIES_CONFIG, annotation.retries());
+        props.put(ProducerConfig.RETRIES_CONFIG, Integer.toString(annotation.retries()));
         if (annotation.idempotent()) {
             props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, "true");
             if (annotation.retries() == 0) {
                 // Kafka requires retries > 0 for idempotent producers; apply a safe default
                 // when the user has not overridden the zero-valued annotation default.
-                props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
+                props.put(ProducerConfig.RETRIES_CONFIG, Integer.toString(Integer.MAX_VALUE));
             }
         }
         if (!annotation.transactionalId().isEmpty()) {
@@ -452,7 +457,7 @@ public final class KafkaesqueExtension
     private boolean hasMethodAnnotation(final ExtensionContext context) {
         return context.getTestMethod()
             .map(m -> m.isAnnotationPresent(Kafkaesque.class))
-            .orElse(false);
+            .orElse(Boolean.FALSE);
     }
 
     /**

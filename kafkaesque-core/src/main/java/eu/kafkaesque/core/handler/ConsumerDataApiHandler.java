@@ -33,6 +33,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static eu.kafkaesque.core.handler.FetchSessionCoordinator.FINAL_EPOCH;
@@ -580,8 +581,7 @@ final class ConsumerDataApiHandler {
         // covers them), and stage 2 alone would not remove ABORTED records below the LSO.
         // For READ_UNCOMMITTED the LSO equals the high-watermark, so stage 2 is a no-op.
         final var stored = effective.stream()
-            .filter(r -> r.offset() >= fetchOffset)
-            .filter(r -> isolationLevel != 1 || r.offset() < lso)
+            .filter(r -> r.offset() >= fetchOffset && (isolationLevel != 1 || r.offset() < lso))
             .collect(toList());
 
         if (stored.isEmpty()) {
@@ -648,7 +648,7 @@ final class ConsumerDataApiHandler {
             .filter(r -> r.key() != null)
             .collect(Collectors.toMap(
                 StoredRecord::key,
-                r -> r,
+                Function.identity(),
                 (a, b) -> b.offset() > a.offset() ? b : a))
             .values().stream()
             .filter(r -> r.value() != null)

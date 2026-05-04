@@ -1,5 +1,7 @@
 package eu.kafkaesque.core.handler;
 
+import edu.umd.cs.findbugs.annotations.Nullable;
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import eu.kafkaesque.core.ServerInfo;
 import eu.kafkaesque.core.connection.ClientConnection;
 import eu.kafkaesque.core.listener.ListenerRegistry;
@@ -206,7 +208,7 @@ public final class KafkaProtocolHandler {
      * @param serverInfo the server info used to advertise host and port in cluster responses;
      *                   may be {@code null} to use built-in defaults
      */
-    public KafkaProtocolHandler(final ServerInfo serverInfo) {
+    public KafkaProtocolHandler(@Nullable final ServerInfo serverInfo) {
         this(serverInfo, true);
     }
 
@@ -222,7 +224,7 @@ public final class KafkaProtocolHandler {
      * @param autoCreateTopicsEnabled {@code false} to return {@code UNKNOWN_TOPIC_OR_PARTITION}
      *                                for unknown topics instead of auto-creating them
      */
-    public KafkaProtocolHandler(final ServerInfo serverInfo, final boolean autoCreateTopicsEnabled) {
+    public KafkaProtocolHandler(@Nullable final ServerInfo serverInfo, final boolean autoCreateTopicsEnabled) {
         this(serverInfo, createSharedStores(), autoCreateTopicsEnabled);
     }
 
@@ -243,7 +245,7 @@ public final class KafkaProtocolHandler {
      * @param autoCreateTopicsEnabled whether to auto-create topics
      */
     private KafkaProtocolHandler(
-            final ServerInfo serverInfo,
+            @Nullable final ServerInfo serverInfo,
             final SharedStores stores,
             final boolean autoCreateTopicsEnabled) {
         this(serverInfo, stores.eventStore(), stores.listenerRegistry(), autoCreateTopicsEnabled);
@@ -259,8 +261,13 @@ public final class KafkaProtocolHandler {
      * @param autoCreateTopicsEnabled {@code false} to return {@code UNKNOWN_TOPIC_OR_PARTITION}
      *                                for unknown topics instead of auto-creating them
      */
+    @SuppressFBWarnings(
+        value = "EI_EXPOSE_REP2",
+        justification = "EventStore and ListenerRegistry are stateful service collaborators "
+                      + "deliberately shared across the broker; the protocol handler must hold "
+                      + "the same instances given by the caller and cannot defensively copy them.")
     public KafkaProtocolHandler(
-            final ServerInfo serverInfo,
+            @Nullable final ServerInfo serverInfo,
             final EventStore eventStore,
             final ListenerRegistry listenerRegistry,
             final boolean autoCreateTopicsEnabled) {

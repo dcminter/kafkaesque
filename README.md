@@ -237,6 +237,29 @@ so to build and run the test suite:
 $ ./mvnw clean verify
 ```
 
+The build is gated on both [Checkstyle](https://checkstyle.sourceforge.io/) and
+[SpotBugs](https://spotbugs.github.io/): style violations fail the build at the
+`validate` phase, and SpotBugs static analysis findings fail the build at the
+`verify` phase. SpotBugs runs at effort `Max`; the threshold is `Medium` for the
+JUnit-support and standalone modules and `Low` for `kafkaesque-core`, where the
+wire-protocol implementation lives. The
+[fb-contrib](https://fb-contrib.sourceforge.net/) detector plugin is enabled to
+add concurrency, NIO, and methodology checks beyond the stock SpotBugs detectors;
+analysis also runs over the integration-test harness in `kafkaesque-it`.
+
+JSR-305 nullness annotations (`@ParametersAreNonnullByDefault` and
+`@ReturnValuesAreNonnullByDefault` from
+[`spotbugs-annotations`](https://spotbugs.readthedocs.io/en/stable/migration.html#findbugs-jsr-305))
+are applied at the package level in `kafkaesque-core` so that interprocedural
+null analysis flows through the parsing pipeline; opt out per field, parameter,
+or return with `@edu.umd.cs.findbugs.annotations.Nullable`.
+
+Lombok-generated code is excluded from SpotBugs analysis via
+`spotbugs-exclude.xml`; hand-written code in Lombok-annotated classes remains in
+scope. Genuine false positives may be silenced with a tightly scoped
+`@edu.umd.cs.findbugs.annotations.SuppressFBWarnings` carrying a non-trivial
+`justification`.
+
 To test against a different `kafka-clients` version (see [the multi-version guide](docs/MULTIVERSION.md)):
 
 ```bash

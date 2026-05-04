@@ -76,6 +76,11 @@
         <maven-source-plugin.version>3.3.1</maven-source-plugin.version>
         <maven-javadoc-plugin.version>3.11.2</maven-javadoc-plugin.version>
         <maven-gpg-plugin.version>3.2.7</maven-gpg-plugin.version>
+
+        <!-- Static analysis -->
+        <spotbugs-maven-plugin.version>4.9.5.0</spotbugs-maven-plugin.version>
+        <spotbugs-annotations.version>4.9.5</spotbugs-annotations.version>
+        <sb-contrib.version>7.6.9</sb-contrib.version>
     </properties>
 
     <dependencyManagement>
@@ -93,6 +98,14 @@
                 <artifactId>lombok</artifactId>
                 <version>${lombok.version}</version>
                 <scope>provided</scope>
+            </dependency>
+
+            <!-- SpotBugs annotations (compile-only; carries @SuppressFBWarnings) -->
+            <dependency>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-annotations</artifactId>
+                <version>${spotbugs-annotations.version}</version>
+                <optional>true</optional>
             </dependency>
 
             <!-- JUnit 4 -->
@@ -276,6 +289,35 @@
                             <version>10.21.4</version>
                         </dependency>
                     </dependencies>
+                </plugin>
+                <plugin>
+                    <groupId>com.github.spotbugs</groupId>
+                    <artifactId>spotbugs-maven-plugin</artifactId>
+                    <version>${spotbugs-maven-plugin.version}</version>
+                    <configuration>
+                        <effort>Max</effort>
+                        <threshold>Medium</threshold>
+                        <failOnError>true</failOnError>
+                        <includeTests>false</includeTests>
+                        <xmlOutput>true</xmlOutput>
+                        <excludeFilterFile>${maven.multiModuleProjectDirectory}/spotbugs-exclude.xml</excludeFilterFile>
+                        <plugins>
+                            <plugin>
+                                <groupId>com.mebigfatguy.sb-contrib</groupId>
+                                <artifactId>sb-contrib</artifactId>
+                                <version>${sb-contrib.version}</version>
+                            </plugin>
+                        </plugins>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>spotbugs-check</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>check</goal>
+                            </goals>
+                        </execution>
+                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

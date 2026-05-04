@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.storage;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import eu.kafkaesque.core.listener.ListenerRegistry;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -119,6 +120,11 @@ public final class TopicStore {
      *
      * @param listenerRegistry the registry whose listeners are notified when topics are created
      */
+    @SuppressFBWarnings(
+        value = "EI_EXPOSE_REP2",
+        justification = "ListenerRegistry is a shared collaborator deliberately held by reference: "
+                      + "the same registry must be shared with EventStore and the protocol handler "
+                      + "so listeners installed by one component are visible to the others.")
     public TopicStore(final ListenerRegistry listenerRegistry) {
         this.listenerRegistry = listenerRegistry;
     }

@@ -1,5 +1,6 @@
 package eu.kafkaesque.core.handler;
 
+import edu.umd.cs.findbugs.annotations.Nullable;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -195,6 +196,7 @@ final class IdempotentProducerRegistry {
      * @param producerEpoch the epoch to validate
      * @return {@link CheckResult.Error} if the epoch is stale; {@code null} if valid
      */
+    @Nullable
     private CheckResult validateEpoch(final long producerId, final short producerEpoch) {
         final CheckResult[] result = {null};
         highestSeenEpoch.compute(producerId, (id, highest) -> {
@@ -243,6 +245,7 @@ final class IdempotentProducerRegistry {
      * @param result       single-element array used to return the {@link CheckResult}
      * @return the new state entry, or {@code null} if the batch was rejected
      */
+    @Nullable
     private static ProducerPartitionState handleNewProducer(
             final int baseSequence,
             final int batchCount,

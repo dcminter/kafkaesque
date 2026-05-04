@@ -1,5 +1,6 @@
 package eu.kafkaesque.core;
 
+import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 import eu.kafkaesque.core.connection.ClientConnection;
 import eu.kafkaesque.core.handler.KafkaProtocolHandler;
 import eu.kafkaesque.core.listener.RecordPublishedListener;
@@ -173,6 +174,12 @@ public final class KafkaesqueServer implements AutoCloseable, ServerInfo {
      * <p>This method runs in a separate thread and continuously processes selector events
      * until the server is stopped.</p>
      */
+    @SuppressFBWarnings(
+        value = "PRMC_POSSIBLY_REDUNDANT_METHOD_CALLS",
+        justification = "running.get() is intentionally re-checked after the blocking "
+            + "sel.select(1000) call: another thread may have flipped the AtomicBoolean "
+            + "to false during the select, and we must observe that change before "
+            + "iterating selected keys.")
     private void runEventLoop() {
         log.debug("Server event loop started");
 

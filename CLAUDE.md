@@ -28,7 +28,18 @@ with it! For now the JUnit 5 annotations should work well in existing test cases
 ## Development standards
 
 After making any edits, you must ensure `mvn checkstyle:check` passes with zero violations. If checkstyle fails, fix 
-all reported violations before considering the task complete. This will enforce some, but not all, of the following:
+all reported violations before considering the task complete. You must also ensure `mvn spotbugs:check` passes with 
+zero violations across the production modules (`kafkaesque-core`, `kafkaesque-junit4`, `kafkaesque-junit5`, 
+`kafkaesque-standalone`) and the integration-test module (`kafkaesque-it`, where `includeTests=true`). SpotBugs 
+runs at `effort=Max`; the threshold is `Low` for `kafkaesque-core` (where wire-protocol code lives) and `Medium` 
+elsewhere. The [fb-contrib](https://fb-contrib.sourceforge.net/) detector plugin is enabled to add concurrency, 
+NIO, and methodology checks. JSR-305 `@ParametersAreNonnullByDefault` and `@ReturnValuesAreNonnullByDefault` are 
+applied at the package level in `kafkaesque-core`; opt out with `@edu.umd.cs.findbugs.annotations.Nullable` on 
+specific fields, parameters, or returns. Lombok-generated synthetic methods are excluded via `spotbugs-exclude.xml`, 
+and `lombok.config` propagates `@Nullable`/`@NonNull` from fields to Lombok-generated constructor parameters and 
+accessors. Genuine false positives may be silenced with a tightly scoped 
+`@edu.umd.cs.findbugs.annotations.SuppressFBWarnings` carrying a non-trivial `justification`. This will enforce 
+some, but not all, of the following:
 
   * Integration test cases must always be run against both Kafkaesque and the real Kafka brokers to verify that we're correctly implementing the Kafka line protocol
   * Immutability is encouraged wherever reasonably possible; all parameters, fields, and variables should therefore be declared `final` unless their mutability is essential.
